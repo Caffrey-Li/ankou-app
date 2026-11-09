@@ -1,6 +1,19 @@
 {
   "identifier": "default",
-  "description": "本地主窗口。界面不请求网络。",
+  "description": "本地主窗口。只放行授权、设置、密钥和历史命令，不请求网络。",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-list-grants",
+    "allow-grant",
+    "allow-revoke",
+    "allow-get-settings",
+    "allow-set-settings",
+    "allow-save-deepseek-key",
+    "allow-delete-deepseek-key",
+    "allow-deepseek-key-saved",
+    "allow-clear-history",
+    "allow-discover-tools",
+    "allow-complete-setup"
+  ]
 }

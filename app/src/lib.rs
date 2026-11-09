@@ -6,10 +6,14 @@ use tauri::Listener;
 use tauri::{Manager, RunEvent, Theme, WindowEvent};
 use wanxiang_core::Supervisor;
 
+mod commands;
+mod discover;
+
 pub fn run() {
-    tauri::Builder::default()
+    commands::attach(tauri::Builder::default())
         .manage(Supervisor::new())
         .setup(|app| {
+            app.manage(commands::Hub::open(app.handle())?);
             setup_tray(app.handle())?;
             if let Some(window) = app.get_webview_window("main") {
                 apply_window_material(&window);
@@ -24,8 +28,19 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                let _ = window.hide();
+                let keep = window
+                    .app_handle()
+                    .try_state::<commands::Hub>()
+                    .and_then(|hub| hub.store.settings().ok())
+                    .map(|settings| settings.close_to_tray)
+                    .unwrap_or(true);
+                if keep {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    shutdown(window.app_handle());
+                    window.app_handle().exit(0);
+                }
             }
             WindowEvent::Resized(_) => {
                 #[cfg(target_os = "macos")]
@@ -103,11 +118,7 @@ fn place_sidebar_effect(window: &impl raw_window_handle::HasWindowHandle) -> boo
     };
     let bounds = root.bounds();
     let sidebar_height = (bounds.size.height - 20.0).max(0.0);
-    let origin_y = if root.isFlipped() {
-        9.0
-    } else {
-        11.0
-    };
+    let origin_y = if root.isFlipped() { 9.0 } else { 11.0 };
     unsafe {
         effect.setFrame(NSRect::new(
             NSPoint::new(9.0, origin_y),

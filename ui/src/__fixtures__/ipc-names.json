@@ -1,0 +1,16 @@
+{
+  "tool_id": ["codex", "cursor", "deepseek_harness", "ds_bot"],
+  "capability": [
+    "account_link",
+    "cleanup",
+    "conversation",
+    "create_conversation",
+    "insert_content",
+    "protected_location",
+    "space_scan",
+    "usage"
+  ],
+  "grant_status": ["active", "needs_reauth"],
+  "tool_presence": ["authorized", "missing", "needs_reauth", "unauthorized"],
+  "summary_mode": ["ai", "ask", "local"]
+}

@@ -10,15 +10,18 @@ use sha2::{Digest, Sha256};
 
 pub const CONFIRM_TTL: Duration = Duration::from_secs(10 * 60);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ToolId {
+    #[serde(rename = "deepseek_harness")]
     DeepSeekHarness,
     DsBot,
     Cursor,
     Codex,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Capability {
     Usage,
     Conversation,
@@ -111,6 +114,7 @@ pub enum GuardError {
     ConfirmationUsed,
     ConfirmationUnknown,
     ConfirmationExpired,
+    NeedsReauth,
     Io(io::ErrorKind),
 }
 
@@ -136,6 +140,7 @@ impl std::fmt::Display for GuardError {
             Self::ConfirmationUsed => "确认令牌已使用",
             Self::ConfirmationUnknown => "确认令牌不存在",
             Self::ConfirmationExpired => "确认令牌已过期",
+            Self::NeedsReauth => "需要重新授权",
             Self::Io(kind) => io_kind_text(*kind),
         })
     }
@@ -172,6 +177,13 @@ impl Clock for SystemClock {
 
 pub trait ToolScheduler: Send + Sync {
     fn on_revoked(&self, tool: ToolId, capability: Capability);
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RootStamp {
+    pub path: PathBuf,
+    pub dev: u64,
+    pub ino: u64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -300,6 +312,35 @@ impl Guard {
             alive: Arc::new(AtomicBool::new(true)),
         });
         Ok(id)
+    }
+
+    pub fn stamp(&self, id: GrantId) -> Result<RootStamp, GuardError> {
+        let inner = self.lock();
+        let grant = inner
+            .grants
+            .iter()
+            .find(|grant| grant.id == id)
+            .ok_or(GuardError::GrantNotFound)?;
+        Ok(RootStamp {
+            path: grant.root.clone(),
+            dev: grant.file_id.dev,
+            ino: grant.file_id.ino,
+        })
+    }
+
+    pub fn restore(
+        &self,
+        tool: ToolId,
+        capability: Capability,
+        scope: PathScope,
+        expected: &RootStamp,
+    ) -> Result<GrantId, GuardError> {
+        let root = canonical_directory(&scope.root)?;
+        let file_id = file_id_of(&root).map_err(io_err)?;
+        if root != expected.path || file_id.dev != expected.dev || file_id.ino != expected.ino {
+            return Err(GuardError::NeedsReauth);
+        }
+        self.grant(tool, capability, scope)
     }
 
     pub fn grants(&self) -> Vec<Grant> {

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import mark from "../../brand/mark.svg";
+import { fallbackSnapshot, inTauri, loadSnapshot, type Snapshot } from "./api";
+import { presenceLabel, toolSpecs } from "./catalog";
 import {
   IconBubble,
   IconChart,
@@ -10,6 +12,8 @@ import {
   IconSearch,
   IconSet,
 } from "./icons";
+import { SettingsPage } from "./SettingsPage";
+import { SetupPage } from "./SetupPage";
 
 const pages = [
   { id: "overview", label: "概览", icon: <IconHome /> },
@@ -21,13 +25,6 @@ const pages = [
 
 type PageId = (typeof pages)[number]["id"];
 
-const tools = [
-  { letter: "H", name: "DeepSeek Harness" },
-  { letter: "B", name: "DS Bot" },
-  { letter: "C", name: "Cursor" },
-  { letter: "Cx", name: "Codex" },
-];
-
 const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
 function formatDate(date: Date) {
@@ -35,10 +32,44 @@ function formatDate(date: Date) {
 }
 
 export function App() {
-  const [page, setPage] = useState<PageId>("overview");
+  const forced = new URLSearchParams(window.location.search).get("page");
+  const [page, setPage] = useState<PageId>(forced === "settings" ? "settings" : "overview");
+  const [snapshot, setSnapshot] = useState<Snapshot>(fallbackSnapshot);
+  const [ready, setReady] = useState(!inTauri());
   const current = pages.find((item) => item.id === page) ?? pages[0];
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
+
+  useEffect(() => {
+    if (!inTauri()) return;
+    let alive = true;
+    loadSnapshot().then((next) => {
+      if (!alive) return;
+      setSnapshot(next);
+      setReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!ready) return <div className="window" />;
+  if (
+    forced === "setup" ||
+    (inTauri() && !snapshot.settings.setup_complete && forced !== "settings")
+  ) {
+    return (
+      <SetupPage
+        snapshot={snapshot}
+        onDone={() =>
+          setSnapshot({
+            ...snapshot,
+            settings: { ...snapshot.settings, setup_complete: true },
+          })
+        }
+      />
+    );
+  }
 
   return (
     <div className="window">
@@ -64,15 +95,23 @@ export function App() {
         <div className="nav-gap" aria-hidden="true" />
         <p className="tools-label">工具</p>
         <ul className="tools">
-          {tools.map((tool) => (
-            <li key={tool.name}>
-              <span className="letter" aria-hidden="true">
-                {tool.letter}
-              </span>
-              <span className="tool-name">{tool.name}</span>
-              <span className="tool-dot" role="img" aria-label="未检测" />
-            </li>
-          ))}
+          {toolSpecs.map((tool) => {
+            const live = snapshot.tools.find((item) => item.tool === tool.id);
+            const presence = live?.presence ?? "missing";
+            return (
+              <li key={tool.id}>
+                <span className="letter" aria-hidden="true">
+                  {tool.letter}
+                </span>
+                <span className="tool-name">{tool.name}</span>
+                <span
+                  className={`tool-dot dot ${presence}`}
+                  role="img"
+                  aria-label={presenceLabel(presence)}
+                />
+              </li>
+            );
+          })}
         </ul>
         <p className="local">
           <span>本机运行</span>
@@ -83,8 +122,11 @@ export function App() {
         <header className="toolbar">
           <div className="title-block">
             <h1>{current.label}</h1>
-            <p className="subtitle">{formatDate(new Date())}</p>
+            <p className="subtitle">
+              {page === "settings" ? "阈值、刷新、授权与常驻" : formatDate(new Date())}
+            </p>
           </div>
+          {page === "settings" ? null : (
           <div className="toolbar-actions">
             <div className="glass-pill">
               <IconClock />
@@ -98,7 +140,14 @@ export function App() {
               <IconSearch />
             </button>
           </div>
+          )}
         </header>
+        {page === "settings" ? (
+          <SettingsPage
+            snapshot={snapshot}
+            onChange={(update) => setSnapshot((current) => update(current))}
+          />
+        ) : (
         <section className="empty" aria-label="页面内容">
           <p className="lead">主窗口已就绪，这一页还没有数据。</p>
           <p className="detail">
@@ -106,6 +155,7 @@ export function App() {
           </p>
           <span className="badge">未验证</span>
         </section>
+        )}
       </main>
     </div>
   );
