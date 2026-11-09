@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "本地主窗口。只放行授权、设置、密钥和历史命令，不请求网络。",
+  "description": "本地主窗口。只放行授权、设置、密钥、历史和用量命令。窗口仍然不能发起网络请求。",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -14,6 +14,8 @@
     "allow-deepseek-key-saved",
     "allow-clear-history",
     "allow-discover-tools",
-    "allow-complete-setup"
+    "allow-complete-setup",
+    "allow-get-usage",
+    "allow-refresh-usage"
   ]
 }

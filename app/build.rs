@@ -12,6 +12,8 @@ fn main() {
             "clear_history",
             "discover_tools",
             "complete_setup",
+            "get_usage",
+            "refresh_usage",
         ]),
     ))
     .expect("生成 Tauri 权限失败");

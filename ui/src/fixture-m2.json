@@ -1,0 +1,204 @@
+{
+  "stamp": "11:45",
+  "banner": [
+    "Cursor 用量暂不提供，未计入",
+    "Harness 用量暂不提供，未计入",
+    "有 1 个会话没有用量记录，未计入"
+  ],
+  "cards": [
+    {
+      "name": "Codex · 5 小时窗口",
+      "value": "6%",
+      "note": "数据为 11:45",
+      "percent": 6,
+      "reset": "16:29 重置",
+      "link": null
+    },
+    {
+      "name": "Codex · 7 天窗口",
+      "value": "1%",
+      "note": "数据为 11:45",
+      "percent": 1,
+      "reset": "11:29 重置",
+      "link": null
+    },
+    {
+      "name": "DeepSeek 账户",
+      "value": "¥12.34",
+      "note": "实际 · 11:45",
+      "percent": null,
+      "reset": null,
+      "link": null
+    },
+    {
+      "name": "Cursor",
+      "value": "—",
+      "note": "暂不提供",
+      "percent": null,
+      "reset": null,
+      "link": null
+    }
+  ],
+  "days": [
+    {
+      "label": "10 月 1 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 2 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 3 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 4 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 5 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 6 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 7 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 8 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 9 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 10 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 11 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 12 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 13 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 14 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 15 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 16 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 17 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 18 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 19 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 20 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 21 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 22 日",
+      "codex": null,
+      "bot": null
+    },
+    {
+      "label": "10 月 23 日",
+      "codex": null,
+      "bot": 15
+    },
+    {
+      "label": "10 月 24 日",
+      "codex": 133848,
+      "bot": null
+    },
+    {
+      "label": "10 月 25 日",
+      "codex": 238426,
+      "bot": 300
+    }
+  ],
+  "details": [
+    {
+      "name": "Codex",
+      "tokens": "372,274",
+      "calls": "—",
+      "fee": "不提供",
+      "source": "本机记录"
+    },
+    {
+      "name": "DeepSeek Harness",
+      "tokens": "暂不提供",
+      "calls": "暂不提供",
+      "fee": "不提供",
+      "source": "—"
+    },
+    {
+      "name": "DS Bot",
+      "tokens": "315",
+      "calls": "3",
+      "fee": "不提供",
+      "source": "本机记录"
+    },
+    {
+      "name": "Cursor",
+      "tokens": "暂不提供",
+      "calls": "暂不提供",
+      "fee": "不提供",
+      "source": "—"
+    }
+  ],
+  "caption": "按各工具自身周期，不受上方日期影响",
+  "empty_note": "更早没有本机记录，不补算",
+  "range_label": "10 月 1 日 – 25 日",
+  "total": "372,589",
+  "total_reason": ""
+}

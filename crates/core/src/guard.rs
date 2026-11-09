@@ -241,6 +241,7 @@ struct Inner {
     next_id: u64,
     grants: Vec<GrantRecord>,
     tokens: HashMap<[u8; 16], TokenRecord>,
+    deepseek_account: bool,
 }
 
 pub struct Guard {
@@ -275,6 +276,7 @@ impl Guard {
                 next_id: 0,
                 grants: Vec::new(),
                 tokens: HashMap::new(),
+                deepseek_account: false,
             }),
             scheduler,
             clock,
@@ -370,13 +372,36 @@ impl Guard {
         Ok(())
     }
 
+    pub fn account_link_active(&self, tool: ToolId) -> bool {
+        matches!(tool, ToolId::DeepSeekHarness | ToolId::DsBot) && self.lock().deepseek_account
+    }
+
+    pub fn set_account_link(&self, active: bool) {
+        self.lock().deepseek_account = active;
+    }
+
+    pub fn revoke_account_link(&self) {
+        let was = {
+            let mut inner = self.lock();
+            let was = inner.deepseek_account;
+            inner.deepseek_account = false;
+            was
+        };
+        if was {
+            self.scheduler
+                .on_revoked(ToolId::DeepSeekHarness, Capability::AccountLink);
+            self.scheduler
+                .on_revoked(ToolId::DsBot, Capability::AccountLink);
+        }
+    }
+
     pub fn open_read(
         &self,
         tool: ToolId,
         capability: Capability,
         path: &Path,
     ) -> Result<ScopedRead, GuardError> {
-        if capability == Capability::SpaceScan {
+        if capability == Capability::AccountLink || capability == Capability::SpaceScan {
             return Err(GuardError::NotGranted);
         }
         let opened = self.open_checked(tool, capability, path, false)?;

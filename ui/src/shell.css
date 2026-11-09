@@ -195,6 +195,14 @@ nav button[aria-current="page"] .nav-icon {
   background: var(--color-text-tertiary);
 }
 
+.tool-dot.authorized {
+  background: var(--color-mist);
+}
+
+.tool-dot.needs_reauth {
+  background: var(--color-ochre);
+}
+
 .local {
   display: flex;
   flex-direction: column;

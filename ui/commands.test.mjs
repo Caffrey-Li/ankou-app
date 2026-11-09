@@ -5,7 +5,7 @@ const capability = JSON.parse(
   readFileSync(new URL("../app/capabilities/default.json", import.meta.url), "utf8"),
 );
 const allowed = capability.permissions.filter((item) => item.startsWith("allow-"));
-const ui = ["api.ts", "App.tsx", "SettingsPage.tsx", "SetupPage.tsx", "catalog.ts"]
+const ui = ["api.ts", "App.tsx", "SettingsPage.tsx", "SetupPage.tsx", "catalog.ts", "UsagePage.tsx"]
   .map((name) => readFileSync(new URL(`./src/${name}`, import.meta.url), "utf8"))
   .join("\n");
 
@@ -22,7 +22,9 @@ assert.deepEqual(
     "delete-deepseek-key",
     "discover-tools",
     "get-settings",
+    "get-usage",
     "list-grants",
+    "refresh-usage",
     "revoke",
     "save-deepseek-key",
     "set-settings",

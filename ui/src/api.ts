@@ -15,6 +15,7 @@ export type Settings = {
   menu_bar_icon: boolean;
   close_to_tray: boolean;
   setup_complete: boolean;
+  codex_app_server: boolean;
 };
 
 export type StoredGrant = {
@@ -50,6 +51,7 @@ export const defaultSettings: Settings = {
   menu_bar_icon: true,
   close_to_tray: true,
   setup_complete: false,
+  codex_app_server: false,
 };
 
 export function inTauri() {
@@ -108,6 +110,84 @@ export function clearHistory() {
 export function revokeGrant(id: number) {
   if (!inTauri()) return Promise.resolve();
   return call<void>("revoke", { id });
+}
+
+export type UsageCard = {
+  name: string;
+  value: string;
+  note: string;
+  percent: number | null;
+  reset: string | null;
+  link: string | null;
+};
+
+export type UsageDay = {
+  label: string;
+  codex: number | null;
+  bot: number | null;
+};
+
+export type UsageDetail = {
+  name: string;
+  tokens: string;
+  calls: string;
+  fee: string;
+  source: string;
+};
+
+export type UsageView = {
+  stamp: string;
+  banner: string[];
+  cards: UsageCard[];
+  days: UsageDay[];
+  details: UsageDetail[];
+  caption: string;
+  empty_note: string;
+  range_label: string;
+  total: string;
+  total_reason: string;
+};
+
+function monthSpan(date = new Date()) {
+  return `${date.getMonth() + 1} 月 1 日 – ${date.getDate()} 日`;
+}
+
+export const emptyUsage: UsageView = {
+  stamp: "—",
+  banner: [
+    "Cursor 用量暂不提供，未计入",
+    "Harness 用量暂不提供，未计入",
+    "Codex 未授权，未计入",
+    "DS Bot 未授权，未计入",
+  ],
+  cards: [
+    { name: "Codex", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "Codex · 窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "DeepSeek 账户", value: "—", note: "未保存密钥", percent: null, reset: null, link: null },
+    { name: "Cursor", value: "—", note: "暂不提供", percent: null, reset: null, link: null },
+  ],
+  days: [],
+  details: [
+    { name: "Codex", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
+    { name: "DeepSeek Harness", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },
+    { name: "DS Bot", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
+    { name: "Cursor", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },
+  ],
+  caption: "按各工具自身周期，不受上方日期影响",
+  empty_note: "更早没有本机记录，不补算",
+  range_label: monthSpan(),
+  total: "—",
+  total_reason: "未授权",
+};
+
+export function loadUsage(range = "month", start?: string, end?: string) {
+  if (!inTauri()) return Promise.resolve(emptyUsage);
+  return call<UsageView>("get_usage", { range, start, end });
+}
+
+export function refreshUsage(range = "month", start?: string, end?: string) {
+  if (!inTauri()) return Promise.resolve(emptyUsage);
+  return call<UsageView>("refresh_usage", { range, start, end });
 }
 
 export function finishSetup() {

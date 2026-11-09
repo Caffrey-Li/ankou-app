@@ -235,6 +235,44 @@ fn retention_drops_days_older_than_the_window() {
 }
 
 #[test]
+fn retention_cutoff_uses_the_local_day_when_utc_has_moved_ahead() {
+    let tmp = Tmp::new();
+    let now = wanxiang_core::clock_at_utc(2026, 11, 10, 5, 0, 0);
+    assert_eq!(
+        wanxiang_core::local_calendar_day(now, -6 * 3600),
+        "2026-11-09"
+    );
+    assert_eq!(wanxiang_core::local_calendar_day(now, 0), "2026-11-10");
+    let clock = Arc::new(FixedClock(now));
+    let guard = Arc::new(Guard::new(Arc::new(Rec), clock.clone()));
+    let store = Store::open_with_offset(
+        &tmp.path.join("wanxiang.sqlite"),
+        guard,
+        clock,
+        -6 * 3600,
+    )
+    .unwrap();
+    let db = tmp.path.join("wanxiang.sqlite");
+    insert_usage(&db, "2025-11-08");
+    insert_usage(&db, "2025-11-09");
+    insert_usage(&db, "2025-11-10");
+    store.apply_retention().unwrap();
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let mut days = conn
+        .prepare("SELECT day FROM usage_daily ORDER BY day")
+        .unwrap();
+    let got: Vec<String> = days
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(|day| day.unwrap())
+        .collect();
+    assert_eq!(
+        got,
+        vec!["2025-11-09".to_string(), "2025-11-10".to_string()]
+    );
+}
+
+#[test]
 fn default_settings_keep_history_for_twelve_months_and_leave_residency_off() {
     let tmp = Tmp::new();
     let store = open(&tmp, guard());

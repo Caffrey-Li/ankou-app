@@ -6,3 +6,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+rusqlite = { version = "0.41.1", default-features = false, features = ["bundled"] }
+serde_json = "1"
+ureq = { version = "2.12.1", default-features = false, features = ["tls"] }
+wanxiang-core = { path = "../../core" }
+
+[dev-dependencies]
+chrono = "0.4.45"

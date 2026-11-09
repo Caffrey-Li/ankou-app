@@ -1,5 +1,5 @@
 use std::io;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -14,6 +14,10 @@ const JOIN_TIMEOUT: Duration = Duration::from_secs(2);
 pub struct TaskStop(Arc<AtomicBool>);
 
 impl TaskStop {
+    pub fn running() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
     pub fn is_stopped(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
@@ -26,30 +30,71 @@ struct Inner {
     children: Vec<Child>,
 }
 
-/// 跟踪后台任务和子进程，退出时一次停掉。
-pub struct Supervisor {
+struct Shared {
     inner: Mutex<Inner>,
     gate: Mutex<()>,
+}
+
+/// 可复制的句柄。丢弃它不会把还在运行的监督器关掉。
+#[derive(Clone)]
+pub struct SupervisorHandle {
+    shared: Arc<Shared>,
+}
+
+pub struct TrackedChild {
+    pub pid: u32,
+    pub stdin: ChildStdin,
+    pub stdout: ChildStdout,
+}
+
+/// 跟踪后台任务和子进程，退出时一次停掉。
+pub struct Supervisor {
+    handle: SupervisorHandle,
 }
 
 impl Supervisor {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(Inner {
-                stop: Arc::new(AtomicBool::new(false)),
-                finished: false,
-                threads: Vec::new(),
-                children: Vec::new(),
-            }),
-            gate: Mutex::new(()),
+            handle: SupervisorHandle {
+                shared: Arc::new(Shared {
+                    inner: Mutex::new(Inner {
+                        stop: Arc::new(AtomicBool::new(false)),
+                        finished: false,
+                        threads: Vec::new(),
+                        children: Vec::new(),
+                    }),
+                    gate: Mutex::new(()),
+                }),
+            },
         }
+    }
+
+    pub fn handle(&self) -> SupervisorHandle {
+        self.handle.clone()
     }
 
     pub fn spawn_task<F>(&self, task: F)
     where
         F: FnOnce(TaskStop) + Send + 'static,
     {
-        let mut inner = self.inner.lock().expect("supervisor lock");
+        self.handle.spawn_task(task);
+    }
+
+    pub fn spawn_child(&self, command: Command) -> io::Result<u32> {
+        self.handle.spawn_child(command)
+    }
+
+    pub fn shutdown(&self) {
+        self.handle.shutdown();
+    }
+}
+
+impl SupervisorHandle {
+    pub fn spawn_task<F>(&self, task: F)
+    where
+        F: FnOnce(TaskStop) + Send + 'static,
+    {
+        let mut inner = self.shared.inner.lock().expect("supervisor lock");
         if inner.finished {
             return;
         }
@@ -57,7 +102,15 @@ impl Supervisor {
         inner.threads.push(thread::spawn(move || task(stop)));
     }
 
-    pub fn spawn_child(&self, mut command: Command) -> io::Result<u32> {
+    pub fn spawn_child(&self, command: Command) -> io::Result<u32> {
+        Ok(self.spawn_tracked(command)?.pid)
+    }
+
+    pub fn spawn_tracked(&self, mut command: Command) -> io::Result<TrackedChild> {
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
@@ -65,19 +118,35 @@ impl Supervisor {
         }
         let mut child = command.spawn()?;
         let pid = child.id();
-        let mut inner = self.inner.lock().expect("supervisor lock");
+        let stdin = child.stdin.take().ok_or_else(|| io::Error::other("缺少标准输入"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("缺少标准输出"))?;
+        let mut inner = self.shared.inner.lock().expect("supervisor lock");
         if inner.finished {
             terminate_child(&mut child);
             return Err(io::Error::other("supervisor already stopped"));
         }
         inner.children.push(child);
-        Ok(pid)
+        Ok(TrackedChild { pid, stdin, stdout })
+    }
+
+    pub fn stop_child(&self, pid: u32) {
+        let mut child = {
+            let mut inner = self.shared.inner.lock().expect("supervisor lock");
+            let Some(pos) = inner.children.iter().position(|child| child.id() == pid) else {
+                return;
+            };
+            inner.children.remove(pos)
+        };
+        terminate_child(&mut child);
     }
 
     pub fn shutdown(&self) {
-        let _gate = self.gate.lock().expect("shutdown gate");
+        let _gate = self.shared.gate.lock().expect("shutdown gate");
         let (threads, children) = {
-            let mut inner = self.inner.lock().expect("supervisor lock");
+            let mut inner = self.shared.inner.lock().expect("supervisor lock");
             if inner.finished {
                 return;
             }

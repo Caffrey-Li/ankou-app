@@ -54,6 +54,14 @@ impl SecretStore {
         }
     }
 
+    pub fn load(&self) -> Result<String, SecretError> {
+        match entry()?.get_password() {
+            Ok(secret) => Ok(secret),
+            Err(keyring_core::Error::NoEntry) => Err(SecretError::Empty),
+            Err(_) => Err(SecretError::Unavailable),
+        }
+    }
+
     pub fn is_saved(&self) -> Result<bool, SecretError> {
         match entry()?.get_password() {
             Ok(secret) => {

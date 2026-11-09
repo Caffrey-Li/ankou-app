@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 use rusqlite::{params, Connection};
 
-use crate::{Capability, Clock, GrantId, Guard, GuardError, PathScope, RootStamp, ToolId};
+use crate::{
+    calendar_cutoff, local_calendar_day, system_offset_secs, unix_secs, Capability, Clock, GrantId,
+    Guard, GuardError, PathScope, RootStamp, ToolId, UsageSnapshot, UsageState, WindowSample,
+};
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS settings (
@@ -29,7 +31,20 @@ CREATE TABLE IF NOT EXISTS usage_daily (
     tool TEXT NOT NULL,
     metric TEXT NOT NULL,
     amount INTEGER NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (day, tool, metric)
+);
+CREATE TABLE IF NOT EXISTS usage_report (
+    tool TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    state TEXT NOT NULL,
+    reported_at TEXT NOT NULL,
+    PRIMARY KEY (tool, metric)
+);
+CREATE TABLE IF NOT EXISTS account_links (
+    tool TEXT PRIMARY KEY NOT NULL,
+    capability TEXT NOT NULL,
+    status TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS cleanup_history (
     id INTEGER PRIMARY KEY,
@@ -59,6 +74,8 @@ pub struct Settings {
     pub menu_bar_icon: bool,
     pub close_to_tray: bool,
     pub setup_complete: bool,
+    #[serde(default)]
+    pub codex_app_server: bool,
 }
 
 impl Default for Settings {
@@ -75,6 +92,7 @@ impl Default for Settings {
             menu_bar_icon: true,
             close_to_tray: true,
             setup_complete: false,
+            codex_app_server: false,
         }
     }
 }
@@ -130,26 +148,56 @@ pub struct Store {
     guard: Arc<Guard>,
     clock: Arc<dyn Clock>,
     live: Mutex<HashMap<i64, GrantId>>,
+    offset_secs: i32,
 }
 
 impl Store {
     pub fn open(path: &Path, guard: Arc<Guard>, clock: Arc<dyn Clock>) -> Result<Self, StoreError> {
+        let offset = system_offset_secs(clock.now());
+        Self::open_with_offset(path, guard, clock, offset)
+    }
+
+    pub fn open_with_offset(
+        path: &Path,
+        guard: Arc<Guard>,
+        clock: Arc<dyn Clock>,
+        offset_secs: i32,
+    ) -> Result<Self, StoreError> {
         let conn = Connection::open(path).map_err(|_| StoreError::Database)?;
         conn.execute_batch(SCHEMA)
             .map_err(|_| StoreError::Database)?;
+        migrate(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
             guard,
             clock,
             live: Mutex::new(HashMap::new()),
+            offset_secs,
         };
+        store.restore_account_link()?;
         store.restore_all()?;
         store.apply_retention()?;
         Ok(store)
     }
 
+    pub fn local_today(&self) -> String {
+        local_calendar_day(self.clock.now(), self.offset_secs)
+    }
+
+    pub fn offset_secs(&self) -> i32 {
+        self.offset_secs
+    }
+
+    pub fn now_unix(&self) -> i64 {
+        unix_secs(self.clock.now())
+    }
+
     pub fn guard(&self) -> &Guard {
         &self.guard
+    }
+
+    pub fn guard_handle(&self) -> Arc<Guard> {
+        Arc::clone(&self.guard)
     }
 
     pub fn settings(&self) -> Result<Settings, StoreError> {
@@ -214,17 +262,206 @@ impl Store {
 
     pub fn clear_history(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().expect("history");
-        conn.execute_batch("DELETE FROM usage_daily; DELETE FROM cleanup_history;")
-            .map_err(|_| StoreError::Database)
+        conn.execute_batch(
+            "DELETE FROM usage_daily; DELETE FROM usage_report; DELETE FROM cleanup_history;",
+        )
+        .map_err(|_| StoreError::Database)
     }
 
     pub fn apply_retention(&self) -> Result<(), StoreError> {
         let settings = self.settings()?;
-        let today = utc_day(self.clock.now());
-        let cutoff = cutoff_day(&today, settings.retention_months)?;
+        let today = self.local_today();
+        let cutoff = calendar_cutoff(&today, settings.retention_months)
+            .ok_or(StoreError::InvalidSetting)?;
         let conn = self.conn.lock().expect("retention");
         conn.execute("DELETE FROM usage_daily WHERE day < ?1", [cutoff])
             .map_err(|_| StoreError::Database)?;
+        Ok(())
+    }
+
+    pub fn grant_account_link(&self) -> Result<(), StoreError> {
+        let conn = self.conn.lock().expect("account");
+        conn.execute(
+            "INSERT INTO account_links (tool, capability, status) VALUES ('deepseek_harness', 'account_link', 'active')
+             ON CONFLICT(tool) DO UPDATE SET capability = 'account_link', status = 'active'",
+            [],
+        )
+        .map_err(|_| StoreError::Database)?;
+        drop(conn);
+        self.guard.set_account_link(true);
+        Ok(())
+    }
+
+    pub fn revoke_account_link(&self) -> Result<(), StoreError> {
+        let conn = self.conn.lock().expect("account");
+        conn.execute(
+            "INSERT INTO account_links (tool, capability, status) VALUES ('deepseek_harness', 'account_link', 'revoked')
+             ON CONFLICT(tool) DO UPDATE SET status = 'revoked'",
+            [],
+        )
+        .map_err(|_| StoreError::Database)?;
+        drop(conn);
+        self.guard.revoke_account_link();
+        Ok(())
+    }
+
+    pub fn account_link_status(&self) -> Result<Option<String>, StoreError> {
+        let conn = self.conn.lock().expect("account");
+        let mut stmt = conn
+            .prepare("SELECT status FROM account_links WHERE tool = 'deepseek_harness'")
+            .map_err(|_| StoreError::Database)?;
+        let mut rows = stmt.query([]).map_err(|_| StoreError::Database)?;
+        match rows.next().map_err(|_| StoreError::Database)? {
+            Some(row) => Ok(Some(row.get(0).map_err(|_| StoreError::Database)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn write_snapshot(
+        &self,
+        tool: ToolId,
+        metric: &str,
+        snapshot: &UsageSnapshot,
+    ) -> Result<(), StoreError> {
+        let today = self.local_today();
+        let cutoff = calendar_cutoff(&today, self.settings()?.retention_months)
+            .ok_or(StoreError::InvalidSetting)?;
+        let stamp = unix_secs(self.clock.now()).to_string();
+        let conn = self.conn.lock().expect("usage");
+        for (day, amount) in &snapshot.tokens {
+            upsert_daily(&conn, day, tool, "tokens", *amount, &stamp, &cutoff)?;
+        }
+        for (day, amount) in &snapshot.calls {
+            upsert_daily(&conn, day, tool, "calls", *amount, &stamp, &cutoff)?;
+        }
+        for balance in &snapshot.balances {
+            upsert_daily(
+                &conn,
+                &today,
+                tool,
+                balance.currency.metric(),
+                balance.total_minor,
+                &stamp,
+                &cutoff,
+            )?;
+        }
+        for (index, window) in snapshot.windows.iter().enumerate() {
+            let name = window_metric(index, window);
+            upsert_daily(
+                &conn,
+                &today,
+                tool,
+                &name,
+                i64::from(window.used_percent) * 100,
+                &stamp,
+                &cutoff,
+            )?;
+            if let Some(resets) = window.resets_at {
+                upsert_daily(
+                    &conn,
+                    &today,
+                    tool,
+                    &format!("{name}_reset"),
+                    resets,
+                    &stamp,
+                    &cutoff,
+                )?;
+            }
+        }
+        for (day, amount) in &snapshot.excluded_call_days {
+            upsert_daily(&conn, day, tool, "excluded_calls", *amount, &stamp, &cutoff)?;
+        }
+        if snapshot.excluded_call_days.is_empty() && snapshot.excluded_calls > 0 {
+            upsert_daily(
+                &conn,
+                &today,
+                tool,
+                "excluded_calls",
+                i64::try_from(snapshot.excluded_calls).unwrap_or(i64::MAX),
+                &stamp,
+                &cutoff,
+            )?;
+        }
+        if snapshot.excluded_sessions > 0 {
+            upsert_daily(
+                &conn,
+                &today,
+                tool,
+                "excluded_sessions",
+                i64::try_from(snapshot.excluded_sessions).unwrap_or(i64::MAX),
+                &stamp,
+                &cutoff,
+            )?;
+        }
+        set_report(&conn, tool, metric, UsageState::Ok, &stamp)?;
+        Ok(())
+    }
+
+    pub fn mark_usage(&self, tool: ToolId, metric: &str, state: UsageState) -> Result<(), StoreError> {
+        let stamp = unix_secs(self.clock.now()).to_string();
+        let conn = self.conn.lock().expect("report");
+        set_report(&conn, tool, metric, state, &stamp)
+    }
+
+    pub fn daily_amount(&self, day: &str, tool: ToolId, metric: &str) -> Result<Option<i64>, StoreError> {
+        let conn = self.conn.lock().expect("daily");
+        let mut stmt = conn
+            .prepare("SELECT amount FROM usage_daily WHERE day = ?1 AND tool = ?2 AND metric = ?3")
+            .map_err(|_| StoreError::Database)?;
+        let mut rows = stmt
+            .query(params![day, enum_name(tool), metric])
+            .map_err(|_| StoreError::Database)?;
+        match rows.next().map_err(|_| StoreError::Database)? {
+            Some(row) => Ok(Some(row.get(0).map_err(|_| StoreError::Database)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn usage_rows(&self) -> Result<Vec<(String, String, String, i64)>, StoreError> {
+        let conn = self.conn.lock().expect("rows");
+        let mut stmt = conn
+            .prepare("SELECT day, tool, metric, amount FROM usage_daily ORDER BY day, tool, metric")
+            .map_err(|_| StoreError::Database)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .map_err(|_| StoreError::Database)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StoreError::Database)
+    }
+
+    pub fn usage_reports(&self) -> Result<Vec<(String, String, String, String)>, StoreError> {
+        let conn = self.conn.lock().expect("reports");
+        let mut stmt = conn
+            .prepare("SELECT tool, metric, state, reported_at FROM usage_report ORDER BY tool, metric")
+            .map_err(|_| StoreError::Database)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .map_err(|_| StoreError::Database)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StoreError::Database)
+    }
+
+    pub fn usage_state(&self, tool: ToolId, metric: &str) -> Result<Option<UsageState>, StoreError> {
+        let conn = self.conn.lock().expect("state");
+        let mut stmt = conn
+            .prepare("SELECT state FROM usage_report WHERE tool = ?1 AND metric = ?2")
+            .map_err(|_| StoreError::Database)?;
+        let mut rows = stmt
+            .query(params![enum_name(tool), metric])
+            .map_err(|_| StoreError::Database)?;
+        match rows.next().map_err(|_| StoreError::Database)? {
+            Some(row) => {
+                let text: String = row.get(0).map_err(|_| StoreError::Database)?;
+                Ok(UsageState::parse(&text))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn restore_account_link(&self) -> Result<(), StoreError> {
+        if self.account_link_status()? == Some("active".to_string()) {
+            self.guard.set_account_link(true);
+        }
         Ok(())
     }
 
@@ -420,6 +657,7 @@ fn write_settings(conn: &Connection, settings: &Settings) -> Result<(), StoreErr
         ("menu_bar_icon", bit(settings.menu_bar_icon)),
         ("close_to_tray", bit(settings.close_to_tray)),
         ("setup_complete", bit(settings.setup_complete)),
+        ("codex_app_server", bit(settings.codex_app_server)),
     ];
     for (key, value) in pairs {
         conn.execute(
@@ -463,6 +701,7 @@ fn apply_setting(settings: &mut Settings, key: &str, value: &str) {
         "menu_bar_icon" => settings.menu_bar_icon = value == "1",
         "close_to_tray" => settings.close_to_tray = value == "1",
         "setup_complete" => settings.setup_complete = value == "1",
+        "codex_app_server" => settings.codex_app_server = value == "1",
         _ => {}
     }
 }
@@ -480,44 +719,65 @@ fn validate(settings: &Settings) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn cutoff_day(today: &str, months: u32) -> Result<String, StoreError> {
-    let date =
-        NaiveDate::parse_from_str(today, "%Y-%m-%d").map_err(|_| StoreError::InvalidSetting)?;
-    let months_i = i32::try_from(months).map_err(|_| StoreError::InvalidSetting)?;
-    let mut month = date.month() as i32 - months_i;
-    let mut year = date.year();
-    while month <= 0 {
-        month += 12;
-        year -= 1;
+fn migrate(conn: &Connection) -> Result<(), StoreError> {
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('usage_daily') WHERE name = 'updated_at'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| StoreError::Database)?;
+    if exists == 0 {
+        conn.execute_batch(
+            "ALTER TABLE usage_daily ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+        )
+        .map_err(|_| StoreError::Database)?;
     }
-    let day = date.day().min(days_in_month(year, month as u32));
-    let cutoff =
-        NaiveDate::from_ymd_opt(year, month as u32, day).ok_or(StoreError::InvalidSetting)?;
-    Ok(cutoff.format("%Y-%m-%d").to_string())
+    Ok(())
 }
 
-fn days_in_month(year: i32, month: u32) -> u32 {
-    let next = if month == 12 {
-        (year + 1, 1)
-    } else {
-        (year, month + 1)
-    };
-    NaiveDate::from_ymd_opt(next.0, next.1, 1)
-        .and_then(|date| date.pred_opt())
-        .map(|date| date.day())
-        .unwrap_or(28)
-}
-
-fn utc_day(now: std::time::SystemTime) -> String {
-    Utc.timestamp_opt(
-        now.duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0),
-        0,
+fn upsert_daily(
+    conn: &Connection,
+    day: &str,
+    tool: ToolId,
+    metric: &str,
+    amount: i64,
+    stamp: &str,
+    cutoff: &str,
+) -> Result<(), StoreError> {
+    if day < cutoff {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO usage_daily (day, tool, metric, amount, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(day, tool, metric) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at",
+        params![day, enum_name(tool), metric, amount, stamp],
     )
-    .single()
-    .map(|time| time.format("%Y-%m-%d").to_string())
-    .unwrap_or_else(|| "1970-01-01".to_string())
+    .map(|_| ())
+    .map_err(|_| StoreError::Database)
+}
+
+fn set_report(
+    conn: &Connection,
+    tool: ToolId,
+    metric: &str,
+    state: UsageState,
+    stamp: &str,
+) -> Result<(), StoreError> {
+    conn.execute(
+        "INSERT INTO usage_report (tool, metric, state, reported_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(tool, metric) DO UPDATE SET state = excluded.state, reported_at = excluded.reported_at",
+        params![enum_name(tool), metric, state.as_str(), stamp],
+    )
+    .map(|_| ())
+    .map_err(|_| StoreError::Database)
+}
+
+fn window_metric(index: usize, window: &WindowSample) -> String {
+    match window.minutes {
+        Some(minutes) => format!("window_{minutes}_{index}_bps"),
+        None => format!("window_unknown_{index}_bps"),
+    }
 }
 
 fn bit(value: bool) -> String {

@@ -1,5 +1,14 @@
-//! DeepSeek Harness 与 DS Bot 的接入占位。
-//! M0 不读取这两个工具的本机数据。
+//! DeepSeek Harness 与 DS Bot。用量只读 `bot/usage.sqlite`，余额只走钥匙串里的 Key。
+//! Harness 没有单独的用量文件。
+
+mod balance;
+mod calls;
+
+pub use balance::{fetch_balance, parse_balance_json};
+pub use calls::{
+    daily_counts, owner_kind, read_usage_copy, read_usage_set, summarize_calls, usage_db_candidates,
+    CallRow, CallSummary, DayCount, OwnerKind,
+};
 
 pub fn availability() -> &'static str {
     "未验证"

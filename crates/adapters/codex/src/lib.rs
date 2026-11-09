@@ -1,5 +1,14 @@
-//! Codex 桌面应用接入占位。
-//! M0 不读取 rollouts，也不连接 app-server。
+//! Codex。用量只读 rollouts，额度窗口优先走 app-server，不打开登录文件。
+
+mod locate;
+mod rollout;
+mod server;
+
+pub use locate::{find_codex_cli, find_codex_cli_in};
+pub use rollout::{
+    combine_rollouts, parse_app_server_result, parse_rollout, read_rollouts, rollout_paths, RolloutUsage,
+};
+pub use server::query_rate_limits;
 
 pub fn availability() -> &'static str {
     "未验证"

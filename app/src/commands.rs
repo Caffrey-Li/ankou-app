@@ -2,33 +2,33 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State};
 use wanxiang_core::{
-    Capability, Clock, Guard, PathScope, SecretStore, Settings, Store, SystemClock, ToolId,
-    ToolScheduler,
+    month_start, present_usage, shift_days, Capability, Clock, GrantStatus, Guard, PathScope,
+    RecordAccess, RefreshGate, SecretStore, Settings, Store, SystemClock, TaskStop, ToolId,
+    UsageFacts, UsagePage,
 };
 
 use crate::discover::{self, ToolSnapshot};
 
 pub struct Hub {
-    pub store: Store,
+    pub store: Arc<Store>,
     pub secrets: SecretStore,
-}
-
-struct Nop;
-
-impl ToolScheduler for Nop {
-    fn on_revoked(&self, _tool: ToolId, _capability: Capability) {}
+    pub gate: Arc<RefreshGate>,
 }
 
 impl Hub {
     pub fn open(app: &AppHandle) -> tauri::Result<Self> {
         let dir = app.path().app_data_dir()?;
         std::fs::create_dir_all(&dir)?;
+        let supervisor = app.state::<wanxiang_core::Supervisor>();
+        let gate = Arc::new(RefreshGate::new(supervisor.handle()));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let guard = Arc::new(Guard::new(Arc::new(Nop), Arc::clone(&clock)));
-        let store = Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?;
+        let guard = Arc::new(Guard::new(Arc::clone(&gate) as Arc<dyn wanxiang_core::ToolScheduler>, Arc::clone(&clock)));
+        let store = Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?);
+        crate::collect::spawn_refresh(Arc::clone(&store), Arc::clone(&gate));
         Ok(Self {
             store,
             secrets: SecretStore::new(),
+            gate,
         })
     }
 }
@@ -116,6 +116,98 @@ fn complete_setup(hub: State<'_, Hub>) -> Result<(), String> {
     hub.store.set_settings(&settings).map_err(text)
 }
 
+#[tauri::command]
+fn get_usage(
+    hub: State<'_, Hub>,
+    range: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+) -> Result<UsagePage, String> {
+    usage_page(&hub, range.as_deref(), start.as_deref(), end.as_deref()).map_err(text)
+}
+
+#[tauri::command]
+fn refresh_usage(
+    hub: State<'_, Hub>,
+    range: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+) -> Result<UsagePage, String> {
+    crate::collect::refresh_once(&hub.store, &hub.gate, &TaskStop::running());
+    usage_page(&hub, range.as_deref(), start.as_deref(), end.as_deref()).map_err(text)
+}
+
+fn usage_page(
+    hub: &Hub,
+    range: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
+) -> Result<UsagePage, StoreErrorText> {
+    let settings = hub.store.settings().map_err(StoreErrorText)?;
+    let today = hub.store.local_today();
+    let (range_start, range_end) = match range.unwrap_or("month") {
+        "today" => (today.clone(), today.clone()),
+        "7" => (shift_days(&today, -6), today.clone()),
+        "30" => (shift_days(&today, -29), today.clone()),
+        "custom" if valid_day(start) && valid_day(end) && start.unwrap() <= end.unwrap() => {
+            (start.unwrap().to_string(), end.unwrap().to_string())
+        }
+        _ => (month_start(&today), today.clone()),
+    };
+    Ok(present_usage(&UsageFacts {
+        now: hub.store.now_unix(),
+        offset_secs: hub.store.offset_secs(),
+        today,
+        range_start,
+        range_end,
+        rows: hub.store.usage_rows().map_err(StoreErrorText)?,
+        reports: hub.store.usage_reports().map_err(StoreErrorText)?,
+        key_saved: hub.secrets.is_saved().unwrap_or(false),
+        account_linked: hub.store.guard().account_link_active(ToolId::DeepSeekHarness),
+        codex_app_server: settings.codex_app_server,
+        codex_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::Codex),
+        bot_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::DsBot),
+    }))
+}
+
+fn record_access(grants: &[wanxiang_core::StoredGrant], tool: ToolId) -> RecordAccess {
+    let mut authorized = false;
+    let mut reauth = false;
+    for grant in grants {
+        if grant.tool == tool && grant.capability == Capability::Usage {
+            if grant.status == GrantStatus::Active {
+                authorized = true;
+            } else if grant.status == GrantStatus::NeedsReauth {
+                reauth = true;
+            }
+        }
+    }
+    if authorized {
+        RecordAccess::Authorized
+    } else if reauth {
+        RecordAccess::NeedsReauth
+    } else {
+        RecordAccess::Unauthorized
+    }
+}
+
+struct StoreErrorText(wanxiang_core::StoreError);
+
+impl std::fmt::Display for StoreErrorText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+fn valid_day(day: Option<&str>) -> bool {
+    day.is_some_and(|day| {
+        day.len() == 10
+            && day.as_bytes()[4] == b'-'
+            && day.as_bytes()[7] == b'-'
+            && day.bytes().filter(|byte| byte.is_ascii_digit()).count() == 8
+    })
+}
+
 pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
         list_grants,
@@ -129,6 +221,8 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         clear_history,
         discover_tools,
         complete_setup,
+        get_usage,
+        refresh_usage,
     ])
 }
 
@@ -167,6 +261,8 @@ mod tests {
             "clear-history",
             "discover-tools",
             "complete-setup",
+            "get-usage",
+            "refresh-usage",
         ];
         let text = include_str!("../capabilities/default.json");
         for name in COMMANDS {

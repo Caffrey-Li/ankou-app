@@ -43,7 +43,7 @@ export const toolSpecs: ToolSpec[] = [
       { capability: "conversation", title: "对话", detail: "读取对话以准备交接", badge: unverified },
       {
         capability: "account_link",
-        title: "余额 · 账户连接",
+        title: "DeepSeek 账户 · 余额",
         detail: "查询 DeepSeek 余额",
         badge: unverified,
       },
@@ -64,7 +64,7 @@ export const toolSpecs: ToolSpec[] = [
     tags: [
       { label: "用量", badge: unverified },
       { label: "对话", badge: unverified },
-      { label: "余额 · 账户连接", badge: unverified },
+      { label: "DeepSeek 账户 · 余额", badge: unverified },
       { label: "空间", badge: unverified },
       { label: "清理", badge: unverified },
       { label: "放入", badge: unverified },
@@ -76,11 +76,18 @@ export const toolSpecs: ToolSpec[] = [
     name: "DS Bot",
     caps: [
       { capability: "usage", title: "用量", detail: "读取本地用量记录", badge: unverified },
+      {
+        capability: "account_link",
+        title: "DeepSeek 账户 · 余额",
+        detail: "与 Harness 共用这一条连接",
+        badge: unverified,
+      },
       { capability: "conversation", title: "Bot 与群聊", detail: "尚未实测", badge: unverified },
       { capability: "insert_content", title: "交接方式", detail: "尚未实测", badge: unverified },
     ],
     tags: [
       { label: "用量", badge: unverified },
+      { label: "DeepSeek 账户 · 余额", badge: unverified },
       { label: "Bot 与群聊", badge: unverified },
       { label: "交接方式", badge: unverified },
     ],

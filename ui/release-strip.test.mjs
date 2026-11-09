@@ -1,0 +1,25 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("..", import.meta.url));
+execFileSync("npx", ["vite", "build", "--config", "ui/vite.config.ts"], {
+  cwd: root,
+  stdio: "inherit",
+});
+
+function files(dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return files(path);
+    return /\.(js|css|html)$/.test(name) ? [path] : [];
+  });
+}
+
+const built = files(join(root, "ui", "dist"))
+  .map((path) => readFileSync(path, "utf8"))
+  .join("\n");
+assert.equal(built.includes("12.34"), false);
+assert.equal(built.includes("fixture-m2"), false);

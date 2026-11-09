@@ -6,6 +6,10 @@ use tauri::Listener;
 use tauri::{Manager, RunEvent, Theme, WindowEvent};
 use wanxiang_core::Supervisor;
 
+#[cfg(test)]
+mod fixture;
+
+mod collect;
 mod commands;
 mod discover;
 
@@ -17,6 +21,7 @@ pub fn run() {
             setup_tray(app.handle())?;
             if let Some(window) = app.get_webview_window("main") {
                 apply_window_material(&window);
+                open_preview(&window);
             }
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
@@ -161,7 +166,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 shutdown(app);
                 app.exit(0);
             }
-            "refresh" => {}
+            "refresh" => {
+                if let Some(hub) = app.try_state::<commands::Hub>() {
+                    collect::refresh_once(&hub.store, &hub.gate, &wanxiang_core::TaskStop::running());
+                }
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -196,6 +205,30 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         let _ = tray;
     }
     Ok(())
+}
+
+fn open_preview(window: &tauri::WebviewWindow) {
+    #[cfg(debug_assertions)]
+    {
+        let Ok(page) = std::env::var("WANXIANG_PREVIEW") else {
+            return;
+        };
+        if page != "usage" && page != "overview" {
+            return;
+        }
+        let window = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            let url = format!("http://127.0.0.1:1420/?page={page}&preview=1");
+            if let Ok(url) = url.parse() {
+                let _ = window.navigate(url);
+            }
+        });
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = window;
+    }
 }
 
 fn current_theme(app: &tauri::AppHandle) -> Theme {
