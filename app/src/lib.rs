@@ -12,6 +12,7 @@ mod fixture;
 mod collect;
 mod commands;
 mod discover;
+mod measured;
 
 pub fn run() {
     commands::attach(tauri::Builder::default())
@@ -168,7 +169,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             "refresh" => {
                 if let Some(hub) = app.try_state::<commands::Hub>() {
-                    collect::refresh_once(&hub.store, &hub.gate, &wanxiang_core::TaskStop::running());
+                    collect::start_manual(
+                        std::sync::Arc::clone(&hub.store),
+                        std::sync::Arc::clone(&hub.gate),
+                        std::sync::Arc::clone(&hub.emit),
+                    );
                 }
             }
             _ => {}

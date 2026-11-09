@@ -51,6 +51,26 @@ CREATE TABLE IF NOT EXISTS cleanup_history (
     created_at TEXT NOT NULL,
     summary TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS codex_file (
+    path TEXT PRIMARY KEY NOT NULL,
+    size INTEGER NOT NULL,
+    mtime INTEGER NOT NULL,
+    samples INTEGER NOT NULL,
+    partial INTEGER NOT NULL,
+    limits_at INTEGER NOT NULL,
+    w0_minutes INTEGER NOT NULL,
+    w0_percent INTEGER NOT NULL,
+    w0_resets INTEGER NOT NULL,
+    w1_minutes INTEGER NOT NULL,
+    w1_percent INTEGER NOT NULL,
+    w1_resets INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS codex_file_day (
+    path TEXT NOT NULL,
+    day TEXT NOT NULL,
+    tokens INTEGER NOT NULL,
+    PRIMARY KEY (path, day)
+);
 ";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -142,6 +162,15 @@ impl std::fmt::Display for StoreError {
 }
 
 impl std::error::Error for StoreError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodexFile {
+    pub samples: i64,
+    pub partial: bool,
+    pub days: Vec<(String, i64)>,
+    pub limits_at: i64,
+    pub windows: Vec<(i64, i64, i64)>,
+}
 
 pub struct Store {
     conn: Mutex<Connection>,
@@ -263,7 +292,7 @@ impl Store {
     pub fn clear_history(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().expect("history");
         conn.execute_batch(
-            "DELETE FROM usage_daily; DELETE FROM usage_report; DELETE FROM cleanup_history;",
+            "DELETE FROM usage_daily; DELETE FROM usage_report; DELETE FROM cleanup_history; DELETE FROM codex_file; DELETE FROM codex_file_day;",
         )
         .map_err(|_| StoreError::Database)
     }
@@ -382,13 +411,43 @@ impl Store {
                 &cutoff,
             )?;
         }
-        if snapshot.excluded_sessions > 0 {
+        if snapshot.manage_session_counts {
+            put_count(
+                &conn,
+                &today,
+                tool,
+                "excluded_sessions",
+                i64::try_from(snapshot.excluded_sessions).unwrap_or(i64::MAX),
+                &stamp,
+                &cutoff,
+            )?;
+            put_count(
+                &conn,
+                &today,
+                tool,
+                "partial_sessions",
+                i64::try_from(snapshot.partial_sessions).unwrap_or(i64::MAX),
+                &stamp,
+                &cutoff,
+            )?;
+        } else if snapshot.excluded_sessions > 0 {
             upsert_daily(
                 &conn,
                 &today,
                 tool,
                 "excluded_sessions",
                 i64::try_from(snapshot.excluded_sessions).unwrap_or(i64::MAX),
+                &stamp,
+                &cutoff,
+            )?;
+        }
+        if !snapshot.windows.is_empty() {
+            upsert_daily(
+                &conn,
+                &today,
+                tool,
+                "window_source",
+                if snapshot.window_live { 1 } else { 2 },
                 &stamp,
                 &cutoff,
             )?;
@@ -456,6 +515,104 @@ impl Store {
             }
             None => Ok(None),
         }
+    }
+
+    pub fn codex_cached(&self, path: &str, size: i64, mtime: i64) -> Result<Option<CodexFile>, StoreError> {
+        let conn = self.conn.lock().expect("codex cache");
+        let mut stmt = conn
+            .prepare(
+                "SELECT samples, partial, limits_at, w0_minutes, w0_percent, w0_resets, w1_minutes, w1_percent, w1_resets
+                 FROM codex_file WHERE path = ?1 AND size = ?2 AND mtime = ?3",
+            )
+            .map_err(|_| StoreError::Database)?;
+        let mut rows = stmt.query(params![path, size, mtime]).map_err(|_| StoreError::Database)?;
+        let Some(row) = rows.next().map_err(|_| StoreError::Database)? else {
+            return Ok(None);
+        };
+        let samples = row.get(0).map_err(|_| StoreError::Database)?;
+        let partial = row.get::<_, i64>(1).map_err(|_| StoreError::Database)? != 0;
+        let limits_at = row.get(2).map_err(|_| StoreError::Database)?;
+        let windows = windows_from_row(&row)?;
+        drop(rows);
+        drop(stmt);
+        let mut days_stmt = conn
+            .prepare("SELECT day, tokens FROM codex_file_day WHERE path = ?1 ORDER BY day")
+            .map_err(|_| StoreError::Database)?;
+        let days = days_stmt
+            .query_map(params![path], |day| Ok((day.get(0)?, day.get(1)?)))
+            .map_err(|_| StoreError::Database)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StoreError::Database)?;
+        Ok(Some(CodexFile {
+            samples,
+            partial,
+            days,
+            limits_at,
+            windows,
+        }))
+    }
+
+    pub fn save_codex_file(&self, path: &str, size: i64, mtime: i64, file: &CodexFile) -> Result<(), StoreError> {
+        let conn = self.conn.lock().expect("codex save");
+        let (w0, w1) = windows_to_row(&file.windows);
+        conn.execute(
+            "INSERT INTO codex_file (
+                path, size, mtime, samples, partial, limits_at,
+                w0_minutes, w0_percent, w0_resets, w1_minutes, w1_percent, w1_resets
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(path) DO UPDATE SET
+                size = excluded.size, mtime = excluded.mtime, samples = excluded.samples,
+                partial = excluded.partial, limits_at = excluded.limits_at,
+                w0_minutes = excluded.w0_minutes, w0_percent = excluded.w0_percent, w0_resets = excluded.w0_resets,
+                w1_minutes = excluded.w1_minutes, w1_percent = excluded.w1_percent, w1_resets = excluded.w1_resets",
+            params![
+                path,
+                size,
+                mtime,
+                file.samples,
+                if file.partial { 1 } else { 0 },
+                file.limits_at,
+                w0.0,
+                w0.1,
+                w0.2,
+                w1.0,
+                w1.1,
+                w1.2
+            ],
+        )
+        .map_err(|_| StoreError::Database)?;
+        conn.execute("DELETE FROM codex_file_day WHERE path = ?1", params![path])
+            .map_err(|_| StoreError::Database)?;
+        for (day, tokens) in &file.days {
+            conn.execute(
+                "INSERT INTO codex_file_day (path, day, tokens) VALUES (?1, ?2, ?3)",
+                params![path, day, tokens],
+            )
+            .map_err(|_| StoreError::Database)?;
+        }
+        Ok(())
+    }
+
+    pub fn forget_codex_files(&self, seen: &[String]) -> Result<(), StoreError> {
+        let conn = self.conn.lock().expect("codex forget");
+        let mut stmt = conn
+            .prepare("SELECT path FROM codex_file")
+            .map_err(|_| StoreError::Database)?;
+        let paths = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|_| StoreError::Database)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StoreError::Database)?;
+        for path in paths {
+            if seen.iter().any(|item| item == &path) {
+                continue;
+            }
+            conn.execute("DELETE FROM codex_file WHERE path = ?1", params![path])
+                .map_err(|_| StoreError::Database)?;
+            conn.execute("DELETE FROM codex_file_day WHERE path = ?1", params![path])
+                .map_err(|_| StoreError::Database)?;
+        }
+        Ok(())
     }
 
     fn restore_account_link(&self) -> Result<(), StoreError> {
@@ -734,6 +891,51 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
         .map_err(|_| StoreError::Database)?;
     }
     Ok(())
+}
+
+fn put_count(
+    conn: &Connection,
+    day: &str,
+    tool: ToolId,
+    metric: &str,
+    amount: i64,
+    stamp: &str,
+    cutoff: &str,
+) -> Result<(), StoreError> {
+    if amount == 0 {
+        conn.execute(
+            "DELETE FROM usage_daily WHERE tool = ?1 AND metric = ?2",
+            params![enum_name(tool), metric],
+        )
+        .map(|_| ())
+        .map_err(|_| StoreError::Database)
+    } else {
+        upsert_daily(conn, day, tool, metric, amount, stamp, cutoff)
+    }
+}
+
+fn windows_from_row(row: &rusqlite::Row<'_>) -> Result<Vec<(i64, i64, i64)>, StoreError> {
+    let mut windows = Vec::new();
+    for base in [3_usize, 6] {
+        let minutes: i64 = row.get(base).map_err(|_| StoreError::Database)?;
+        if minutes == -2 {
+            continue;
+        }
+        windows.push((
+            minutes,
+            row.get(base + 1).map_err(|_| StoreError::Database)?,
+            row.get(base + 2).map_err(|_| StoreError::Database)?,
+        ));
+    }
+    Ok(windows)
+}
+
+fn windows_to_row(windows: &[(i64, i64, i64)]) -> ((i64, i64, i64), (i64, i64, i64)) {
+    let blank = (-2, -1, -1);
+    (
+        windows.first().copied().unwrap_or(blank),
+        windows.get(1).copied().unwrap_or(blank),
+    )
 }
 
 fn upsert_daily(

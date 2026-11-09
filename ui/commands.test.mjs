@@ -27,11 +27,14 @@ assert.deepEqual(
     "refresh-usage",
     "revoke",
     "save-deepseek-key",
+    "set-capability",
     "set-settings",
   ],
 );
+assert.equal(allowed.includes("allow-grant"), false);
+assert.equal(allowed.length, invoked.length);
 for (const name of invoked) {
-  assert.ok(allowed.includes(`allow-${name}`), name);
+  assert.equal(allowed.filter((item) => item === `allow-${name}`).length, 1, name);
 }
 assert.equal(ui.includes("已连接"), false);
 assert.equal(ui.includes("已选"), false);

@@ -24,3 +24,7 @@ assert.match(source, /余额密钥未保存/);
 assert.match(source, /DeepSeek 账户 · 余额/);
 assert.match(source, /更早没有本机记录，不补算/);
 assert.match(source, /按各工具自身周期，不受上方日期影响/);
+assert.match(source, /刷新中/);
+assert.match(source, /已实测 2026-11-09/);
+assert.match(source, /其余工具运行正常/);
+assert.match(source, /已授权/);

@@ -112,6 +112,11 @@ export function revokeGrant(id: number) {
   return call<void>("revoke", { id });
 }
 
+export function setCapability(kind: string, on: boolean) {
+  if (!inTauri()) return Promise.resolve();
+  return call<void>("set_capability", { kind, on });
+}
+
 export type UsageCard = {
   name: string;
   value: string;
@@ -185,9 +190,9 @@ export function loadUsage(range = "month", start?: string, end?: string) {
   return call<UsageView>("get_usage", { range, start, end });
 }
 
-export function refreshUsage(range = "month", start?: string, end?: string) {
-  if (!inTauri()) return Promise.resolve(emptyUsage);
-  return call<UsageView>("refresh_usage", { range, start, end });
+export function refreshUsage() {
+  if (!inTauri()) return Promise.resolve(false);
+  return call<boolean>("refresh_usage");
 }
 
 export function finishSetup() {

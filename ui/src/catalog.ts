@@ -15,12 +15,12 @@ export type CapRow = {
   capability: CapabilityId;
   title: string;
   detail: string;
-  badge: "未验证" | "暂不提供";
+  badge: "未验证" | "暂不提供" | "已实测";
 };
 
 export type ToolTag = {
   label: string;
-  badge: "未验证" | "暂不提供";
+  badge: "未验证" | "暂不提供" | "已实测";
 };
 
 export type ToolSpec = {
@@ -44,8 +44,8 @@ export const toolSpecs: ToolSpec[] = [
       {
         capability: "account_link",
         title: "DeepSeek 账户 · 余额",
-        detail: "查询 DeepSeek 余额",
-        badge: unverified,
+        detail: "已实测 2026-11-09",
+        badge: "已实测",
       },
       {
         capability: "space_scan",
@@ -64,7 +64,7 @@ export const toolSpecs: ToolSpec[] = [
     tags: [
       { label: "用量", badge: unverified },
       { label: "对话", badge: unverified },
-      { label: "DeepSeek 账户 · 余额", badge: unverified },
+      { label: "DeepSeek 账户 · 余额", badge: "已实测" },
       { label: "空间", badge: unverified },
       { label: "清理", badge: unverified },
       { label: "放入", badge: unverified },
@@ -75,19 +75,19 @@ export const toolSpecs: ToolSpec[] = [
     letter: "B",
     name: "DS Bot",
     caps: [
-      { capability: "usage", title: "用量", detail: "读取本地用量记录", badge: unverified },
+      { capability: "usage", title: "用量", detail: "已实测 2026-11-09", badge: "已实测" },
       {
         capability: "account_link",
         title: "DeepSeek 账户 · 余额",
-        detail: "与 Harness 共用这一条连接",
-        badge: unverified,
+        detail: "已实测 2026-11-09",
+        badge: "已实测",
       },
       { capability: "conversation", title: "Bot 与群聊", detail: "尚未实测", badge: unverified },
       { capability: "insert_content", title: "交接方式", detail: "尚未实测", badge: unverified },
     ],
     tags: [
-      { label: "用量", badge: unverified },
-      { label: "DeepSeek 账户 · 余额", badge: unverified },
+      { label: "用量", badge: "已实测" },
+      { label: "DeepSeek 账户 · 余额", badge: "已实测" },
       { label: "Bot 与群聊", badge: unverified },
       { label: "交接方式", badge: unverified },
     ],
@@ -156,14 +156,14 @@ export const toolSpecs: ToolSpec[] = [
       {
         capability: "usage",
         title: "用量与额度窗口",
-        detail: "尚未实测",
-        badge: unverified,
+        detail: "已实测 2026-11-09",
+        badge: "已实测",
       },
       { capability: "conversation", title: "对话", detail: "尚未实测", badge: unverified },
       { capability: "insert_content", title: "放入", detail: "尚未实测", badge: unverified },
     ],
     tags: [
-      { label: "用量与额度窗口", badge: unverified },
+      { label: "用量与额度窗口", badge: "已实测" },
       { label: "对话", badge: unverified },
       { label: "放入", badge: unverified },
     ],

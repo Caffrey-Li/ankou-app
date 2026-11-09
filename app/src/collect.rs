@@ -1,29 +1,70 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use wanxiang_adapter_codex::{
-    combine_rollouts, find_codex_cli, parse_rollout, query_rate_limits, rollout_paths,
-};
+use wanxiang_adapter_codex::{find_codex_cli, parse_rollout, query_rate_limits, rollout_paths};
 use wanxiang_adapter_dsh::{daily_counts, fetch_balance, read_usage_set, usage_db_candidates};
 use wanxiang_core::{
-    local_calendar_day, run_collect, wait_interval, Capability, GrantStatus, Guard, RefreshGate,
-    SecretError, SecretStore, Store, TaskStop, ToolId, UsageError, UsageSnapshot, UsageSource,
-    UsageState, REFRESH_EVERY,
+    local_calendar_day, run_collect, wait_interval, Capability, CodexFile, GrantStatus, Guard,
+    RefreshGate, SecretError, SecretStore, Store, TaskStop, ToolId, UsageError, UsageSnapshot,
+    UsageSource, WindowSample, REFRESH_EVERY,
 };
 
-pub fn spawn_refresh(store: Arc<Store>, gate: Arc<RefreshGate>) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefreshKind {
+    Launch,
+    Manual,
+    Periodic,
+}
+
+impl RefreshKind {
+    fn app_server(self) -> bool {
+        !matches!(self, Self::Periodic)
+    }
+}
+
+pub fn due(now: SystemTime, last: SystemTime) -> bool {
+    now.duration_since(last).unwrap_or_default() >= REFRESH_EVERY
+}
+
+pub trait ServerProbe: Sync {
+    fn start(&self, gate: &RefreshGate) -> Result<Vec<WindowSample>, UsageError>;
+}
+
+struct LiveServer;
+
+impl ServerProbe for LiveServer {
+    fn start(&self, gate: &RefreshGate) -> Result<Vec<WindowSample>, UsageError> {
+        let path = std::env::var("PATH").unwrap_or_default();
+        let Some(bin) = find_codex_cli(&path) else {
+            return Err(UsageError::AppServer);
+        };
+        let mut command = Command::new(bin);
+        command.arg("app-server");
+        let windows = query_rate_limits(&gate.supervisor(), command, |pid| gate.track_codex(pid))?;
+        gate.clear_codex();
+        Ok(windows)
+    }
+}
+
+pub fn spawn_refresh(
+    store: Arc<Store>,
+    gate: Arc<RefreshGate>,
+    emit: Arc<dyn Fn(&str) + Send + Sync>,
+) {
     if std::env::var_os("WANXIANG_SKIP_REFRESH").is_some() {
         return;
     }
     gate.supervisor().spawn_task(move |stop| {
+        let mut marked = SystemTime::now();
         let launch = store
             .settings()
             .map(|settings| settings.refresh_on_launch)
             .unwrap_or(false);
         if launch {
-            refresh_once(&store, &gate, &stop);
+            refresh_blocking(&store, &gate, &stop, RefreshKind::Launch, &LiveServer, &emit);
         }
         while !stop.is_stopped() {
             let periodic = store
@@ -35,19 +76,64 @@ pub fn spawn_refresh(store: Arc<Store>, gate: Arc<RefreshGate>) {
                 continue;
             }
             wait_interval(&stop, REFRESH_EVERY);
-            if stop.is_stopped() {
-                break;
+            if stop.is_stopped() || !due(SystemTime::now(), marked) {
+                continue;
             }
-            refresh_once(&store, &gate, &stop);
+            marked = SystemTime::now();
+            refresh_blocking(&store, &gate, &stop, RefreshKind::Periodic, &LiveServer, &emit);
         }
     });
 }
 
-pub fn refresh_once(store: &Store, gate: &Arc<RefreshGate>, stop: &TaskStop) {
+pub fn start_manual(
+    store: Arc<Store>,
+    gate: Arc<RefreshGate>,
+    emit: Arc<dyn Fn(&str) + Send + Sync>,
+) -> bool {
+    if !gate.try_begin() {
+        return false;
+    }
+    emit("started");
+    gate.supervisor().spawn_task(move |stop| {
+        let _end = End(Arc::clone(&gate), Arc::clone(&emit));
+        refresh_body(&store, &gate, &stop, RefreshKind::Manual, &LiveServer, emit.as_ref());
+    });
+    true
+}
+
+fn refresh_blocking(
+    store: &Store,
+    gate: &Arc<RefreshGate>,
+    stop: &TaskStop,
+    kind: RefreshKind,
+    server: &dyn ServerProbe,
+    emit: &Arc<dyn Fn(&str) + Send + Sync>,
+) {
     if !gate.try_begin() {
         return;
     }
-    let _busy = Busy(gate);
+    emit("started");
+    let _end = End(Arc::clone(gate), Arc::clone(emit));
+    refresh_body(store, gate, stop, kind, server, emit.as_ref());
+}
+
+struct End(Arc<RefreshGate>, Arc<dyn Fn(&str) + Send + Sync>);
+
+impl Drop for End {
+    fn drop(&mut self) {
+        (self.1)("done");
+        self.0.end();
+    }
+}
+
+fn refresh_body(
+    store: &Store,
+    gate: &RefreshGate,
+    stop: &TaskStop,
+    kind: RefreshKind,
+    server: &dyn ServerProbe,
+    emit: &(dyn Fn(&str) + Sync),
+) {
     if stop.is_stopped() {
         return;
     }
@@ -62,57 +148,69 @@ pub fn refresh_once(store: &Store, gate: &Arc<RefreshGate>, stop: &TaskStop) {
             grant.tool == tool && grant.capability == capability && grant.status == GrantStatus::Active
         })
     };
-    if let Some(root) = grants.iter().find(|grant| {
+    let want_server = kind.app_server() && settings.codex_app_server && active(ToolId::Codex, Capability::Usage);
+    let bot = grants.iter().find(|grant| {
         grant.tool == ToolId::DsBot && grant.capability == Capability::Usage && grant.status == GrantStatus::Active
-    }) {
-        let _ = run_collect(
-            store,
-            gate,
-            stop,
-            &DsBotSource {
-                root: root.root.clone(),
-                offset: store.offset_secs(),
-                guard: store.guard_handle(),
-            },
-        );
-    }
-    if store.guard().account_link_active(ToolId::DeepSeekHarness) {
-        let _ = run_collect(store, gate, stop, &BalanceSource);
-    }
-    if let Some(root) = grants.iter().find(|grant| {
+    });
+    let codex = grants.iter().find(|grant| {
         grant.tool == ToolId::Codex && grant.capability == Capability::Usage && grant.status == GrantStatus::Active
-    }) {
-        let _ = run_collect(
-            store,
-            gate,
-            stop,
-            &CodexFiles {
-                root: root.root.clone(),
-                offset: store.offset_secs(),
-                guard: store.guard_handle(),
-            },
-        );
-        if settings.codex_app_server && active(ToolId::Codex, Capability::Usage) {
-            let _ = run_collect(
-                store,
-                gate,
-                stop,
-                &CodexServer {
-                    gate: Arc::clone(gate),
-                },
-            );
-        } else {
-            let _ = store.mark_usage(ToolId::Codex, "windows", UsageState::AppOff);
-        }
-    }
-}
-
-struct Busy<'a>(&'a RefreshGate);
-
-impl Drop for Busy<'_> {
-    fn drop(&mut self) {
-        self.0.end();
-    }
+    });
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            if let Some(root) = bot {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &DsBotSource {
+                        root: root.root.clone(),
+                        offset: store.offset_secs(),
+                        guard: store.guard_handle(),
+                    },
+                );
+            }
+            emit("ds_bot");
+        });
+        scope.spawn(|| {
+            if store.guard().account_link_active(ToolId::DeepSeekHarness) {
+                let _ = run_collect(store, gate, stop, &BalanceSource);
+            }
+            emit("balance");
+        });
+        scope.spawn(|| {
+            if let Some(root) = codex {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &CodexFiles {
+                        root: root.root.clone(),
+                        offset: store.offset_secs(),
+                        guard: store.guard_handle(),
+                        store,
+                        write_windows: !want_server && !settings.codex_app_server,
+                    },
+                );
+            }
+            emit("codex");
+        });
+        scope.spawn(|| {
+            if want_server {
+                match server.start(gate) {
+                    Ok(windows) => {
+                        let mut snapshot = UsageSnapshot::empty();
+                        snapshot.windows = windows;
+                        snapshot.window_live = true;
+                        let _ = store.write_snapshot(ToolId::Codex, "windows", &snapshot);
+                    }
+                    Err(err) => {
+                        let _ = store.mark_usage(ToolId::Codex, "windows", err.state());
+                    }
+                }
+            }
+            emit("windows");
+        });
+    });
 }
 
 struct DsBotSource {
@@ -195,13 +293,15 @@ impl UsageSource for BalanceSource {
     }
 }
 
-struct CodexFiles {
+struct CodexFiles<'a> {
     root: PathBuf,
     offset: i32,
     guard: Arc<Guard>,
+    store: &'a Store,
+    write_windows: bool,
 }
 
-impl UsageSource for CodexFiles {
+impl UsageSource for CodexFiles<'_> {
     fn tool(&self) -> ToolId {
         ToolId::Codex
     }
@@ -215,72 +315,103 @@ impl UsageSource for CodexFiles {
         if stop.is_stopped() {
             return Err(UsageError::Stopped);
         }
-        let mut parsed = Vec::new();
-        for path in readable_paths(&self.root) {
-            if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+        let mut snapshot = UsageSnapshot::empty();
+        snapshot.manage_session_counts = true;
+        let mut seen = Vec::new();
+        let mut days = BTreeMap::<String, i64>::new();
+        let mut excluded = 0_u64;
+        let mut partial = 0_u64;
+        let mut counted = false;
+        let mut newest: Option<(i64, Vec<WindowSample>)> = None;
+        for path in rollout_paths(&self.root) {
+            if stop.is_stopped() {
+                return Err(UsageError::Stopped);
+            }
+            let meta = std::fs::metadata(&path).map_err(|_| UsageError::Unreadable)?;
+            let key = path.to_string_lossy().into_owned();
+            let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|time| i64::try_from(time.as_secs()).unwrap_or(i64::MAX))
+                .unwrap_or(0);
+            let file = match self.store.codex_cached(&key, size, mtime).map_err(|_| UsageError::Unreadable)? {
+                Some(hit) => hit,
+                None => {
+                    let text = read_text(&self.guard, ToolId::Codex, &path)?;
+                    let row = parse_rollout(&text);
+                    let mut bucket = BTreeMap::<String, i64>::new();
+                    for (at, tokens) in row.at_ms.iter().zip(&row.events) {
+                        let instant = UNIX_EPOCH + Duration::from_millis((*at).max(0) as u64);
+                        let day = local_calendar_day(instant, self.offset);
+                        *bucket.entry(day).or_default() += tokens;
+                    }
+                    let file = CodexFile {
+                        samples: i64::from(row.samples),
+                        partial: row.partial,
+                        days: bucket.into_iter().collect(),
+                        limits_at: row.limits_at.unwrap_or(-1),
+                        windows: row
+                            .windows
+                            .iter()
+                            .take(2)
+                            .map(|window| {
+                                (
+                                    window.minutes.unwrap_or(-1),
+                                    i64::from(window.used_percent),
+                                    window.resets_at.unwrap_or(-1),
+                                )
+                            })
+                            .collect(),
+                    };
+                    self.store
+                        .save_codex_file(&key, size, mtime, &file)
+                        .map_err(|_| UsageError::Unreadable)?;
+                    file
+                }
+            };
+            seen.push(key);
+            if file.samples == 0 {
+                excluded += 1;
                 continue;
             }
-            let text = read_text(&self.guard, ToolId::Codex, &path)?;
-            parsed.push(parse_rollout(&text));
-        }
-        let mut snapshot = UsageSnapshot::empty();
-        if let Some((_, excluded)) = combine_rollouts(&parsed) {
-            snapshot.excluded_sessions = excluded;
-        } else if !parsed.is_empty() {
-            snapshot.excluded_sessions = u64::try_from(parsed.len()).unwrap_or(0);
-            return Ok(snapshot);
-        }
-        let mut days = std::collections::BTreeMap::<String, i64>::new();
-        for row in &parsed {
-            for (at, tokens) in row.at_ms.iter().zip(&row.events) {
-                let instant = UNIX_EPOCH + Duration::from_millis((*at).max(0) as u64);
-                let day = local_calendar_day(instant, self.offset);
+            counted = true;
+            if file.partial {
+                partial += 1;
+            }
+            for (day, tokens) in file.days {
                 *days.entry(day).or_default() += tokens;
             }
+            if file.limits_at >= 0
+                && newest
+                    .as_ref()
+                    .map(|(at, _)| file.limits_at >= *at)
+                    .unwrap_or(true)
+            {
+                let windows = file
+                    .windows
+                    .iter()
+                    .map(|(minutes, percent, resets)| WindowSample {
+                        minutes: (*minutes >= 0).then_some(*minutes),
+                        used_percent: i32::try_from(*percent).unwrap_or(0),
+                        resets_at: (*resets >= 0).then_some(*resets),
+                    })
+                    .collect();
+                newest = Some((file.limits_at, windows));
+            }
         }
-        snapshot.tokens = days.into_iter().collect();
-        if let Some(newest) = parsed
-            .iter()
-            .filter(|row| !row.windows.is_empty())
-            .max_by_key(|row| row.limits_at.unwrap_or(0))
-        {
-            snapshot.windows = newest.windows.clone();
+        self.store.forget_codex_files(&seen).map_err(|_| UsageError::Unreadable)?;
+        snapshot.excluded_sessions = excluded;
+        snapshot.partial_sessions = partial;
+        if counted {
+            snapshot.tokens = days.into_iter().collect();
+            if self.write_windows {
+                if let Some((_, windows)) = newest {
+                    snapshot.windows = windows;
+                }
+            }
         }
-        Ok(snapshot)
-    }
-}
-
-struct CodexServer {
-    gate: Arc<RefreshGate>,
-}
-
-impl UsageSource for CodexServer {
-    fn tool(&self) -> ToolId {
-        ToolId::Codex
-    }
-    fn capability(&self) -> Capability {
-        Capability::Usage
-    }
-    fn metric(&self) -> &'static str {
-        "windows"
-    }
-    fn collect(&self, stop: &TaskStop) -> Result<UsageSnapshot, UsageError> {
-        if stop.is_stopped() {
-            return Err(UsageError::Stopped);
-        }
-        let path = std::env::var("PATH").unwrap_or_default();
-        let Some(bin) = find_codex_cli(&path) else {
-            return Err(UsageError::AppServer);
-        };
-        let mut command = Command::new(bin);
-        command.arg("app-server");
-        let gate = Arc::clone(&self.gate);
-        let windows = query_rate_limits(&self.gate.supervisor(), command, move |pid| {
-            gate.track_codex(pid);
-        })?;
-        self.gate.clear_codex();
-        let mut snapshot = UsageSnapshot::empty();
-        snapshot.windows = windows;
         Ok(snapshot)
     }
 }
@@ -341,5 +472,151 @@ mod tests {
             .collect();
         assert_eq!(names, vec!["demo.jsonl".to_string()]);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant, SystemTime};
+
+    use wanxiang_core::{
+        Capability, Clock, Guard, PathScope, RefreshGate, Store, Supervisor, SystemClock, TaskStop,
+        ToolId, ToolScheduler, UsageError, UsageSource, WindowSample, REFRESH_EVERY,
+    };
+
+    use super::{due, refresh_body, RefreshKind, ServerProbe};
+
+    struct StepClock(Mutex<SystemTime>);
+
+    impl Clock for StepClock {
+        fn now(&self) -> SystemTime {
+            *self.0.lock().expect("clock")
+        }
+    }
+
+    struct FakeServer<'a>(&'a AtomicU32);
+
+    impl ServerProbe for FakeServer<'_> {
+        fn start(&self, _gate: &RefreshGate) -> Result<Vec<WindowSample>, UsageError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![])
+        }
+    }
+
+    fn open_store(dir: &std::path::Path) -> Store {
+        let supervisor = Supervisor::new();
+        let gate = Arc::new(RefreshGate::new(supervisor.handle()));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let guard = Arc::new(Guard::new(
+            Arc::clone(&gate) as Arc<dyn ToolScheduler>,
+            Arc::clone(&clock),
+        ));
+        Store::open(&dir.join("wanxiang.sqlite"), guard, clock).unwrap()
+    }
+
+    #[test]
+    fn periodic_rounds_do_not_start_app_server() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-periods-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let codex = dir.join("codex");
+        std::fs::create_dir_all(codex.join("sessions")).unwrap();
+        let store = open_store(&dir);
+        store
+            .grant(
+                ToolId::Codex,
+                Capability::Usage,
+                PathScope {
+                    root: codex,
+                    pattern: "sessions/**/*.jsonl".to_string(),
+                },
+            )
+            .unwrap();
+        let mut settings = store.settings().unwrap();
+        settings.codex_app_server = true;
+        store.set_settings(&settings).unwrap();
+        let supervisor = Supervisor::new();
+        let gate = Arc::new(RefreshGate::new(supervisor.handle()));
+        let starts = AtomicU32::new(0);
+        let server = FakeServer(&starts);
+        let clock = StepClock(Mutex::new(
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+        ));
+        let mut marked = clock.now();
+        for _ in 0..3 {
+            *clock.0.lock().expect("clock") += REFRESH_EVERY;
+            assert!(due(clock.now(), marked));
+            marked = clock.now();
+            refresh_body(
+                &store,
+                &gate,
+                &TaskStop::running(),
+                RefreshKind::Periodic,
+                &server,
+                &|_| {},
+            );
+        }
+        assert_eq!(starts.load(Ordering::SeqCst), 0);
+        refresh_body(
+            &store,
+            &gate,
+            &TaskStop::running(),
+            RefreshKind::Manual,
+            &server,
+            &|_| {},
+        );
+        assert_eq!(starts.load(Ordering::SeqCst), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn second_codex_scan_is_at_least_five_times_faster() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("codex");
+        let sessions = root.join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let line = concat!(
+            r#"{"timestamp":"2026-11-02T00:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":3,"cached_input_tokens":1,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":5},"last_token_usage":{"input_tokens":3,"cached_input_tokens":1,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":5}}}}"#,
+            "\n"
+        );
+        let body = line.repeat(20);
+        for index in 0..2000 {
+            std::fs::write(sessions.join(format!("{index}.jsonl")), &body).unwrap();
+        }
+        let store = open_store(&dir);
+        store
+            .grant(
+                ToolId::Codex,
+                Capability::Usage,
+                PathScope {
+                    root: root.clone(),
+                    pattern: "sessions/**/*.jsonl".to_string(),
+                },
+            )
+            .unwrap();
+        let guard = store.guard_handle();
+        let scan = || {
+            let started = Instant::now();
+            let source = super::CodexFiles {
+                root: root.clone(),
+                offset: 0,
+                guard: Arc::clone(&guard),
+                store: &store,
+                write_windows: false,
+            };
+            UsageSource::collect(&source, &TaskStop::running()).unwrap();
+            started.elapsed()
+        };
+        let first = scan();
+        let second = scan();
+        println!(
+            "codex-scan first_ms={} second_ms={}",
+            first.as_millis(),
+            second.as_millis()
+        );
+        assert!(
+            second.as_secs_f64() * 5.0 < first.as_secs_f64(),
+            "first {first:?} second {second:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

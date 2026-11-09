@@ -85,7 +85,29 @@ function AuthLink({ source, onSettings }: { source: string; onSettings: () => vo
   );
 }
 
-export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings: () => void }) {
+export type RefreshPending = {
+  ds_bot: boolean;
+  balance: boolean;
+  codex: boolean;
+  windows: boolean;
+};
+
+const idlePending: RefreshPending = {
+  ds_bot: false,
+  balance: false,
+  codex: false,
+  windows: false,
+};
+
+export function UsagePage({
+  usage,
+  onSettings,
+  pending = idlePending,
+}: {
+  usage: UsageView;
+  onSettings: () => void;
+  pending?: RefreshPending;
+}) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("工具");
   const days = usage.days.length > 0 ? usage.days : placeholderDays();
   const max = Math.max(0, ...days.map((day) => (day.codex ?? 0) + (day.bot ?? 0)));
@@ -101,7 +123,11 @@ export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings:
         {usage.cards.map((card, index) => (
           <article key={`${card.name}-${index}`} className="quota-tile">
             <h3>{cardTitle(card.name)}</h3>
-            {card.name === "Cursor" ? (
+            {pending.windows && card.name.startsWith("Codex") ? (
+              <p className="quota-plain">刷新中</p>
+            ) : pending.balance && card.name === "DeepSeek 账户" ? (
+              <p className="quota-plain">刷新中</p>
+            ) : card.name === "Cursor" ? (
               <div className="quota-copy">
                 <p className="quota-plain">暂不提供</p>
                 <p className="share">个人账户来源待验证</p>
@@ -118,8 +144,7 @@ export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings:
                   {card.percent != null ? (
                     <>
                       {card.reset ? <p className="reset-line">{card.reset}</p> : null}
-                      <p className="share">本机记录</p>
-                      <span className={chipClass(card.note)}>{card.note}</span>
+                      <p className="share">{card.note}</p>
                     </>
                   ) : (
                     <>
@@ -142,8 +167,8 @@ export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings:
           <div className="total-block">
             <p>本月可核实用量</p>
             <div className="token-figure">
-              <strong>{usage.total}</strong>
-              {usage.total === "—" ? null : <span>token</span>}
+              <strong>{pending.codex || pending.ds_bot ? "刷新中" : usage.total}</strong>
+              {usage.total === "—" || pending.codex || pending.ds_bot ? null : <span>token</span>}
             </div>
             {usage.total === "—" ? (
               <p className="total-reason">
@@ -214,19 +239,22 @@ export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings:
               <span className="num">费用</span>
               <span className="source">来源</span>
             </div>
-            {usage.details.map((row) => (
+            {usage.details.map((row) => {
+              const waiting = (row.name === "DS Bot" && pending.ds_bot) || (row.name === "Codex" && pending.codex);
+              return (
               <div key={row.name} className="detail-row">
                 <span className="detail-name">{row.name}</span>
                 <span>工具</span>
-                <span className="num">{row.tokens}</span>
-                <span className="num">{row.calls}</span>
+                <span className="num">{waiting ? "刷新中" : row.tokens}</span>
+                <span className="num">{waiting ? "刷新中" : row.calls}</span>
                 <span className="num">{row.fee}</span>
                 <span className="source">
                   {row.source || "—"}
                   <AuthLink source={row.source} onSettings={onSettings} />
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="chart-empty">暂不提供</p>
@@ -237,7 +265,15 @@ export function UsagePage({ usage, onSettings }: { usage: UsageView; onSettings:
   );
 }
 
-export function QuotaCard({ usage, onOpen }: { usage: UsageView; onOpen: () => void }) {
+export function QuotaCard({
+  usage,
+  onOpen,
+  pending = idlePending,
+}: {
+  usage: UsageView;
+  onOpen: () => void;
+  pending?: RefreshPending;
+}) {
   const codex = usage.cards.find((card) => card.percent != null) ?? usage.cards[0];
   const balance = usage.cards.find((card) => card.name === "DeepSeek 账户");
   return (
@@ -250,16 +286,28 @@ export function QuotaCard({ usage, onOpen }: { usage: UsageView; onOpen: () => v
         </span>
       </button>
       <div className="quota-body">
-        <Ring percent={codex?.percent ?? null} />
-        <div>
-          <strong>{codex?.name ?? "Codex"}</strong>
-          {codex?.reset ? <p className="reset-line">{codex.reset}</p> : null}
-          <p className="quota-status">{codex?.note}</p>
-        </div>
+        {pending.windows ? (
+          <p className="quota-plain">刷新中</p>
+        ) : (
+          <>
+            <Ring percent={codex?.percent ?? null} />
+            <div>
+              <strong>{codex?.name ?? "Codex"}</strong>
+              {codex?.reset ? <p className="reset-line">{codex.reset}</p> : null}
+              <p className="quota-status">{codex?.note}</p>
+            </div>
+          </>
+        )}
       </div>
       <div className="quota-line">
         <span>DeepSeek 余额</span>
-        <strong>{balance && balance.value !== "—" ? balance.value : balance?.note ?? "未保存密钥"}</strong>
+        <strong>
+          {pending.balance
+            ? "刷新中"
+            : balance && balance.value !== "—"
+              ? balance.value
+              : balance?.note ?? "未保存密钥"}
+        </strong>
       </div>
       <div className="quota-line">
         <span>Cursor 额度</span>

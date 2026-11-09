@@ -28,6 +28,7 @@ fn duplicate_rollout_counts_only_the_last_sample() {
     let rollout = parse_rollout(&text("duplicate"));
     assert_eq!(rollout.events.len(), 1);
     assert!(rollout.incomplete);
+    assert!(rollout.partial);
     let value = text("duplicate")
         .lines()
         .find_map(|line| {

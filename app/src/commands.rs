@@ -1,10 +1,10 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use wanxiang_core::{
-    month_start, present_usage, shift_days, Capability, Clock, GrantStatus, Guard, PathScope,
-    RecordAccess, RefreshGate, SecretStore, Settings, Store, SystemClock, TaskStop, ToolId,
-    UsageFacts, UsagePage,
+    month_start, present_usage, shift_days, Capability, Clock, GrantStatus, Guard, RecordAccess,
+    RefreshGate, SecretStore, Settings, Store, SystemClock, ToolId, UsageFacts, UsagePage,
 };
 
 use crate::discover::{self, ToolSnapshot};
@@ -13,6 +13,7 @@ pub struct Hub {
     pub store: Arc<Store>,
     pub secrets: SecretStore,
     pub gate: Arc<RefreshGate>,
+    pub emit: Arc<dyn Fn(&str) + Send + Sync>,
 }
 
 impl Hub {
@@ -24,11 +25,16 @@ impl Hub {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let guard = Arc::new(Guard::new(Arc::clone(&gate) as Arc<dyn wanxiang_core::ToolScheduler>, Arc::clone(&clock)));
         let store = Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?);
-        crate::collect::spawn_refresh(Arc::clone(&store), Arc::clone(&gate));
+        let emit_app = app.clone();
+        let emit: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |part: &str| {
+            let _ = emit_app.emit("usage-item", part.to_string());
+        });
+        crate::collect::spawn_refresh(Arc::clone(&store), Arc::clone(&gate), Arc::clone(&emit));
         Ok(Self {
             store,
             secrets: SecretStore::new(),
             gate,
+            emit,
         })
     }
 }
@@ -43,27 +49,20 @@ fn text(err: impl std::fmt::Display) -> String {
 
 #[tauri::command]
 fn list_grants(hub: State<'_, Hub>) -> Result<Vec<wanxiang_core::StoredGrant>, String> {
-    hub.store.grants().map_err(text)
-}
-
-#[tauri::command]
-fn grant(
-    hub: State<'_, Hub>,
-    tool: ToolId,
-    capability: Capability,
-    root: String,
-    pattern: String,
-) -> Result<wanxiang_core::StoredGrant, String> {
-    hub.store
-        .grant(
-            tool,
-            capability,
-            PathScope {
-                root: root.into(),
-                pattern,
-            },
-        )
-        .map_err(text)
+    let mut grants = hub.store.grants().map_err(text)?;
+    if hub.store.account_link_status().map_err(text)?.as_deref() == Some("active") {
+        for tool in [ToolId::DeepSeekHarness, ToolId::DsBot] {
+            grants.push(wanxiang_core::StoredGrant {
+                id: 0,
+                tool,
+                capability: Capability::AccountLink,
+                root: PathBuf::new(),
+                pattern: String::new(),
+                status: GrantStatus::Active,
+            });
+        }
+    }
+    Ok(grants)
 }
 
 #[tauri::command]
@@ -127,14 +126,17 @@ fn get_usage(
 }
 
 #[tauri::command]
-fn refresh_usage(
-    hub: State<'_, Hub>,
-    range: Option<String>,
-    start: Option<String>,
-    end: Option<String>,
-) -> Result<UsagePage, String> {
-    crate::collect::refresh_once(&hub.store, &hub.gate, &TaskStop::running());
-    usage_page(&hub, range.as_deref(), start.as_deref(), end.as_deref()).map_err(text)
+fn refresh_usage(hub: State<'_, Hub>) -> Result<bool, String> {
+    Ok(crate::collect::start_manual(
+        Arc::clone(&hub.store),
+        Arc::clone(&hub.gate),
+        Arc::clone(&hub.emit),
+    ))
+}
+
+#[tauri::command]
+fn set_capability(hub: State<'_, Hub>, kind: String, on: bool) -> Result<(), String> {
+    crate::measured::set(&hub.store, &kind, on)
 }
 
 fn usage_page(
@@ -211,7 +213,6 @@ fn valid_day(day: Option<&str>) -> bool {
 pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
         list_grants,
-        grant,
         revoke,
         get_settings,
         set_settings,
@@ -223,6 +224,7 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         complete_setup,
         get_usage,
         refresh_usage,
+        set_capability,
     ])
 }
 
@@ -231,27 +233,24 @@ mod tests {
     #[test]
     fn grant_parses_the_ui_tool_name() {
         #[derive(serde::Deserialize)]
-        struct GrantArgs {
-            tool: wanxiang_core::ToolId,
-            capability: wanxiang_core::Capability,
-            root: String,
-            pattern: String,
+        struct SetCapabilityArgs {
+            kind: String,
+            on: bool,
         }
-        let args: GrantArgs = serde_json::from_str(
-            r#"{"tool":"deepseek_harness","capability":"usage","root":"/tmp/wanxiang","pattern":"**"}"#,
-        )
-        .unwrap();
-        assert_eq!(args.tool, wanxiang_core::ToolId::DeepSeekHarness);
-        assert_eq!(args.capability, wanxiang_core::Capability::Usage);
-        assert_eq!(args.root, "/tmp/wanxiang");
-        assert_eq!(args.pattern, "**");
+        let args: SetCapabilityArgs =
+            serde_json::from_str(r#"{"kind":"ds_bot_usage","on":true}"#).unwrap();
+        assert_eq!(args.kind, "ds_bot_usage");
+        assert!(args.on);
+        let off: SetCapabilityArgs =
+            serde_json::from_str(r#"{"kind":"codex_usage","on":false}"#).unwrap();
+        assert_eq!(off.kind, "codex_usage");
+        assert!(!off.on);
     }
 
     #[test]
     fn capability_lists_each_command_once() {
         const COMMANDS: &[&str] = &[
             "list-grants",
-            "grant",
             "revoke",
             "get-settings",
             "set-settings",
@@ -263,11 +262,21 @@ mod tests {
             "complete-setup",
             "get-usage",
             "refresh-usage",
+            "set-capability",
         ];
         let text = include_str!("../capabilities/default.json");
+        let value: serde_json::Value = serde_json::from_str(text).unwrap();
+        let allows: Vec<&str> = value["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item.as_str().filter(|name| name.starts_with("allow-")))
+            .collect();
+        assert_eq!(allows.len(), COMMANDS.len());
         for name in COMMANDS {
-            let needle = format!("\"allow-{name}\"");
-            assert!(text.contains(&needle), "{needle}");
+            let needle = format!("allow-{name}");
+            assert_eq!(allows.iter().filter(|item| **item == needle).count(), 1, "{needle}");
         }
+        assert!(!allows.contains(&"allow-grant"));
     }
 }

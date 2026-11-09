@@ -169,7 +169,10 @@ pub struct UsageSnapshot {
     pub excluded_calls: u64,
     pub excluded_call_days: Vec<(String, i64)>,
     pub excluded_sessions: u64,
+    pub partial_sessions: u64,
     pub partial: bool,
+    pub window_live: bool,
+    pub manage_session_counts: bool,
 }
 
 impl UsageSnapshot {
@@ -182,7 +185,10 @@ impl UsageSnapshot {
             excluded_calls: 0,
             excluded_call_days: Vec::new(),
             excluded_sessions: 0,
+            partial_sessions: 0,
             partial: false,
+            window_live: false,
+            manage_session_counts: false,
         }
     }
 }

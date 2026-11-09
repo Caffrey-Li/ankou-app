@@ -9,7 +9,7 @@
     {
       "name": "Codex · 5 小时窗口",
       "value": "6%",
-      "note": "数据为 11:45",
+      "note": "本机记录",
       "percent": 6,
       "reset": "16:29 重置",
       "link": null
@@ -17,7 +17,7 @@
     {
       "name": "Codex · 7 天窗口",
       "value": "1%",
-      "note": "数据为 11:45",
+      "note": "本机记录",
       "percent": 1,
       "reset": "11:29 重置",
       "link": null

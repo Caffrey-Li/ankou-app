@@ -12,6 +12,7 @@ pub struct RolloutUsage {
     pub events: Vec<i64>,
     pub at_ms: Vec<i64>,
     pub incomplete: bool,
+    pub partial: bool,
     pub compactions: Option<u32>,
     pub windows: Vec<WindowSample>,
     pub limits_at: Option<i64>,
@@ -41,6 +42,7 @@ struct Building {
     events: Vec<i64>,
     at_ms: Vec<i64>,
     incomplete: bool,
+    partial: bool,
     compactions: Option<u32>,
     previous: Option<Counts>,
     limits_at: Option<i64>,
@@ -53,6 +55,7 @@ pub fn parse_rollout(text: &str) -> RolloutUsage {
         events: Vec::new(),
         at_ms: Vec::new(),
         incomplete: false,
+        partial: false,
         compactions: None,
         previous: None,
         limits_at: None,
@@ -66,6 +69,7 @@ pub fn parse_rollout(text: &str) -> RolloutUsage {
         events: building.events,
         at_ms: building.at_ms,
         incomplete: building.incomplete,
+        partial: building.partial,
         compactions: building.compactions,
         windows: building.windows,
         limits_at: building.limits_at,
@@ -181,6 +185,7 @@ fn consume(rollout: &mut Building, line: &str) {
             };
             if (previous.is_none() || reset) && current.total > delta.total {
                 rollout.incomplete = true;
+                rollout.partial = true;
             }
             rollout.previous = Some(current);
             if at.is_none() || delta.input < 0 || delta.cached < 0 || delta.output < 0 || delta.reasoning < 0 || delta.total < 0

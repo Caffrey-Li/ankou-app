@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import mark from "../../brand/mark.svg";
 import {
   emptyUsage,
@@ -24,7 +24,7 @@ import {
 import { SettingsPage } from "./SettingsPage";
 import { SetupPage } from "./SetupPage";
 import { OverviewToolRows, SidebarTools, toolMarks } from "./tool-status";
-import { QuotaCard, RangeControl, UsagePage, type UsageRange } from "./UsagePage";
+import { QuotaCard, RangeControl, UsagePage, type RefreshPending, type UsageRange } from "./UsagePage";
 
 const pages = [
   { id: "overview", label: "概览", icon: <IconHome /> },
@@ -108,12 +108,71 @@ export function App() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [ready, setReady] = useState(!inTauri());
+  const [refreshing, setRefreshing] = useState(false);
+  const [pending, setPending] = useState<RefreshPending>({
+    ds_bot: false,
+    balance: false,
+    codex: false,
+    windows: false,
+  });
+  const rangeRef = useRef(range);
+  const customRef = useRef({ start: customStart, end: customEnd });
+  rangeRef.current = range;
+  customRef.current = { start: customStart, end: customEnd };
   const current = pages.find((item) => item.id === page) ?? pages[0];
   const preview = new URLSearchParams(window.location.search).get("preview") === "1";
   const keySaved = snapshot.keySaved || fixture;
   const marks = toolMarks(snapshot.tools, usage.details, fixture);
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
+  const notices = attentionItems(usage, keySaved);
+  const authorized = marks.filter((mark) => mark.presence === "authorized").length;
+  function onRefresh() {
+    if (!inTauri() || refreshing) return;
+    setRefreshing(true);
+    setPending({ ds_bot: true, balance: true, codex: true, windows: true });
+    void refreshUsage().then((started) => {
+      if (!started) {
+        setRefreshing(false);
+        setPending({ ds_bot: false, balance: false, codex: false, windows: false });
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!inTauri()) return;
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) => {
+      if (!alive) return;
+      void listen<string>("usage-item", (event) => {
+        const part = event.payload;
+        if (part === "started") {
+          setRefreshing(true);
+          setPending({ ds_bot: true, balance: true, codex: true, windows: true });
+          return;
+        }
+        if (part === "done") {
+          setRefreshing(false);
+          setPending({ ds_bot: false, balance: false, codex: false, windows: false });
+          return;
+        }
+        const custom = customRef.current;
+        if (part !== "ds_bot" && part !== "balance" && part !== "codex" && part !== "windows") return;
+        void loadUsage(rangeRef.current, custom.start, custom.end).then((next) => {
+          setUsage((current) => mergeUsage(current, part, next));
+          setPending((current) => ({ ...current, [part]: false }));
+        });
+      }).then((stop) => {
+        if (alive) unlisten = stop;
+        else stop();
+      });
+    });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!inTauri()) return;
@@ -209,7 +268,9 @@ export function App() {
                 ? "阈值、刷新、授权与常驻"
                 : page === "usage"
                   ? `${rangesLabel(range)} · ${usage.range_label}`
-                  : formatDate(shownDate())}
+                  : page === "overview"
+                    ? overviewSubtitle(authorized, notices.length)
+                    : formatDate(shownDate())}
             </p>
           </div>
           {page === "settings" ? null : (
@@ -232,12 +293,11 @@ export function App() {
                 <span className="pill-rule" aria-hidden="true" />
                 <button
                   type="button"
-                  className="icon-hit"
+                  className={refreshing ? "icon-hit spinning" : "icon-hit"}
                   aria-label="刷新"
-                  onClick={() => {
-                    if (!inTauri()) return;
-                    void refreshUsage(range, customStart, customEnd).then(setUsage);
-                  }}
+                  aria-busy={refreshing}
+                  disabled={refreshing}
+                  onClick={onRefresh}
                 >
                   <IconRefresh />
                 </button>
@@ -246,12 +306,11 @@ export function App() {
             {page === "usage" ? (
               <button
                 type="button"
-                className="glass-icon"
+                className={refreshing ? "glass-icon spinning" : "glass-icon"}
                 aria-label="刷新"
-                onClick={() => {
-                  if (!inTauri()) return;
-                  void refreshUsage(range, customStart, customEnd).then(setUsage);
-                }}
+                aria-busy={refreshing}
+                disabled={refreshing}
+                onClick={onRefresh}
               >
                 <IconRefresh />
               </button>
@@ -267,14 +326,17 @@ export function App() {
           <SettingsPage
             snapshot={snapshot}
             onChange={(update) => setSnapshot((current) => update(current))}
+            onReload={() => {
+              void loadSnapshot().then(setSnapshot);
+            }}
           />
         ) : page === "usage" ? (
-          <UsagePage usage={usage} onSettings={() => setPage("settings")} />
+          <UsagePage usage={usage} pending={pending} onSettings={() => setPage("settings")} />
         ) : page === "overview" ? (
           <div className="overview-page">
             <Attention usage={usage} keySaved={keySaved} onSettings={() => setPage("settings")} />
             <div className="overview-row">
-              <QuotaCard usage={usage} onOpen={() => setPage("usage")} />
+              <QuotaCard usage={usage} pending={pending} onOpen={() => setPage("usage")} />
               <section className="overview-card placeholder-card">
                 <div className="quota-title">
                   <IconBubble />
@@ -316,6 +378,47 @@ export function App() {
   );
 }
 
+function overviewSubtitle(authorized: number, notices: number) {
+  if (authorized > 0 && notices === 0) return "其余工具运行正常";
+  if (authorized > 0) return `已授权 ${authorized} 个工具`;
+  return "";
+}
+
+function mergeUsage(current: UsageView, part: string, next: UsageView): UsageView {
+  if (part === "balance") {
+    return {
+      ...current,
+      cards: current.cards.map((card) =>
+        card.name === "DeepSeek 账户" ? next.cards.find((item) => item.name === card.name) ?? card : card,
+      ),
+    };
+  }
+  if (part === "windows") {
+    const fresh = next.cards.filter((card) => card.name.startsWith("Codex"));
+    const rest = current.cards.filter((card) => !card.name.startsWith("Codex"));
+    return { ...current, cards: [...fresh, ...rest] };
+  }
+  if (part === "ds_bot" || part === "codex") {
+    const name = part === "ds_bot" ? "DS Bot" : "Codex";
+    return {
+      ...current,
+      total: next.total,
+      total_reason: next.total_reason,
+      banner: next.banner,
+      days: next.days.map((day) => {
+        const previous = current.days.find((item) => item.label === day.label);
+        return part === "ds_bot"
+          ? { ...day, codex: previous?.codex ?? day.codex }
+          : { ...day, bot: previous?.bot ?? day.bot };
+      }),
+      details: current.details.map((row) =>
+        row.name === name ? next.details.find((item) => item.name === name) ?? row : row,
+      ),
+    };
+  }
+  return current;
+}
+
 function Attention({
   usage,
   keySaved,
@@ -341,7 +444,6 @@ function Attention({
         需要处理
       </p>
       <h2>{items.length} 件事需要你处理</h2>
-      <p className="attention-lead">其余工具运行正常</p>
       {items.map((item) => (
         <div key={item.title} className="attention-item">
           <span className="attention-icon" aria-hidden="true">

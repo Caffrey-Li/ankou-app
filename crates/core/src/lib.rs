@@ -13,7 +13,8 @@ pub use guard::{
 };
 pub use secret::{SecretError, SecretStore};
 pub use store::{
-    presence, GrantStatus, Settings, Store, StoreError, StoredGrant, SummaryMode, ToolPresence,
+    presence, CodexFile, GrantStatus, Settings, Store, StoreError, StoredGrant, SummaryMode,
+    ToolPresence,
 };
 pub use present::{
     month_start, present_usage, shift_days, RecordAccess, UsageCard, UsageDay, UsageDetail,

@@ -110,6 +110,10 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             if excluded_sessions > 0 {
                 banner.push(format!("有 {excluded_sessions} 个会话没有用量记录，未计入"));
             }
+            let partial_sessions = sum_metric(facts, "codex", "partial_sessions").unwrap_or(0);
+            if partial_sessions > 0 {
+                banner.push(format!("有 {partial_sessions} 个会话只计入部分用量"));
+            }
         }
     }
     match facts.bot_access {
@@ -308,24 +312,6 @@ fn withheld_detail(name: &str) -> UsageDetail {
     }
 }
 
-fn source_note(report: Option<(&str, i64)>, facts: &UsageFacts, local: bool) -> String {
-    let Some((state, at)) = report else {
-        return if local { "本机记录".to_string() } else { "暂不提供".to_string() };
-    };
-    let clock = hhmm(at, facts.offset_secs);
-    if state != "ok" || facts.now.saturating_sub(at) > STALE_AFTER.as_secs() as i64 {
-        if !facts.codex_app_server && !local {
-            return "数据过时 · 应用未运行".to_string();
-        }
-        return format!("过时 · {clock}");
-    }
-    if local {
-        "本机记录".to_string()
-    } else {
-        format!("数据为 {clock}")
-    }
-}
-
 fn report<'a>(facts: &'a UsageFacts, tool: &str, metric: &str) -> Option<(&'a str, i64)> {
     facts
         .reports
@@ -398,13 +384,22 @@ fn codex_cards(
         };
         return vec![status_card("Codex", note, false), status_card("Codex · 窗口", note, false)];
     }
+    let live = latest_amount(facts, "codex", "window_source") == Some(1);
+    let origin = if live {
+        match window_report {
+            Some((_, at)) => format!("实际 · {}", hhmm(at, facts.offset_secs)),
+            None => "实际 · —".to_string(),
+        }
+    } else {
+        "本机记录".to_string()
+    };
     let mut cards: Vec<_> = windows
         .iter()
         .take(2)
         .map(|window| UsageCard {
             name: format!("Codex · {}", window_title(window.minutes)),
             value: format!("{}%", window.percent),
-            note: source_note(window_report, facts, false),
+            note: origin.clone(),
             percent: Some(window.percent),
             reset: window
                 .resets_at
@@ -440,7 +435,7 @@ fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
     if day.is_empty() {
         return Vec::new();
     }
-    facts
+    let mut windows: Vec<_> = facts
         .rows
         .iter()
         .filter(|row| row.0 == day && row.1 == "codex" && row.2.starts_with("window_") && !row.2.ends_with("_reset"))
@@ -460,8 +455,10 @@ fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
                 resets_at,
             })
         })
-        .take(2)
-        .collect()
+        .collect();
+    windows.sort_by_key(|window| window.minutes.unwrap_or(i64::MAX));
+    windows.truncate(2);
+    windows
 }
 
 fn minutes_of(metric: &str) -> Option<i64> {

@@ -142,3 +142,55 @@ fn excluded_calls_are_named_in_the_banner() {
     let page = present_usage(&facts);
     assert!(page.banner.iter().any(|line| line == "有 2 条调用无法归属，未计入"));
 }
+
+#[test]
+fn partial_sessions_join_the_banner() {
+    let mut facts = empty();
+    facts.codex_access = RecordAccess::Authorized;
+    facts.rows.push((
+        "2026-11-09".to_string(),
+        "codex".to_string(),
+        "partial_sessions".to_string(),
+        3,
+    ));
+    let page = present_usage(&facts);
+    assert!(page.banner.iter().any(|line| line == "有 3 个会话只计入部分用量"));
+}
+
+#[test]
+fn app_server_windows_say_actual_and_shorter_period_comes_first() {
+    let mut facts = empty();
+    facts.codex_access = RecordAccess::Authorized;
+    facts.codex_app_server = true;
+    facts.now = 1_700_000_000;
+    for (metric, percent) in [("window_10080_1_bps", 2900_i64), ("window_300_0_bps", 6200)] {
+        facts.rows.push(("2026-11-09".to_string(), "codex".to_string(), metric.to_string(), percent));
+    }
+    facts.rows.push((
+        "2026-11-09".to_string(),
+        "codex".to_string(),
+        "window_source".to_string(),
+        1,
+    ));
+    facts.reports.push((
+        "codex".to_string(),
+        "windows".to_string(),
+        "ok".to_string(),
+        facts.now.to_string(),
+    ));
+    let page = present_usage(&facts);
+    assert!(page.cards[0].name.contains("5 小时"));
+    assert!(page.cards[1].name.contains("7 天"));
+    assert!(page.cards[0].note.starts_with("实际 · "));
+    assert!(page.cards[1].note.starts_with("实际 · "));
+
+    facts.rows.retain(|row| row.2 != "window_source");
+    facts.rows.push((
+        "2026-11-09".to_string(),
+        "codex".to_string(),
+        "window_source".to_string(),
+        2,
+    ));
+    let page = present_usage(&facts);
+    assert_eq!(page.cards[0].note, "本机记录");
+}

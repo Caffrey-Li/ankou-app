@@ -5,7 +5,6 @@
   "permissions": [
     "core:default",
     "allow-list-grants",
-    "allow-grant",
     "allow-revoke",
     "allow-get-settings",
     "allow-set-settings",
@@ -16,6 +15,7 @@
     "allow-discover-tools",
     "allow-complete-setup",
     "allow-get-usage",
-    "allow-refresh-usage"
+    "allow-refresh-usage",
+    "allow-set-capability"
   ]
 }

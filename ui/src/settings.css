@@ -207,9 +207,24 @@
   line-height: 1.2;
 }
 
+.tag.granted {
+  background: rgba(74, 111, 160, 0.12);
+  color: #4a6fa0;
+}
+
+.tag.unauthorized {
+  background: rgba(29, 29, 31, 0.06);
+  color: var(--color-text-secondary);
+}
+
 .tag.unverified {
   background: rgba(185, 115, 63, 0.13);
   color: var(--color-ochre);
+}
+
+.tag.withheld {
+  background: rgba(161, 161, 166, 0.16);
+  color: var(--color-text-tertiary);
 }
 
 .tool-block {
@@ -285,6 +300,11 @@
   border: 1px solid rgba(29, 29, 31, 0.12);
   border-radius: 5px;
   background: rgba(29, 29, 31, 0.04);
+}
+
+.check:checked {
+  border-color: var(--color-mist);
+  background: var(--color-mist);
 }
 
 .key-form,

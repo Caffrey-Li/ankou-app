@@ -321,6 +321,21 @@ h1 {
   place-items: center;
 }
 
+.icon-hit:disabled,
+.glass-icon:disabled {
+  opacity: 0.45;
+}
+
+.spinning .icon {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .icon-clock {
   color: var(--color-text-secondary);
 }

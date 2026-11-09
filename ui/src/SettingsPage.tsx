@@ -1,20 +1,26 @@
 import { useState } from "react";
 import type { Settings, Snapshot } from "./api";
-import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings } from "./api";
-import { presenceLabel, toolSpecs, type ToolId } from "./catalog";
+import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
+import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
 import "./settings.css";
 
 export function SettingsPage({
   snapshot,
   onChange,
+  onReload,
 }: {
   snapshot: Snapshot;
   onChange: (update: (current: Snapshot) => Snapshot) => void;
+  onReload: () => void;
 }) {
   const [openTool, setOpenTool] = useState<ToolId | "">("");
   const [keyOpen, setKeyOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+
+  function toggleMeasured(kind: string, on: boolean) {
+    void setCapability(kind, on).then(() => onReload());
+  }
 
   function update(patch: Partial<Settings>) {
     let previous: Settings | null = null;
@@ -259,7 +265,7 @@ export function SettingsPage({
                 </div>
                 <div className="tag-row">
                   {spec.tags.map((tag) => (
-                    <span key={tag.label} className={tag.badge === "未验证" ? "tag unverified" : "tag"}>
+                    <span key={tag.label} className={authTagClass(tag.badge)}>
                       {tag.badge === "暂不提供" ? `${tag.label} · 暂不提供` : tag.label}
                     </span>
                   ))}
@@ -268,6 +274,28 @@ export function SettingsPage({
                   <div className="cap-list">
                     {spec.caps.map((cap) => {
                       const grant = grants.find((item) => item.capability === cap.capability);
+                      const kind = measuredKind(spec.id, cap.capability, cap.title);
+                      if (kind) {
+                        const checked =
+                          cap.capability === "account_link"
+                            ? grants.some((item) => item.capability === "account_link" && item.status === "active")
+                            : grant?.status === "active";
+                        return (
+                          <div className="cap-row" key={cap.title}>
+                            <input
+                              className="check"
+                              type="checkbox"
+                              aria-label={cap.title}
+                              checked={checked}
+                              onChange={(event) => toggleMeasured(kind, event.target.checked)}
+                            />
+                            <span className="cap-copy">
+                              <strong>{cap.title}</strong>
+                              <span>{cap.detail}</span>
+                            </span>
+                          </div>
+                        );
+                      }
                       return (
                         <div className="cap-row disabled" key={cap.title}>
                           <input className="check" type="checkbox" disabled aria-label={cap.title} />
@@ -292,11 +320,26 @@ export function SettingsPage({
                               撤销
                             </button>
                           ) : (
-                            <span className={cap.badge === "未验证" ? "tag unverified" : "tag"}>{cap.badge}</span>
+                            <span className={authTagClass(cap.badge)}>{cap.badge}</span>
                           )}
                         </div>
                       );
                     })}
+                    {spec.id === "codex" ? (
+                      <div className="cap-row">
+                        <input
+                          className="check"
+                          type="checkbox"
+                          aria-label="Codex app-server"
+                          checked={snapshot.settings.codex_app_server}
+                          onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
+                        />
+                        <span className="cap-copy">
+                          <strong>Codex app-server</strong>
+                          <span>已实测 2026-11-09</span>
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -304,13 +347,35 @@ export function SettingsPage({
           })}
         </div>
         <div className="legend">
-          <span className="tag">已授权</span>
-          <span className="tag">未授权</span>
-          <span className="tag unverified">未验证</span>
+          <span className={authTagClass("已授权")}>已授权</span>
+          <span className={authTagClass("未授权")}>未授权</span>
+          <span className={authTagClass("未验证")}>未验证</span>
+          <span className={authTagClass("暂不提供")}>暂不提供</span>
         </div>
       </aside>
     </div>
   );
+}
+
+export function authTagClass(state: "已授权" | "未授权" | "未验证" | "暂不提供" | "已实测") {
+  switch (state) {
+    case "已授权":
+    case "已实测":
+      return "tag granted";
+    case "未授权":
+      return "tag unauthorized";
+    case "未验证":
+      return "tag unverified";
+    case "暂不提供":
+      return "tag withheld";
+  }
+}
+
+function measuredKind(tool: ToolId, capability: CapabilityId, title: string) {
+  if (tool === "ds_bot" && capability === "usage" && title === "用量") return "ds_bot_usage";
+  if (tool === "codex" && capability === "usage" && title === "用量与额度窗口") return "codex_usage";
+  if (capability === "account_link" && title === "DeepSeek 账户 · 余额") return "deepseek_balance";
+  return null;
 }
 
 function NumberRow({
