@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "本地主窗口。界面不请求网络。",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

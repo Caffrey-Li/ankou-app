@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    name: build and test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: install frontend dependencies
+        run: npm ci
+      - name: test
+        run: npm test
+      - name: build frontend
+        run: npm run build
+      - name: test rust workspace
+        run: cargo test --workspace --locked
+      - name: build app
+        run: cargo build --locked -p wanxiang-app

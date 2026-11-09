@@ -1,0 +1,69 @@
+/* Figma ui7zTemjbm3XTVMZh69KKB
+   01 设计规范 22:57，窗口 18:74，侧栏 18:75，选中导航 18:83 */
+:root {
+  color-scheme: light;
+  --color-graphite: #1d1d1f;
+  --color-mist: #4a6fa0;
+  --color-ochre: #b9733f;
+  --color-text-secondary: #6e6e73;
+  --color-text-tertiary: #a1a1a6;
+  --color-separator: #e5e5ea;
+  --color-window: #f5f5f7;
+  --color-window-l1: #f7f7f8;
+  --color-card: #ffffff;
+  --color-window-top: #f9f9fa;
+  --color-window-bottom: #f4f4f6;
+  --glass: color-mix(in srgb, var(--color-card) 55%, transparent);
+  --tint-mist: color-mix(in srgb, var(--color-mist) 12%, transparent);
+  --tint-ochre: color-mix(in srgb, var(--color-ochre) 12%, transparent);
+  --overlay: color-mix(in srgb, black 16%, transparent);
+  --radius-window: 24px;
+  --radius-popover: 22px;
+  --radius-card: 16px;
+  --radius-card-lg: 20px;
+  --radius-inset: 12px;
+  --radius-nav: 9px;
+  --radius-control: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --font-size-display: 28px;
+  --font-size-title: 22px;
+  --font-size-section: 15px;
+  --font-size-body: 13px;
+  --font-size-caption: 12px;
+  --font-size-figure: 40px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-ui: "SF Pro Text", "SF Pro", "PingFang SC", "Segoe UI Variable", "Segoe UI",
+    "Microsoft YaHei UI", sans-serif;
+  --blur-glass: 30px;
+  --layout-sidebar-width: 224px;
+  --layout-sidebar-margin: 10px;
+  --layout-nav-height: 31px;
+  --shadow-window: 0 30px 80px color-mix(in srgb, #141a24 22%, transparent);
+  --shadow-sidebar: 0 6px 20px color-mix(in srgb, #1a1f29 8%, transparent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-graphite);
+  background: linear-gradient(180deg, var(--color-window-top), var(--color-window-bottom));
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}

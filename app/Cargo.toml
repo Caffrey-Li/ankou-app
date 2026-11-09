@@ -1,0 +1,18 @@
+[package]
+name = "wanxiang-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "万象小助手"
+
+[lib]
+name = "wanxiang_app"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+wanxiang-core = { path = "../crates/core" }

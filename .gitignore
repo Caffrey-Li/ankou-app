@@ -1,0 +1,6 @@
+/target
+/node_modules
+/ui/dist
+/app/gen
+.DS_Store
+*.log
