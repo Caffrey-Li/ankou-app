@@ -12,10 +12,15 @@ const forbidden = [
   "websocket",
   "application support",
   "state.vscdb",
-  "auth.json",
-  "cursorauth",
-  ".credentials",
 ];
+
+// 守卫必须写出这些名字才能拒绝它们。只放行守卫自己的源码和测试。
+const denylistNeedles = ["auth.json", "cursorauth", ".credentials"];
+const denylistAllow = new Set([
+  "crates/core/src/guard.rs",
+  "crates/core/tests/guard.rs",
+  "crates/core/tests/path_props.rs",
+]);
 
 function files(dir) {
   const found = [];
@@ -35,8 +40,10 @@ const hits = [];
 for (const relative of roots) {
   for (const path of files(join(root, relative))) {
     const text = readFileSync(path, "utf8").toLowerCase();
-    for (const needle of forbidden) {
-      if (text.includes(needle)) hits.push(`${path}: ${needle}`);
+    const rel = path.slice(root.length).replaceAll("\\", "/").replace(/^\//, "");
+    const needles = denylistAllow.has(rel) ? forbidden : forbidden.concat(denylistNeedles);
+    for (const needle of needles) {
+      if (text.includes(needle)) hits.push(`${rel}: ${needle}`);
     }
   }
 }
