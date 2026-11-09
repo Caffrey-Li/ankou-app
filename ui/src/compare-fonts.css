@@ -1,0 +1,10 @@
+@import "@fontsource/noto-sans-sc/400.css";
+@import "@fontsource/noto-sans-sc/500.css";
+@import "@fontsource/noto-sans-sc/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/600.css";
+
+html[data-compare="1"] {
+  --font-ui: "Noto Sans SC", sans-serif;
+  --font-latin: "Inter", sans-serif;
+}

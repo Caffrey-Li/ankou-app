@@ -43,12 +43,12 @@
   --font-weight-bold: 700;
   --font-ui: "SF Pro Text", "SF Pro", "PingFang SC", "Segoe UI Variable", "Segoe UI",
     "Microsoft YaHei UI", sans-serif;
-  --blur-glass: 30px;
+  --font-latin: var(--font-ui);
+  --blur-glass: 15px;
   --layout-sidebar-width: 224px;
-  --layout-sidebar-margin: 10px;
   --layout-nav-height: 31px;
-  --shadow-window: 0 30px 80px color-mix(in srgb, #141a24 22%, transparent);
-  --shadow-sidebar: 0 6px 20px color-mix(in srgb, #1a1f29 8%, transparent);
+  --shadow-window: 0 30px 80px -10px rgba(20, 26, 36, 0.22);
+  --shadow-sidebar: 0 6px 20px -4px rgba(26, 31, 41, 0.08);
 }
 
 html,
@@ -60,7 +60,7 @@ body,
 body {
   margin: 0;
   color: var(--color-graphite);
-  background: linear-gradient(180deg, var(--color-window-top), var(--color-window-bottom));
+  background: transparent;
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-regular);

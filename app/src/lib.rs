@@ -11,6 +11,9 @@ pub fn run() {
         .manage(Supervisor::new())
         .setup(|app| {
             setup_tray(app.handle())?;
+            if let Some(window) = app.get_webview_window("main") {
+                apply_window_material(&window);
+            }
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_icon(Image::from_bytes(include_bytes!(
@@ -19,11 +22,18 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            WindowEvent::Resized(_) => {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = place_sidebar_effect(window);
+                }
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("启动万象小助手失败")
@@ -33,6 +43,80 @@ pub fn run() {
             RunEvent::Reopen { .. } => reveal(app),
             _ => {}
         });
+}
+
+fn apply_window_material(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window.set_theme(Some(Theme::Light));
+        match window_vibrancy::apply_vibrancy(
+            window,
+            window_vibrancy::NSVisualEffectMaterial::Sidebar,
+            Some(window_vibrancy::NSVisualEffectState::Active),
+            Some(16.0),
+        ) {
+            Ok(()) if place_sidebar_effect(window) => {
+                let _ = window.eval("document.documentElement.dataset.vibrancy='sidebar'");
+            }
+            Ok(()) => {
+                let _ = window_vibrancy::clear_vibrancy(window);
+                eprintln!("无法把系统材质限制在侧栏内，侧栏改用半透明白");
+            }
+            Err(error) => {
+                eprintln!("系统侧栏材质不可用，侧栏改用半透明白：{error}");
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        match window_vibrancy::apply_mica(window, Some(false)) {
+            Ok(()) => {
+                let _ = window.eval("document.documentElement.dataset.vibrancy='mica'");
+            }
+            Err(error) => {
+                eprintln!("Mica 不可用，侧栏改用半透明白：{error}");
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = window;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn place_sidebar_effect(window: &impl raw_window_handle::HasWindowHandle) -> bool {
+    use objc2::msg_send;
+    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+    use raw_window_handle::RawWindowHandle;
+
+    let Ok(handle) = window.window_handle() else {
+        return false;
+    };
+    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
+        return false;
+    };
+    let root: &NSView = unsafe { appkit.ns_view.cast().as_ref() };
+    let Some(effect) = root.viewWithTag(91376254) else {
+        return false;
+    };
+    let bounds = root.bounds();
+    let sidebar_height = (bounds.size.height - 20.0).max(0.0);
+    let origin_y = if root.isFlipped() {
+        9.0
+    } else {
+        11.0
+    };
+    unsafe {
+        effect.setFrame(NSRect::new(
+            NSPoint::new(9.0, origin_y),
+            NSSize::new(224.0, sidebar_height),
+        ));
+        effect.setAutoresizingMask(NSAutoresizingMaskOptions::ViewHeightSizable);
+        let () = msg_send![&*effect, setCornerRadius: 16.0_f64];
+    }
+    effect.frame().size.height > 0.0
 }
 
 fn shutdown(app: &tauri::AppHandle) {
