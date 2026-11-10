@@ -68,9 +68,15 @@ pub struct UsagePage {
 pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     let codex_open = facts.codex_access == RecordAccess::Authorized;
     let bot_open = facts.bot_access == RecordAccess::Authorized;
-    let codex_tokens = codex_open.then(|| sum_metric(facts, "codex", "tokens")).flatten();
-    let bot_tokens = bot_open.then(|| sum_metric(facts, "ds_bot", "tokens")).flatten();
-    let bot_calls = bot_open.then(|| sum_metric(facts, "ds_bot", "calls")).flatten();
+    let codex_tokens = codex_open
+        .then(|| sum_metric(facts, "codex", "tokens"))
+        .flatten();
+    let bot_tokens = bot_open
+        .then(|| sum_metric(facts, "ds_bot", "tokens"))
+        .flatten();
+    let bot_calls = bot_open
+        .then(|| sum_metric(facts, "ds_bot", "calls"))
+        .flatten();
     let excluded_calls = if bot_open {
         sum_metric(facts, "ds_bot", "excluded_calls").unwrap_or(0)
     } else {
@@ -83,12 +89,17 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     };
     let balance = latest_amount(facts, "deepseek_harness", "balance_cny_fen")
         .or_else(|| latest_amount(facts, "deepseek_harness", "balance_usd_cent"));
-    let balance_currency = if latest_amount(facts, "deepseek_harness", "balance_cny_fen").is_some() {
+    let balance_currency = if latest_amount(facts, "deepseek_harness", "balance_cny_fen").is_some()
+    {
         Currency::Cny
     } else {
         Currency::Usd
     };
-    let windows = if codex_open { latest_windows(facts) } else { Vec::new() };
+    let windows = if codex_open {
+        latest_windows(facts)
+    } else {
+        Vec::new()
+    };
     let window_report = report(facts, "codex", "windows");
     let balance_report = report(facts, "deepseek_harness", "balance");
     let mut banner = vec![
@@ -124,9 +135,14 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         }
         RecordAccess::Authorized => {}
     }
-    let window_hidden = !facts.codex_app_server || window_report.map(|(state, _)| state) == Some("app_off");
-    let (balance_value, balance_note, balance_link) = balance_card(facts, balance, balance_currency, balance_report);
-    let counted = [codex_tokens, bot_tokens].into_iter().flatten().collect::<Vec<_>>();
+    let window_hidden =
+        !facts.codex_app_server || window_report.map(|(state, _)| state) == Some("app_off");
+    let (balance_value, balance_note, balance_link) =
+        balance_card(facts, balance, balance_currency, balance_report);
+    let counted = [codex_tokens, bot_tokens]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
     let (total, total_reason) = if counted.is_empty() {
         ("—".to_string(), total_reason(facts).to_string())
     } else {
@@ -159,8 +175,12 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             .into_iter()
             .map(|day| UsageDay {
                 label: day_label(&day),
-                codex: codex_open.then(|| day_amount(facts, &day, "codex", "tokens")).flatten(),
-                bot: bot_open.then(|| day_amount(facts, &day, "ds_bot", "tokens")).flatten(),
+                codex: codex_open
+                    .then(|| day_amount(facts, &day, "codex", "tokens"))
+                    .flatten(),
+                bot: bot_open
+                    .then(|| day_amount(facts, &day, "ds_bot", "tokens"))
+                    .flatten(),
             })
             .collect(),
         details: vec![
@@ -178,8 +198,10 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
 }
 
 fn total_reason(facts: &UsageFacts) -> &'static str {
-    let open = facts.codex_access == RecordAccess::Authorized || facts.bot_access == RecordAccess::Authorized;
-    let reauth = facts.codex_access == RecordAccess::NeedsReauth || facts.bot_access == RecordAccess::NeedsReauth;
+    let open = facts.codex_access == RecordAccess::Authorized
+        || facts.bot_access == RecordAccess::Authorized;
+    let reauth = facts.codex_access == RecordAccess::NeedsReauth
+        || facts.bot_access == RecordAccess::NeedsReauth;
     if open {
         "无本机记录"
     } else if reauth {
@@ -199,7 +221,11 @@ fn balance_card(
         return ("—".to_string(), "未保存密钥".to_string(), None);
     }
     if !facts.account_linked {
-        return ("—".to_string(), "未授权".to_string(), Some("去设置授权".to_string()));
+        return (
+            "—".to_string(),
+            "未授权".to_string(),
+            Some("去设置授权".to_string()),
+        );
     }
     if let Some(amount) = balance {
         let at = report.map(|(_, at)| at).unwrap_or(facts.now);
@@ -211,7 +237,11 @@ fn balance_card(
         } else {
             format!("过时 · {clock}")
         };
-        return (format!("{}{}", currency.symbol(), format_minor(amount)), note, None);
+        return (
+            format!("{}{}", currency.symbol(), format_minor(amount)),
+            note,
+            None,
+        );
     }
     let note = match report.map(|(state, _)| state) {
         Some("invalid_key") => "密钥无效",
@@ -236,9 +266,7 @@ pub fn shift_days(today: &str, days: i64) -> String {
     let Some(date) = NaiveDate::parse_from_str(today, "%Y-%m-%d").ok() else {
         return today.to_string();
     };
-    (date + Duration::days(days))
-        .format("%Y-%m-%d")
-        .to_string()
+    (date + Duration::days(days)).format("%Y-%m-%d").to_string()
 }
 
 fn range_label(start: &str, end: &str) -> String {
@@ -277,16 +305,25 @@ fn counted_detail(
             let has_tokens = tokens.is_some();
             UsageDetail {
                 name: name.to_string(),
-                tokens: tokens.map(group_int).unwrap_or_else(|| "无本机记录".to_string()),
+                tokens: tokens
+                    .map(group_int)
+                    .unwrap_or_else(|| "无本机记录".to_string()),
                 calls: if dash_calls && has_tokens {
                     "—".to_string()
                 } else if dash_calls {
                     "无本机记录".to_string()
                 } else {
-                    calls.map(group_int).unwrap_or_else(|| "无本机记录".to_string())
+                    calls
+                        .map(group_int)
+                        .unwrap_or_else(|| "无本机记录".to_string())
                 },
                 fee: "不提供".to_string(),
-                source: if has_tokens { "本机记录" } else { "无本机记录" }.to_string(),
+                source: if has_tokens {
+                    "本机记录"
+                } else {
+                    "无本机记录"
+                }
+                .to_string(),
             }
         }
     }
@@ -382,7 +419,10 @@ fn codex_cards(
                 _ => "无本机记录",
             }
         };
-        return vec![status_card("Codex", note, false), status_card("Codex · 窗口", note, false)];
+        return vec![
+            status_card("Codex", note, false),
+            status_card("Codex · 窗口", note, false),
+        ];
     }
     let live = latest_amount(facts, "codex", "window_source") == Some(1);
     let origin = if live {
@@ -428,7 +468,12 @@ fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
     let day = facts
         .rows
         .iter()
-        .filter(|row| row.1 == "codex" && row.2.starts_with("window_") && !row.2.ends_with("_reset") && row.0.as_str() <= facts.today.as_str())
+        .filter(|row| {
+            row.1 == "codex"
+                && row.2.starts_with("window_")
+                && !row.2.ends_with("_reset")
+                && row.0.as_str() <= facts.today.as_str()
+        })
         .map(|row| row.0.as_str())
         .max()
         .unwrap_or("");
@@ -438,7 +483,12 @@ fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
     let mut windows: Vec<_> = facts
         .rows
         .iter()
-        .filter(|row| row.0 == day && row.1 == "codex" && row.2.starts_with("window_") && !row.2.ends_with("_reset"))
+        .filter(|row| {
+            row.0 == day
+                && row.1 == "codex"
+                && row.2.starts_with("window_")
+                && !row.2.ends_with("_reset")
+        })
         .filter_map(|row| {
             let percent = i32::try_from(row.3 / 100).ok()?;
             let resets_at = facts

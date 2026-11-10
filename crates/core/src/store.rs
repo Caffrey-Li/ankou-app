@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS account_links (
 CREATE TABLE IF NOT EXISTS cleanup_history (
     id INTEGER PRIMARY KEY,
     created_at TEXT NOT NULL,
-    summary TEXT NOT NULL
+    tool TEXT NOT NULL,
+    entry_count INTEGER NOT NULL,
+    total_bytes INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS codex_file (
     path TEXT PRIMARY KEY NOT NULL,
@@ -292,6 +294,38 @@ impl Store {
         load_grants(&conn)
     }
 
+    pub fn cleanup_history(&self) -> Result<Vec<(String, u64, u64)>, StoreError> {
+        let conn = self.conn.lock().expect("cleanup history");
+        let mut stmt = conn
+            .prepare("SELECT tool, entry_count, total_bytes FROM cleanup_history ORDER BY id")
+            .map_err(|_| StoreError::Database)?;
+        let rows = stmt
+            .query_map([], |row| {
+                let count: i64 = row.get(1)?;
+                let bytes: i64 = row.get(2)?;
+                Ok((row.get(0)?, count as u64, bytes as u64))
+            })
+            .map_err(|_| StoreError::Database)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StoreError::Database)
+    }
+
+    pub fn record_cleanup(
+        &self,
+        tool: ToolId,
+        entry_count: u64,
+        total_bytes: u64,
+    ) -> Result<(), StoreError> {
+        let text = unix_secs(self.clock.now()).to_string();
+        let conn = self.conn.lock().expect("cleanup");
+        conn.execute(
+            "INSERT INTO cleanup_history (created_at, tool, entry_count, total_bytes) VALUES (?1, ?2, ?3, ?4)",
+            params![text, enum_name(tool), entry_count as i64, total_bytes as i64],
+        )
+        .map(|_| ())
+        .map_err(|_| StoreError::Database)
+    }
+
     pub fn clear_history(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().expect("history");
         conn.execute_batch(
@@ -303,8 +337,8 @@ impl Store {
     pub fn apply_retention(&self) -> Result<(), StoreError> {
         let settings = self.settings()?;
         let today = self.local_today();
-        let cutoff = calendar_cutoff(&today, settings.retention_months)
-            .ok_or(StoreError::InvalidSetting)?;
+        let cutoff =
+            calendar_cutoff(&today, settings.retention_months).ok_or(StoreError::InvalidSetting)?;
         let conn = self.conn.lock().expect("retention");
         conn.execute("DELETE FROM usage_daily WHERE day < ?1", [cutoff])
             .map_err(|_| StoreError::Database)?;
@@ -459,13 +493,23 @@ impl Store {
         Ok(())
     }
 
-    pub fn mark_usage(&self, tool: ToolId, metric: &str, state: UsageState) -> Result<(), StoreError> {
+    pub fn mark_usage(
+        &self,
+        tool: ToolId,
+        metric: &str,
+        state: UsageState,
+    ) -> Result<(), StoreError> {
         let stamp = unix_secs(self.clock.now()).to_string();
         let conn = self.conn.lock().expect("report");
         set_report(&conn, tool, metric, state, &stamp)
     }
 
-    pub fn daily_amount(&self, day: &str, tool: ToolId, metric: &str) -> Result<Option<i64>, StoreError> {
+    pub fn daily_amount(
+        &self,
+        day: &str,
+        tool: ToolId,
+        metric: &str,
+    ) -> Result<Option<i64>, StoreError> {
         let conn = self.conn.lock().expect("daily");
         let mut stmt = conn
             .prepare("SELECT amount FROM usage_daily WHERE day = ?1 AND tool = ?2 AND metric = ?3")
@@ -485,7 +529,9 @@ impl Store {
             .prepare("SELECT day, tool, metric, amount FROM usage_daily ORDER BY day, tool, metric")
             .map_err(|_| StoreError::Database)?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .map_err(|_| StoreError::Database)?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|_| StoreError::Database)
@@ -494,16 +540,24 @@ impl Store {
     pub fn usage_reports(&self) -> Result<Vec<(String, String, String, String)>, StoreError> {
         let conn = self.conn.lock().expect("reports");
         let mut stmt = conn
-            .prepare("SELECT tool, metric, state, reported_at FROM usage_report ORDER BY tool, metric")
+            .prepare(
+                "SELECT tool, metric, state, reported_at FROM usage_report ORDER BY tool, metric",
+            )
             .map_err(|_| StoreError::Database)?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .map_err(|_| StoreError::Database)?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|_| StoreError::Database)
     }
 
-    pub fn usage_state(&self, tool: ToolId, metric: &str) -> Result<Option<UsageState>, StoreError> {
+    pub fn usage_state(
+        &self,
+        tool: ToolId,
+        metric: &str,
+    ) -> Result<Option<UsageState>, StoreError> {
         let conn = self.conn.lock().expect("state");
         let mut stmt = conn
             .prepare("SELECT state FROM usage_report WHERE tool = ?1 AND metric = ?2")
@@ -520,7 +574,12 @@ impl Store {
         }
     }
 
-    pub fn codex_cached(&self, path: &str, size: i64, mtime: i64) -> Result<Option<CodexFile>, StoreError> {
+    pub fn codex_cached(
+        &self,
+        path: &str,
+        size: i64,
+        mtime: i64,
+    ) -> Result<Option<CodexFile>, StoreError> {
         let conn = self.conn.lock().expect("codex cache");
         let mut stmt = conn
             .prepare(
@@ -528,7 +587,9 @@ impl Store {
                  FROM codex_file WHERE path = ?1 AND size = ?2 AND mtime = ?3",
             )
             .map_err(|_| StoreError::Database)?;
-        let mut rows = stmt.query(params![path, size, mtime]).map_err(|_| StoreError::Database)?;
+        let mut rows = stmt
+            .query(params![path, size, mtime])
+            .map_err(|_| StoreError::Database)?;
         let Some(row) = rows.next().map_err(|_| StoreError::Database)? else {
             return Ok(None);
         };
@@ -555,7 +616,13 @@ impl Store {
         }))
     }
 
-    pub fn save_codex_file(&self, path: &str, size: i64, mtime: i64, file: &CodexFile) -> Result<(), StoreError> {
+    pub fn save_codex_file(
+        &self,
+        path: &str,
+        size: i64,
+        mtime: i64,
+        file: &CodexFile,
+    ) -> Result<(), StoreError> {
         let conn = self.conn.lock().expect("codex save");
         let (w0, w1) = windows_to_row(&file.windows);
         conn.execute(
@@ -892,6 +959,27 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
     if exists == 0 {
         conn.execute_batch(
             "ALTER TABLE usage_daily ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+        )
+        .map_err(|_| StoreError::Database)?;
+    }
+    let summary: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('cleanup_history') WHERE name = 'summary'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| StoreError::Database)?;
+    if summary > 0 {
+        conn.execute_batch(
+            "CREATE TABLE cleanup_history_next (
+                id INTEGER PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                tool TEXT NOT NULL,
+                entry_count INTEGER NOT NULL,
+                total_bytes INTEGER NOT NULL
+            );
+            DROP TABLE cleanup_history;
+            ALTER TABLE cleanup_history_next RENAME TO cleanup_history;",
         )
         .map_err(|_| StoreError::Database)?;
     }

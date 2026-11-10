@@ -482,10 +482,11 @@ impl Guard {
 
     pub fn has_grant(&self, tool: ToolId, capability: Capability) -> bool {
         let inner = self.lock();
-        inner
-            .grants
-            .iter()
-            .any(|grant| grant.tool == tool && grant.capability == capability && grant.alive.load(Ordering::Acquire))
+        inner.grants.iter().any(|grant| {
+            grant.tool == tool
+                && grant.capability == capability
+                && grant.alive.load(Ordering::Acquire)
+        })
     }
 
     pub fn issue_summary_confirmation(&self, content: &[u8]) -> Result<ConfirmToken, GuardError> {
@@ -508,7 +509,11 @@ impl Guard {
         Ok(ConfirmToken { id })
     }
 
-    pub fn redeem_summary_confirmation(&self, token: &ConfirmToken, content: &[u8]) -> Result<(), GuardError> {
+    pub fn redeem_summary_confirmation(
+        &self,
+        token: &ConfirmToken,
+        content: &[u8],
+    ) -> Result<(), GuardError> {
         let now = self.clock.now();
         let mut inner = self.lock();
         let Some(record) = inner.tokens.get(&token.id) else {
@@ -875,6 +880,18 @@ fn seg_match(pattern: &str, text: &str) -> bool {
         !text.is_empty() && pattern[0] == text[0] && rec(&pattern[1..], &text[1..])
     }
     rec(pattern.as_bytes(), text.as_bytes())
+}
+
+pub(crate) fn metadata_denied(path: &Path) -> bool {
+    if credential_kind(path).is_some() {
+        return true;
+    }
+    path.components().any(|component| match component {
+        Component::Normal(text) => {
+            normalize_name(&text.to_string_lossy()).eq_ignore_ascii_case("cursorauth")
+        }
+        _ => false,
+    })
 }
 
 fn credential_kind(path: &Path) -> Option<CredentialKind> {

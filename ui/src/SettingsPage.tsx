@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Settings, Snapshot } from "./api";
 import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
+import { Check } from "./Check";
 import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
 import { ToolIcon } from "./tool-status";
 import "./settings.css";
@@ -281,9 +282,7 @@ export function SettingsPage({
                             : grant?.status === "active";
                         return (
                           <div className="cap-row" key={cap.title}>
-                            <input
-                              className="check"
-                              type="checkbox"
+                            <Check
                               aria-label={cap.title}
                               checked={checked}
                               onChange={(event) => toggleMeasured(kind, event.target.checked)}
@@ -297,7 +296,7 @@ export function SettingsPage({
                       }
                       return (
                         <div className="cap-row disabled" key={cap.title}>
-                          <input className="check" type="checkbox" disabled aria-label={cap.title} />
+                          <Check disabled aria-label={cap.title} />
                           <span className="cap-copy">
                             <strong>{cap.title}</strong>
                             <span>{grant ? (grant.status === "needs_reauth" ? "需要重新授权" : "已授权") : cap.detail}</span>
@@ -326,9 +325,7 @@ export function SettingsPage({
                     })}
                     {spec.id === "codex" ? (
                       <div className="cap-row">
-                        <input
-                          className="check"
-                          type="checkbox"
+                        <Check
                           aria-label="Codex app-server"
                           checked={snapshot.settings.codex_app_server}
                           onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}

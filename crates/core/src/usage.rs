@@ -212,7 +212,12 @@ pub fn accept_percent(value: i64) -> Option<i32> {
 
 /// 把金额字符串换成最小货币单位。非法输入返回 None，不折成 0。
 pub fn parse_minor_units(text: &str) -> Option<i64> {
-    if text.is_empty() || text.as_bytes().iter().any(|byte| byte.is_ascii_whitespace()) {
+    if text.is_empty()
+        || text
+            .as_bytes()
+            .iter()
+            .any(|byte| byte.is_ascii_whitespace())
+    {
         return None;
     }
     let (whole, frac) = match text.split_once('.') {
@@ -257,7 +262,11 @@ pub fn local_calendar_day(now: SystemTime, offset_secs: i32) -> String {
 pub fn system_offset_secs(now: SystemTime) -> i32 {
     Utc.timestamp_opt(unix_secs(now), 0)
         .single()
-        .map(|time| time.with_timezone(&chrono::Local).offset().local_minus_utc())
+        .map(|time| {
+            time.with_timezone(&chrono::Local)
+                .offset()
+                .local_minus_utc()
+        })
         .unwrap_or(0)
 }
 
@@ -271,7 +280,8 @@ pub fn calendar_cutoff(today: &str, months: u32) -> Option<String> {
         year -= 1;
     }
     let day = date.day().min(days_in_month(year, month as u32)?);
-    NaiveDate::from_ymd_opt(year, month as u32, day).map(|cutoff| cutoff.format("%Y-%m-%d").to_string())
+    NaiveDate::from_ymd_opt(year, month as u32, day)
+        .map(|cutoff| cutoff.format("%Y-%m-%d").to_string())
 }
 
 fn days_in_month(year: i32, month: u32) -> Option<u32> {

@@ -64,7 +64,14 @@ pub fn spawn_refresh(
             .map(|settings| settings.refresh_on_launch)
             .unwrap_or(false);
         if launch {
-            refresh_blocking(&store, &gate, &stop, RefreshKind::Launch, &LiveServer, &emit);
+            refresh_blocking(
+                &store,
+                &gate,
+                &stop,
+                RefreshKind::Launch,
+                &LiveServer,
+                &emit,
+            );
         }
         while !stop.is_stopped() {
             let periodic = store
@@ -80,7 +87,14 @@ pub fn spawn_refresh(
                 continue;
             }
             marked = SystemTime::now();
-            refresh_blocking(&store, &gate, &stop, RefreshKind::Periodic, &LiveServer, &emit);
+            refresh_blocking(
+                &store,
+                &gate,
+                &stop,
+                RefreshKind::Periodic,
+                &LiveServer,
+                &emit,
+            );
         }
     });
 }
@@ -96,7 +110,14 @@ pub fn start_manual(
     emit("started");
     gate.supervisor().spawn_task(move |stop| {
         let _end = End(Arc::clone(&gate), Arc::clone(&emit));
-        refresh_body(&store, &gate, &stop, RefreshKind::Manual, &LiveServer, emit.as_ref());
+        refresh_body(
+            &store,
+            &gate,
+            &stop,
+            RefreshKind::Manual,
+            &LiveServer,
+            emit.as_ref(),
+        );
     });
     true
 }
@@ -145,15 +166,22 @@ fn refresh_body(
     };
     let active = |tool, capability| {
         grants.iter().any(|grant| {
-            grant.tool == tool && grant.capability == capability && grant.status == GrantStatus::Active
+            grant.tool == tool
+                && grant.capability == capability
+                && grant.status == GrantStatus::Active
         })
     };
-    let want_server = kind.app_server() && settings.codex_app_server && active(ToolId::Codex, Capability::Usage);
+    let want_server =
+        kind.app_server() && settings.codex_app_server && active(ToolId::Codex, Capability::Usage);
     let bot = grants.iter().find(|grant| {
-        grant.tool == ToolId::DsBot && grant.capability == Capability::Usage && grant.status == GrantStatus::Active
+        grant.tool == ToolId::DsBot
+            && grant.capability == Capability::Usage
+            && grant.status == GrantStatus::Active
     });
     let codex = grants.iter().find(|grant| {
-        grant.tool == ToolId::Codex && grant.capability == Capability::Usage && grant.status == GrantStatus::Active
+        grant.tool == ToolId::Codex
+            && grant.capability == Capability::Usage
+            && grant.status == GrantStatus::Active
     });
     std::thread::scope(|scope| {
         scope.spawn(|| {
@@ -242,7 +270,10 @@ impl UsageSource for DsBotSource {
                 )
             })
             .collect();
-        if !files.iter().any(|path| path.file_name().and_then(|name| name.to_str()) == Some("usage.sqlite")) {
+        if !files
+            .iter()
+            .any(|path| path.file_name().and_then(|name| name.to_str()) == Some("usage.sqlite"))
+        {
             return Err(UsageError::Unreadable);
         }
         for file in &files {
@@ -336,7 +367,11 @@ impl UsageSource for CodexFiles<'_> {
                 .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                 .map(|time| i64::try_from(time.as_secs()).unwrap_or(i64::MAX))
                 .unwrap_or(0);
-            let file = match self.store.codex_cached(&key, size, mtime).map_err(|_| UsageError::Unreadable)? {
+            let file = match self
+                .store
+                .codex_cached(&key, size, mtime)
+                .map_err(|_| UsageError::Unreadable)?
+            {
                 Some(hit) => hit,
                 None => {
                     let text = read_text(&self.guard, ToolId::Codex, &path)?;
@@ -401,7 +436,9 @@ impl UsageSource for CodexFiles<'_> {
                 newest = Some((file.limits_at, windows));
             }
         }
-        self.store.forget_codex_files(&seen).map_err(|_| UsageError::Unreadable)?;
+        self.store
+            .forget_codex_files(&seen)
+            .map_err(|_| UsageError::Unreadable)?;
         snapshot.excluded_sessions = excluded;
         snapshot.partial_sessions = partial;
         if counted {
@@ -439,7 +476,9 @@ fn read_text(guard: &Guard, tool: ToolId, path: &Path) -> Result<String, UsageEr
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
-        let read = opened.read(&mut chunk).map_err(|_| UsageError::Unreadable)?;
+        let read = opened
+            .read(&mut chunk)
+            .map_err(|_| UsageError::Unreadable)?;
         if read == 0 {
             break;
         }

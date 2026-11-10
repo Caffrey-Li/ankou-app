@@ -27,6 +27,10 @@
     "allow-place-deeplink",
     "allow-export-handoff",
     "allow-organize-handoff",
-    "allow-tool-icons"
+    "allow-tool-icons",
+    "allow-scan-space",
+    "allow-cancel-scan",
+    "allow-prepare-cleanup",
+    "allow-run-cleanup"
   ]
 }

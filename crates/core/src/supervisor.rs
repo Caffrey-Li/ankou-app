@@ -118,7 +118,10 @@ impl SupervisorHandle {
         }
         let mut child = command.spawn()?;
         let pid = child.id();
-        let stdin = child.stdin.take().ok_or_else(|| io::Error::other("缺少标准输入"))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("缺少标准输入"))?;
         let stdout = child
             .stdout
             .take()

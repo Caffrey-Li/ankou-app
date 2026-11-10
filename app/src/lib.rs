@@ -15,6 +15,8 @@ mod discover;
 mod handoff;
 mod icons;
 mod measured;
+mod runtime;
+mod space;
 
 pub fn run() {
     commands::attach(
@@ -22,54 +24,54 @@ pub fn run() {
             .plugin(tauri_plugin_opener::init())
             .plugin(tauri_plugin_dialog::init()),
     )
-        .manage(Supervisor::new())
-        .setup(|app| {
-            app.manage(commands::Hub::open(app.handle())?);
-            setup_tray(app.handle())?;
-            if let Some(window) = app.get_webview_window("main") {
-                apply_window_material(&window);
-                open_preview(&window);
+    .manage(Supervisor::new())
+    .setup(|app| {
+        app.manage(commands::Hub::open(app.handle())?);
+        setup_tray(app.handle())?;
+        if let Some(window) = app.get_webview_window("main") {
+            apply_window_material(&window);
+            open_preview(&window);
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_icon(Image::from_bytes(include_bytes!(
+                "../icons/icon-windows-256.png"
+            ))?);
+        }
+        Ok(())
+    })
+    .on_window_event(|window, event| match event {
+        WindowEvent::CloseRequested { api, .. } => {
+            let keep = window
+                .app_handle()
+                .try_state::<commands::Hub>()
+                .and_then(|hub| hub.store.settings().ok())
+                .map(|settings| settings.close_to_tray)
+                .unwrap_or(true);
+            if keep {
+                api.prevent_close();
+                let _ = window.hide();
+            } else {
+                shutdown(window.app_handle());
+                window.app_handle().exit(0);
             }
-            #[cfg(target_os = "windows")]
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_icon(Image::from_bytes(include_bytes!(
-                    "../icons/icon-windows-256.png"
-                ))?);
-            }
-            Ok(())
-        })
-        .on_window_event(|window, event| match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                let keep = window
-                    .app_handle()
-                    .try_state::<commands::Hub>()
-                    .and_then(|hub| hub.store.settings().ok())
-                    .map(|settings| settings.close_to_tray)
-                    .unwrap_or(true);
-                if keep {
-                    api.prevent_close();
-                    let _ = window.hide();
-                } else {
-                    shutdown(window.app_handle());
-                    window.app_handle().exit(0);
-                }
-            }
-            WindowEvent::Resized(_) => {
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = place_sidebar_effect(window);
-                }
-            }
-            _ => {}
-        })
-        .build(tauri::generate_context!())
-        .expect("启动万象小助手失败")
-        .run(|app, event| match event {
-            RunEvent::Exit => shutdown(app),
+        }
+        WindowEvent::Resized(_) => {
             #[cfg(target_os = "macos")]
-            RunEvent::Reopen { .. } => reveal(app),
-            _ => {}
-        });
+            {
+                let _ = place_sidebar_effect(window);
+            }
+        }
+        _ => {}
+    })
+    .build(tauri::generate_context!())
+    .expect("启动万象小助手失败")
+    .run(|app, event| match event {
+        RunEvent::Exit => shutdown(app),
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => reveal(app),
+        _ => {}
+    });
 }
 
 fn apply_window_material(window: &tauri::WebviewWindow) {
@@ -224,17 +226,34 @@ fn open_preview(window: &tauri::WebviewWindow) {
         let Ok(page) = std::env::var("WANXIANG_PREVIEW") else {
             return;
         };
-        if page != "usage" && page != "overview" && page != "handoff" && page != "handoff-preview" {
+        if !matches!(
+            page.as_str(),
+            "usage"
+                | "overview"
+                | "handoff"
+                | "handoff-preview"
+                | "space"
+                | "space-live"
+                | "space-confirm"
+                | "space-result"
+                | "space-overview"
+        ) {
             return;
         }
         let window = window.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(700));
-            let url = if page == "handoff" || page == "handoff-preview" {
-                let sheet = if page == "handoff-preview" { "&sheet=preview" } else { "" };
-                format!("http://127.0.0.1:1420/?page=handoff&preview=1&compare=1&fixture=m3{sheet}")
-            } else {
-                format!("http://127.0.0.1:1420/?page={page}&preview=1")
+            let url = match page.as_str() {
+                "handoff" => "http://127.0.0.1:1420/?page=handoff&preview=1&compare=1&fixture=m3".to_string(),
+                "handoff-preview" => {
+                    "http://127.0.0.1:1420/?page=handoff&preview=1&compare=1&fixture=m3&sheet=preview".to_string()
+                }
+                "space" => "http://127.0.0.1:1420/?page=space&preview=1&fixture=m4".to_string(),
+                "space-live" => "http://127.0.0.1:1420/?page=space&preview=1".to_string(),
+                "space-confirm" => "http://127.0.0.1:1420/?page=space&preview=1&fixture=m4&sheet=confirm".to_string(),
+                "space-result" => "http://127.0.0.1:1420/?page=space&preview=1&fixture=m4&sheet=result".to_string(),
+                "space-overview" => "http://127.0.0.1:1420/?page=overview&preview=1&fixture=m4".to_string(),
+                _ => format!("http://127.0.0.1:1420/?page={page}&preview=1"),
             };
             if let Ok(url) = url.parse() {
                 let _ = window.navigate(url);

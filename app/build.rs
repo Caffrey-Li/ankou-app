@@ -33,6 +33,10 @@ fn main() {
         "export_handoff",
         "organize_handoff",
         "tool_icons",
+        "scan_space",
+        "cancel_scan",
+        "prepare_cleanup",
+        "run_cleanup",
     ];
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(COMMANDS),

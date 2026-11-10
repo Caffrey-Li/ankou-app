@@ -178,6 +178,28 @@ export function IconArrow() {
   );
 }
 
+export function IconLock() {
+  return (
+    <Icon
+      viewBox="0 0 15 15"
+      size={15}
+      strokeWidth={1.3}
+      paths={["M4.5 7V4.8a3 3 0 0 1 6 0V7", "M3.5 7H11.5V12.5H3.5V7Z"]}
+    />
+  );
+}
+
+export function IconTrash() {
+  return (
+    <Icon
+      viewBox="0 0 15 15"
+      size={15}
+      strokeWidth={1.3}
+      paths={["M3.5 4.5H11.5", "M6 4.5V3.2H9V4.5", "M5 4.5L5.4 12H9.6L10 4.5"]}
+    />
+  );
+}
+
 export function IconSearch() {
   return (
     <Icon

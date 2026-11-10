@@ -23,7 +23,7 @@ const built = files(join(root, "ui", "dist"))
   .join("\n");
 assert.equal(built.includes("12.34"), false);
 assert.equal(built.includes("fixture-m2"), false);
-for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set"]) {
+for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set", "WANXIANG_SPACE_FIXTURE"]) {
   assert.equal(built.includes(needle), false, needle);
 }
 
@@ -40,6 +40,6 @@ const executable = builtApp
   ?.executable;
 assert.ok(executable, "release executable");
 const binary = readFileSync(executable);
-for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set"]) {
+for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set", "WANXIANG_SPACE_FIXTURE"]) {
   assert.equal(binary.includes(Buffer.from(needle)), false, needle);
 }

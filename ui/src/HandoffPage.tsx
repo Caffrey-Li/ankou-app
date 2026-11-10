@@ -9,6 +9,7 @@ import {
   prepareHandoff,
   sendSummary,
 } from "./api";
+import { Check } from "./Check";
 import rowsFromFile from "./fixture-m3.json";
 import { IconArrow, IconCheck, IconChevron, IconClose, IconCopy, IconSearch } from "./icons";
 import { ToolIcon } from "./tool-status";
@@ -415,7 +416,7 @@ export function HandoffPage({
               将把「{selected?.title}」的快照发送到 DeepSeek API。不含附件与其他对话，万象不保存。字数在发送前按请求体计算。
             </p>
             <label>
-              <input type="checkbox" defaultChecked /> 只对本次有效
+              <Check defaultChecked /> 只对本次有效
             </label>
             <button type="button" className="primary-button" onClick={() => void confirmSend()}>
               发送并生成

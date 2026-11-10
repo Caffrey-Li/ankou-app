@@ -101,7 +101,15 @@ pub fn organize_local(text: &str) -> Organized {
         ("不确定事项", 5),
         ("资料位置", 6),
     ];
-    let mut bins = [String::new(), String::new(), String::new(), String::new(), String::new(), String::new(), String::new()];
+    let mut bins = [
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    ];
     let mut current: Option<usize> = None;
     let mut seen = false;
     for line in text.lines() {
@@ -162,21 +170,38 @@ pub fn summary_chars(body: &str) -> usize {
     body.chars().count()
 }
 
-pub fn authorize_summary(guard: &Guard, linked: bool, key_saved: bool, body: &[u8]) -> Result<ConfirmToken, SummaryError> {
+pub fn authorize_summary(
+    guard: &Guard,
+    linked: bool,
+    key_saved: bool,
+    body: &[u8],
+) -> Result<ConfirmToken, SummaryError> {
     if !linked {
         return Err(SummaryError::NoAccount);
     }
     if !key_saved {
         return Err(SummaryError::NoKey);
     }
-    guard.issue_summary_confirmation(body).map_err(SummaryError::Token)
+    guard
+        .issue_summary_confirmation(body)
+        .map_err(SummaryError::Token)
 }
 
-pub fn redeem_summary(guard: &Guard, token: &ConfirmToken, body: &[u8]) -> Result<(), SummaryError> {
-    guard.redeem_summary_confirmation(token, body).map_err(SummaryError::Token)
+pub fn redeem_summary(
+    guard: &Guard,
+    token: &ConfirmToken,
+    body: &[u8],
+) -> Result<(), SummaryError> {
+    guard
+        .redeem_summary_confirmation(token, body)
+        .map_err(SummaryError::Token)
 }
 
-pub fn prepare_deeplink(guard: &Guard, enabled: bool, text: &str) -> Result<ConfirmToken, DeeplinkError> {
+pub fn prepare_deeplink(
+    guard: &Guard,
+    enabled: bool,
+    text: &str,
+) -> Result<ConfirmToken, DeeplinkError> {
     if !enabled {
         return Err(DeeplinkError::Off);
     }
@@ -187,7 +212,11 @@ pub fn prepare_deeplink(guard: &Guard, enabled: bool, text: &str) -> Result<Conf
         return Err(DeeplinkError::TooLong);
     }
     guard
-        .issue_confirmation(ToolId::Cursor, Capability::CreateConversation, text.as_bytes())
+        .issue_confirmation(
+            ToolId::Cursor,
+            Capability::CreateConversation,
+            text.as_bytes(),
+        )
         .map_err(DeeplinkError::Token)
 }
 
@@ -198,7 +227,12 @@ pub fn place_deeplink(
     open: impl FnOnce(&str) -> bool,
 ) -> Result<(), DeeplinkError> {
     guard
-        .redeem_confirmation(token, ToolId::Cursor, Capability::CreateConversation, text.as_bytes())
+        .redeem_confirmation(
+            token,
+            ToolId::Cursor,
+            Capability::CreateConversation,
+            text.as_bytes(),
+        )
         .map_err(DeeplinkError::Token)?;
     let url = cursor_prompt_url(text).url.ok_or(DeeplinkError::TooLong)?;
     if !url.starts_with(DEEPLINK_PREFIX) || !open(&url) {
@@ -209,7 +243,10 @@ pub fn place_deeplink(
 
 pub fn write_export(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if path.as_os_str().is_empty() {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "先选择保存位置"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "先选择保存位置",
+        ));
     }
     std::fs::write(path, bytes)
 }
@@ -226,7 +263,9 @@ fn encode_query(text: &str) -> String {
     let mut out = String::new();
     for byte in text.as_bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
             _ => out.push_str(&format!("%{byte:02X}")),
         }
     }

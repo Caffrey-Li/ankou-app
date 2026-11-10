@@ -270,3 +270,62 @@ export function loadToolIcons() {
   if (!inTauri()) return Promise.resolve([] as ToolIconFile[]);
   return call<ToolIconFile[]>("tool_icons");
 }
+
+export type SpaceEntry = {
+  rel: string;
+  bytes: number;
+  files: number;
+  dev: number;
+  ino: number;
+  weak: boolean;
+};
+
+export type SpaceScan = {
+  protected_bytes: number;
+  cleanable_bytes: number;
+  unscanned: number;
+  cancelled: boolean;
+  quit: string | null;
+  entries: SpaceEntry[];
+  trash_supported: boolean;
+};
+
+export type CleanupItem = {
+  name: string;
+  label: string;
+};
+
+export function scanSpace(tool: string) {
+  return call<SpaceScan>("scan_space", { tool });
+}
+
+export function cancelScan(tool: string) {
+  return call<void>("cancel_scan", { tool });
+}
+
+export function prepareCleanup(tool: string, entries: SpaceEntry[]) {
+  return call<string>("prepare_cleanup", {
+    tool,
+    entries: entries.map((entry) => ({
+      rel: entry.rel,
+      bytes: entry.bytes,
+      files: entry.files,
+      dev: entry.dev,
+      ino: entry.ino,
+    })),
+  });
+}
+
+export function runCleanup(tool: string, token: string, entries: SpaceEntry[]) {
+  return call<{ blocked: string | null; entry_count: number; total_bytes: number; items: CleanupItem[] }>("run_cleanup", {
+    tool,
+    token,
+    entries: entries.map((entry) => ({
+      rel: entry.rel,
+      bytes: entry.bytes,
+      files: entry.files,
+      dev: entry.dev,
+      ino: entry.ino,
+    })),
+  });
+}

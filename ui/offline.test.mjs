@@ -14,12 +14,14 @@ const forbidden = [
   "state.vscdb",
 ];
 
-// 守卫必须写出这些名字才能拒绝它们。只放行守卫自己的源码和测试。
+// 守卫和空间扫描要写出这些名字，才能在 stat 之前跳过。只放行这两处和它们的测试。
 const denylistNeedles = ["auth.json", "cursorauth", ".credentials"];
 const denylistAllow = new Set([
   "crates/core/src/guard.rs",
+  "crates/core/src/space.rs",
   "crates/core/tests/guard.rs",
   "crates/core/tests/path_props.rs",
+  "crates/core/tests/space.rs",
 ]);
 
 function files(dir) {

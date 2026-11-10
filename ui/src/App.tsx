@@ -5,6 +5,7 @@ import { loadDevFixture } from "./fixture";
 import { fixtureHandoffRows, HandoffFilters, HandoffPage, handoffSubtitle, type HandoffFilter } from "./HandoffPage";
 import { IconBubble, IconChart, IconClock, IconDisk, IconHome, IconPlus, IconRefresh, IconSearch, IconSet } from "./icons";
 import { SettingsPage } from "./SettingsPage";
+import { fixtureSpaceSummary, SpacePage } from "./SpacePage";
 import { SetupPage } from "./SetupPage";
 import { OverviewToolRows, SidebarTools, toolMarks } from "./tool-status";
 import { QuotaCard, RangeControl, UsagePage, type RefreshPending, type UsageRange } from "./UsagePage";
@@ -34,14 +35,23 @@ function formatDate(date: Date) {
 }
 
 const fixtureKind = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("fixture") : null;
-const fixtureClock = fixtureKind === "m2" || fixtureKind === "m3";
+const fixtureClock = fixtureKind === "m2" || fixtureKind === "m3" || fixtureKind === "m4";
 
 function shownDate() {
   return fixtureClock ? new Date(2026, 9, 25) : new Date();
 }
 
-function attentionItems(usage: UsageView, keySaved: boolean, overThreshold: number) {
-  const items: { title: string; detail: string; action: string; quiet: boolean; to: "settings" | "handoff" }[] = [];
+function attentionItems(usage: UsageView, keySaved: boolean, overThreshold: number, spaceOver: boolean) {
+  const items: { title: string; detail: string; action: string; quiet: boolean; to: "settings" | "handoff" | "space" }[] = [];
+  if (spaceOver) {
+    items.push({
+      title: `${fixtureSpaceSummary.tool} 本机占用 ${fixtureSpaceSummary.size}`,
+      detail: `超过提醒阈值 ${fixtureSpaceSummary.threshold}`,
+      action: "查看清理",
+      quiet: false,
+      to: "space",
+    });
+  }
   if (!keySaved) {
     items.push({
       title: "余额密钥未保存",
@@ -107,8 +117,11 @@ export function App() {
   const [handoffFilter, setHandoffFilter] = useState<HandoffFilter>("all");
   const [handoffQuery, setHandoffQuery] = useState("");
   const [previewRequest, setPreviewRequest] = useState(0);
+  const [spaceRequest, setSpaceRequest] = useState(0);
+  const [spaceStamp, setSpaceStamp] = useState(fixtureKind === "m4" ? "19:10" : "");
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const fixtureM3 = fixtureKind === "m3";
+  const fixtureM4 = fixtureKind === "m4";
   const sheet = new URLSearchParams(window.location.search).get("sheet");
   const handoffSheet = sheet === "preview" || sheet === "confirm" ? sheet : "";
   const [pending, setPending] = useState<RefreshPending>({
@@ -123,7 +136,7 @@ export function App() {
   customRef.current = { start: customStart, end: customEnd };
   const current = pages.find((item) => item.id === page) ?? pages[0];
   const preview = new URLSearchParams(window.location.search).get("preview") === "1";
-  const keySaved = snapshot.keySaved || fixture;
+  const keySaved = snapshot.keySaved || fixture || fixtureM4;
   const marks = toolMarks(snapshot.tools, usage.details, fixture);
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
@@ -191,7 +204,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!inTauri() || fixtureM3) return;
+    if (!inTauri() || fixtureM3 || fixtureM4) return;
     let alive = true;
     void listConversations().then((page) => {
       if (alive) setConversations(page.rows);
@@ -202,7 +215,7 @@ export function App() {
   }, [fixtureM3]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV || fixtureKind === "m4") return;
     let alive = true;
     void loadDevFixture().then((next) => {
       if (!alive || !next) return;
@@ -216,7 +229,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!inTauri() || fixture) return;
+    if (!inTauri() || fixture || fixtureM4) return;
     let alive = true;
     loadUsage(range, customStart, customEnd).then((next) => {
       if (alive) setUsage(next);
@@ -286,7 +299,9 @@ export function App() {
                       ? page === "handoff"
                         ? handoffSubtitle(handoffRows, threshold)
                         : formatDate(shownDate())
-                      : formatDate(shownDate())}
+                      : page === "space"
+                        ? `按工具统计本机已知占用 · 阈值 ${snapshot.settings.space_threshold_gb} GB`
+                        : formatDate(shownDate())}
             </p>
           </div>
           <div className="toolbar-drag" data-tauri-drag-region />
@@ -311,6 +326,20 @@ export function App() {
                   新建交接
                 </button>
               </>
+            ) : page === "space" ? (
+              <div className="glass-pill">
+                <IconClock />
+                <span>{spaceStamp ? `扫描于 ${spaceStamp}` : "尚未扫描"}</span>
+                <span className="pill-rule" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="icon-hit"
+                  aria-label="刷新"
+                  onClick={() => setSpaceRequest((value) => value + 1)}
+                >
+                  <IconRefresh />
+                </button>
+              </div>
             ) : (
               <div className="glass-pill">
                 <IconClock />
@@ -339,7 +368,7 @@ export function App() {
               >
                 <IconRefresh />
               </button>
-            ) : page === "handoff" ? null : (
+            ) : page === "handoff" || page === "space" ? null : (
               <button type="button" className="glass-icon" aria-label="搜索">
                 <IconSearch />
               </button>
@@ -363,8 +392,10 @@ export function App() {
               usage={usage}
               keySaved={keySaved}
               overThreshold={overThreshold}
+              spaceOver={fixtureM4}
               onSettings={() => setPage("settings")}
               onHandoff={() => setPage("handoff")}
+              onSpace={() => setPage("space")}
             />
             <div className="overview-row">
               <QuotaCard usage={usage} pending={pending} onOpen={() => setPage("usage")} />
@@ -378,14 +409,30 @@ export function App() {
                   {overThreshold > 0 ? `${overThreshold} 个对话超过提醒阈值` : "尚未接入"}
                 </p>
               </section>
-              <section className="overview-card placeholder-card">
+              <button type="button" className="overview-card placeholder-card space-overview" onClick={() => setPage("space")}>
                 <div className="quota-title">
                   <IconDisk />
                   <span>空间</span>
                   <span className="quota-chev" aria-hidden="true">›</span>
                 </div>
-                <p className="overview-pending">尚未接入</p>
-              </section>
+                {fixtureM4 ? (
+                  <>
+                    <p className="space-card-size">{fixtureSpaceSummary.size}</p>
+                    <p className="space-card-meta">
+                      {fixtureSpaceSummary.tool} · 阈值 {fixtureSpaceSummary.threshold}
+                    </p>
+                    <div className="space-card-bar" aria-hidden="true">
+                      <i style={{ width: "85%" }} />
+                      <b style={{ width: "15%" }} />
+                    </div>
+                    <p className="space-card-legend">
+                      受保护 {fixtureSpaceSummary.protected} · 可清理 {fixtureSpaceSummary.cleanable}
+                    </p>
+                  </>
+                ) : (
+                  <p className="overview-pending">尚未扫描</p>
+                )}
+              </button>
             </div>
             <section className="overview-card tool-board">
               <div className="tool-board-head">
@@ -406,6 +453,15 @@ export function App() {
             sheet={handoffSheet}
             previewRequest={previewRequest}
             onQuery={setHandoffQuery}
+          />
+        ) : page === "space" ? (
+          <SpacePage
+            fixture={fixtureM4}
+            windows={windows}
+            sheet={sheet === "confirm" || sheet === "result" ? sheet : ""}
+            thresholdGb={snapshot.settings.space_threshold_gb}
+            scanRequest={spaceRequest}
+            onStamp={setSpaceStamp}
           />
         ) : (
         <section className="empty" aria-label="页面内容">
@@ -460,16 +516,20 @@ function Attention({
   usage,
   keySaved,
   overThreshold,
+  spaceOver,
   onSettings,
   onHandoff,
+  onSpace,
 }: {
   usage: UsageView;
   keySaved: boolean;
   overThreshold: number;
+  spaceOver: boolean;
   onSettings: () => void;
   onHandoff: () => void;
+  onSpace: () => void;
 }) {
-  const items = attentionItems(usage, keySaved, overThreshold);
+  const items = attentionItems(usage, keySaved, overThreshold, spaceOver);
   if (items.length === 0) {
     return (
       <section className="overview-card attention attention-ok">
@@ -497,7 +557,7 @@ function Attention({
           <button
             type="button"
             className={item.quiet ? "attention-action quiet" : "attention-action"}
-            onClick={() => (item.to === "handoff" ? onHandoff() : onSettings())}
+            onClick={() => (item.to === "handoff" ? onHandoff() : item.to === "space" ? onSpace() : onSettings())}
           >
             {item.action}
           </button>

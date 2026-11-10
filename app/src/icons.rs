@@ -8,6 +8,8 @@ use wanxiang_core::ToolId;
 
 /// 已从本机应用包的 Info.plist 确认：`com.deepseek.dsh` 的 CFBundleName 是 DeepSeek Harness。
 const HARNESS_BUNDLE_ID: &str = "com.deepseek.dsh";
+/// 已从本机应用包的 Info.plist 确认：`com.openai.codex` 的 CFBundleName 是 ChatGPT。不按文件夹名查找。
+const CODEX_BUNDLE_ID: &str = "com.openai.codex";
 
 #[derive(Debug, Serialize)]
 pub struct ToolIcon {
@@ -42,20 +44,25 @@ pub fn tool_icons(cache: &Path) -> Vec<ToolIcon> {
 
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 fn null_icons() -> Vec<ToolIcon> {
-    [ToolId::DeepSeekHarness, ToolId::DsBot, ToolId::Cursor, ToolId::Codex]
-        .into_iter()
-        .map(|tool| ToolIcon {
-            tool,
-            png_base64: None,
-        })
-        .collect()
+    [
+        ToolId::DeepSeekHarness,
+        ToolId::DsBot,
+        ToolId::Cursor,
+        ToolId::Codex,
+    ]
+    .into_iter()
+    .map(|tool| ToolIcon {
+        tool,
+        png_base64: None,
+    })
+    .collect()
 }
 
 fn locate(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Located {
     Located {
-        harness: harness_app(root, bundle_id),
+        harness: app_with_bundle_id(root, HARNESS_BUNDLE_ID, &bundle_id),
         cursor: exact_named_app(root, "Cursor.app"),
-        codex: exact_named_app(root, "Codex.app"),
+        codex: app_with_bundle_id(root, CODEX_BUNDLE_ID, &bundle_id),
     }
 }
 
@@ -70,7 +77,11 @@ fn exact_named_app(root: &Path, name: &str) -> Option<PathBuf> {
     })
 }
 
-fn harness_app(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Option<PathBuf> {
+fn app_with_bundle_id(
+    root: &Path,
+    want: &str,
+    bundle_id: &impl Fn(&Path) -> Option<String>,
+) -> Option<PathBuf> {
     let mut found = None;
     for entry in fs::read_dir(root).ok()?.flatten() {
         let path = entry.path();
@@ -78,7 +89,7 @@ fn harness_app(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Opti
         if !name.to_str().is_some_and(|name| name.ends_with(".app")) || !path.is_dir() {
             continue;
         }
-        if bundle_id(&path).as_deref() != Some(HARNESS_BUNDLE_ID) {
+        if bundle_id(&path).as_deref() != Some(want) {
             continue;
         }
         if found.is_some() {
@@ -89,32 +100,51 @@ fn harness_app(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Opti
     found
 }
 
-fn assemble(cache: &Path, found: Located, read: &mut impl FnMut(&Path) -> Option<Vec<u8>>) -> Vec<ToolIcon> {
-    let mut icon = |tool, path: Option<PathBuf>| ToolIcon {
-        tool,
-        png_base64: path
-            .and_then(|path| cached_png(cache, &path, read))
-            .map(base64_encode),
+fn assemble(
+    cache: &Path,
+    found: Located,
+    read: &mut impl FnMut(&Path) -> Option<Vec<u8>>,
+) -> Vec<ToolIcon> {
+    let mut icon = |path: Option<PathBuf>| {
+        path.and_then(|path| cached_png(cache, &path, read))
+            .map(base64_encode)
     };
+    let harness = icon(found.harness);
     vec![
-        icon(ToolId::DeepSeekHarness, found.harness),
+        ToolIcon {
+            tool: ToolId::DeepSeekHarness,
+            png_base64: harness.clone(),
+        },
         ToolIcon {
             tool: ToolId::DsBot,
-            png_base64: None,
+            png_base64: harness,
         },
-        icon(ToolId::Cursor, found.cursor),
-        icon(ToolId::Codex, found.codex),
+        ToolIcon {
+            tool: ToolId::Cursor,
+            png_base64: icon(found.cursor),
+        },
+        ToolIcon {
+            tool: ToolId::Codex,
+            png_base64: icon(found.codex),
+        },
     ]
 }
 
-fn cached_png(cache: &Path, app: &Path, read: &mut impl FnMut(&Path) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
+fn cached_png(
+    cache: &Path,
+    app: &Path,
+    read: &mut impl FnMut(&Path) -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
     let modified = fs::metadata(app).ok()?.modified().ok()?;
     let stamp = stamp_text(app, modified);
     let key = cache_key(app);
     let png_path = cache.join(format!("{key}.png"));
     let stamp_path = cache.join(format!("{key}.stamp"));
     if fs::read_to_string(&stamp_path).ok().as_deref() == Some(stamp.as_str()) {
-        if let Some(bytes) = fs::read(&png_path).ok().filter(|bytes| png_size(bytes) == Some((128, 128))) {
+        if let Some(bytes) = fs::read(&png_path)
+            .ok()
+            .filter(|bytes| png_size(bytes) == Some((128, 128)))
+        {
             return Some(bytes);
         }
     }
@@ -128,7 +158,12 @@ fn cached_png(cache: &Path, app: &Path, read: &mut impl FnMut(&Path) -> Option<V
 
 fn stamp_text(app: &Path, modified: SystemTime) -> String {
     let dur = modified.duration_since(UNIX_EPOCH).unwrap_or_default();
-    format!("{}\n{}.{}", app.display(), dur.as_secs(), dur.subsec_nanos())
+    format!(
+        "{}\n{}.{}",
+        app.display(),
+        dur.as_secs(),
+        dur.subsec_nanos()
+    )
 }
 
 /// ponytail: 文件名用 FNV-1a 64。stamp 里写完整路径，撞名就重读，不会把另一张图交出去。要更稳就换成 sha256。
@@ -156,7 +191,9 @@ fn base64_encode(bytes: Vec<u8>) -> String {
     let mut out = String::new();
     let mut index = 0;
     while index + 3 <= bytes.len() {
-        let value = ((bytes[index] as u32) << 16) | ((bytes[index + 1] as u32) << 8) | bytes[index + 2] as u32;
+        let value = ((bytes[index] as u32) << 16)
+            | ((bytes[index + 1] as u32) << 8)
+            | bytes[index + 2] as u32;
         out.push(TABLE[((value >> 18) & 63) as usize] as char);
         out.push(TABLE[((value >> 12) & 63) as usize] as char);
         out.push(TABLE[((value >> 6) & 63) as usize] as char);
@@ -196,11 +233,11 @@ fn bundle_identifier(app: &Path) -> Option<String> {
 
 #[cfg(target_os = "macos")]
 fn render_png(app: &Path) -> Option<Vec<u8>> {
-    use objc2::AllocAnyThread;
     use objc2::runtime::AnyObject;
+    use objc2::AllocAnyThread;
     use objc2_app_kit::{
-        NSBitmapImageFileType, NSBitmapImageRep, NSCompositingOperation, NSDeviceRGBColorSpace, NSGraphicsContext,
-        NSWorkspace,
+        NSBitmapImageFileType, NSBitmapImageRep, NSCompositingOperation, NSDeviceRGBColorSpace,
+        NSGraphicsContext, NSWorkspace,
     };
     use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
 
@@ -237,7 +274,8 @@ fn render_png(app: &Path) -> Option<Vec<u8>> {
         );
         NSGraphicsContext::restoreGraphicsState_class();
         let props: objc2::rc::Retained<NSDictionary<NSString, AnyObject>> = NSDictionary::new();
-        let data = unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &props) }?;
+        let data =
+            unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &props) }?;
         Some(data.to_vec())
     })
 }
@@ -249,7 +287,8 @@ mod tests {
     use std::time::Duration;
 
     fn temp_apps(label: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!("wanxiang-icons-{label}-{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("wanxiang-icons-{label}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
         path
@@ -271,17 +310,20 @@ mod tests {
         fs::create_dir(root.join("Codex.app")).unwrap();
         fs::create_dir(root.join("Other.app")).unwrap();
         fs::create_dir(root.join("Harness.app")).unwrap();
+        fs::create_dir(root.join("Desktop.app")).unwrap();
         let found = locate(&root, |path| {
             if path.ends_with("Harness.app") {
                 Some(HARNESS_BUNDLE_ID.to_string())
-            } else if path.ends_with("Other.app") {
-                Some("com.deepseek.chat".to_string())
+            } else if path.ends_with("Desktop.app") {
+                Some(CODEX_BUNDLE_ID.to_string())
+            } else if path.ends_with("Codex.app") {
+                Some("com.example.not-the-app".to_string())
             } else {
                 None
             }
         });
         assert!(found.cursor.is_none());
-        assert_eq!(found.codex.unwrap().file_name().unwrap(), "Codex.app");
+        assert_eq!(found.codex.unwrap().file_name().unwrap(), "Desktop.app");
         assert_eq!(found.harness.unwrap().file_name().unwrap(), "Harness.app");
         let again = locate(&root, |_| Some("com.example.not-harness".to_string()));
         assert!(again.harness.is_none());
@@ -295,6 +337,51 @@ mod tests {
         fs::create_dir(root.join("B.app")).unwrap();
         let found = locate(&root, |_| Some(HARNESS_BUNDLE_ID.to_string()));
         assert!(found.harness.is_none());
+        assert!(found.codex.is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ds_bot_reuses_the_harness_icon_and_stays_empty_without_it() {
+        let root = temp_apps("bot");
+        let app = root.join("Harness.app");
+        fs::create_dir(&app).unwrap();
+        let cache = root.join("icon-cache");
+        let reads = Cell::new(0);
+        let mut read = |_: &Path| {
+            reads.set(reads.get() + 1);
+            Some(png128())
+        };
+        let rows = assemble(
+            &cache,
+            Located {
+                harness: Some(app),
+                cursor: None,
+                codex: None,
+            },
+            &mut read,
+        );
+        let harness = rows
+            .iter()
+            .find(|icon| icon.tool == ToolId::DeepSeekHarness)
+            .unwrap();
+        let bot = rows.iter().find(|icon| icon.tool == ToolId::DsBot).unwrap();
+        assert_eq!(harness.png_base64, bot.png_base64);
+        assert!(harness.png_base64.is_some());
+        assert_eq!(reads.get(), 1);
+        let empty = assemble(
+            &cache,
+            Located {
+                harness: None,
+                cursor: None,
+                codex: None,
+            },
+            &mut read,
+        );
+        assert!(empty
+            .iter()
+            .any(|icon| icon.tool == ToolId::DsBot && icon.png_base64.is_none()));
+        assert_eq!(reads.get(), 1);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -319,8 +406,12 @@ mod tests {
             codex: None,
         };
         let first = assemble(&cache, found, &mut read);
-        assert!(first.iter().any(|icon| icon.tool == ToolId::DsBot && icon.png_base64.is_none()));
-        assert!(first.iter().any(|icon| icon.tool == ToolId::Cursor && icon.png_base64.is_some()));
+        assert!(first
+            .iter()
+            .any(|icon| icon.tool == ToolId::DsBot && icon.png_base64.is_none()));
+        assert!(first
+            .iter()
+            .any(|icon| icon.tool == ToolId::Cursor && icon.png_base64.is_some()));
         assert_eq!(reads.get(), 1);
         let found = Located {
             harness: None,
@@ -353,12 +444,15 @@ mod tests {
     #[test]
     fn windows_reader_is_unimplemented() {
         let body = include_str!("icons.rs").split("mod tests").next().unwrap();
-        let start = body.find("#[cfg(target_os = \"windows\")]").expect("windows cfg");
+        let start = body
+            .find("#[cfg(target_os = \"windows\")]")
+            .expect("windows cfg");
         let window = &body[start..start + 240];
         assert!(window.contains("未实现"), "{window}");
         assert!(window.contains("null_icons"), "{window}");
         assert!(null_icons().iter().all(|icon| icon.png_base64.is_none()));
-        assert!(!body.contains("ChatGPT"));
+        assert!(!body.contains("ChatGPT.app"));
+        assert!(body.contains(CODEX_BUNDLE_ID));
         assert!(!body.contains("/.codex"));
         assert!(!body.contains("/.dsh"));
         assert!(!body.contains("home_dir"));
@@ -373,6 +467,17 @@ mod tests {
             return;
         };
         assert_eq!(bundle_identifier(&path).as_deref(), Some(HARNESS_BUNDLE_ID));
+        assert_eq!(path.parent(), Some(Path::new("/Applications")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn installed_codex_is_only_the_confirmed_bundle() {
+        let found = locate(Path::new("/Applications"), bundle_identifier);
+        let Some(path) = found.codex else {
+            return;
+        };
+        assert_eq!(bundle_identifier(&path).as_deref(), Some(CODEX_BUNDLE_ID));
         assert_eq!(path.parent(), Some(Path::new("/Applications")));
     }
 

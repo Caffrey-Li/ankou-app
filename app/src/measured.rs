@@ -27,10 +27,87 @@ pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     set_at(store, kind, on, &home.join(".dsh"), &home.join(".codex"))
 }
 
+pub fn apply_space_fixture(store: &Store) -> Result<(), String> {
+    let Some(root) = space_fixture_root() else {
+        return Ok(());
+    };
+    let grants = store.grants().map_err(show)?;
+    for grant in grants {
+        if grant.tool == ToolId::DeepSeekHarness
+            && (grant.capability == Capability::SpaceScan
+                || grant.capability == Capability::Cleanup)
+        {
+            store.revoke(grant.id).map_err(show)?;
+        }
+    }
+    set_at(store, "harness_space", true, &root, &root)?;
+    set_at(store, "harness_cleanup", true, &root, &root)
+}
+
+#[cfg(debug_assertions)]
+pub fn space_fixture_active() -> bool {
+    space_fixture_root().is_some()
+}
+
+#[cfg(not(debug_assertions))]
+pub fn space_fixture_active() -> bool {
+    false
+}
+
+#[cfg(debug_assertions)]
+fn space_fixture_root() -> Option<std::path::PathBuf> {
+    let raw = std::env::var_os("WANXIANG_SPACE_FIXTURE")?;
+    if raw.is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(raw))
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn space_fixture_root() -> Option<std::path::PathBuf> {
+    None
+}
+
 pub fn set_at(store: &Store, kind: &str, on: bool, dsh: &Path, codex: &Path) -> Result<(), String> {
     match kind {
-        "ds_bot_usage" => set_path(store, ToolId::DsBot, dsh, BOT_PATTERN, on),
-        "codex_usage" => set_path(store, ToolId::Codex, codex, CODEX_PATTERN, on),
+        "ds_bot_usage" => set_path(
+            store,
+            ToolId::DsBot,
+            Capability::Usage,
+            dsh,
+            BOT_PATTERN,
+            on,
+        ),
+        "codex_usage" => set_path(
+            store,
+            ToolId::Codex,
+            Capability::Usage,
+            codex,
+            CODEX_PATTERN,
+            on,
+        ),
+        "harness_space" => set_path(
+            store,
+            ToolId::DeepSeekHarness,
+            Capability::SpaceScan,
+            dsh,
+            "**",
+            on,
+        ),
+        "harness_cleanup" => {
+            for pattern in wanxiang_core::CLEANUP_PATTERNS {
+                set_path(
+                    store,
+                    ToolId::DeepSeekHarness,
+                    Capability::Cleanup,
+                    dsh,
+                    pattern,
+                    on,
+                )?;
+            }
+            Ok(())
+        }
         "deepseek_balance" => {
             if on {
                 store.grant_account_link().map_err(show)
@@ -44,18 +121,28 @@ pub fn set_at(store: &Store, kind: &str, on: bool, dsh: &Path, codex: &Path) -> 
             store.set_settings(&settings).map_err(show)
         }
         "codex_conversation" | "ds_bot_conversation" => {
-            let _ = (conversation_scope(kind), conversation_root(kind, dsh, codex));
+            let _ = (
+                conversation_scope(kind),
+                conversation_root(kind, dsh, codex),
+            );
             Err("尚未验证，不能授权".to_string())
         }
         _ => Err("没有这项授权".to_string()),
     }
 }
 
-fn set_path(store: &Store, tool: ToolId, root: &Path, pattern: &str, on: bool) -> Result<(), String> {
+fn set_path(
+    store: &Store,
+    tool: ToolId,
+    capability: Capability,
+    root: &Path,
+    pattern: &str,
+    on: bool,
+) -> Result<(), String> {
     if !on {
         let grants = store.grants().map_err(show)?;
         for grant in grants {
-            if grant.tool == tool && grant.capability == Capability::Usage && grant.pattern == pattern {
+            if grant.tool == tool && grant.capability == capability && grant.pattern == pattern {
                 store.revoke(grant.id).map_err(show)?;
             }
         }
@@ -64,7 +151,7 @@ fn set_path(store: &Store, tool: ToolId, root: &Path, pattern: &str, on: bool) -
     store
         .grant(
             tool,
-            Capability::Usage,
+            capability,
             PathScope {
                 root: root.to_path_buf(),
                 pattern: pattern.to_string(),
@@ -85,10 +172,11 @@ mod tests {
 
     use wanxiang_core::{Clock, Guard, RefreshGate, Store, Supervisor, SystemClock, ToolScheduler};
 
-    use super::{conversation_root, conversation_scope, set_at};
+    use super::{apply_space_fixture, conversation_root, conversation_scope, set_at};
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("wanxiang-measured-{name}-{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("wanxiang-measured-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(path.join("dsh")).unwrap();
         std::fs::create_dir_all(path.join("codex")).unwrap();
@@ -99,7 +187,10 @@ mod tests {
         let supervisor = Supervisor::new();
         let gate = Arc::new(RefreshGate::new(supervisor.handle()));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let guard = Arc::new(Guard::new(Arc::clone(&gate) as Arc<dyn ToolScheduler>, Arc::clone(&clock)));
+        let guard = Arc::new(Guard::new(
+            Arc::clone(&gate) as Arc<dyn ToolScheduler>,
+            Arc::clone(&clock),
+        ));
         Store::open(&dir.join("wanxiang.sqlite"), guard, clock).unwrap()
     }
 
@@ -117,7 +208,10 @@ mod tests {
             grant.pattern == "sessions/**/*.jsonl" && grant.root == codex.canonicalize().unwrap()
         }));
         set_at(&store, "deepseek_balance", true, &dsh, &codex).unwrap();
-        assert_eq!(store.account_link_status().unwrap().as_deref(), Some("active"));
+        assert_eq!(
+            store.account_link_status().unwrap().as_deref(),
+            Some("active")
+        );
         set_at(&store, "codex_app_server", true, &dsh, &codex).unwrap();
         assert!(store.settings().unwrap().codex_app_server);
         set_at(&store, "ds_bot_usage", false, &dsh, &codex).unwrap();
@@ -125,21 +219,130 @@ mod tests {
         set_at(&store, "deepseek_balance", false, &dsh, &codex).unwrap();
         set_at(&store, "codex_app_server", false, &dsh, &codex).unwrap();
         assert!(store.grants().unwrap().is_empty());
-        assert_ne!(store.account_link_status().unwrap().as_deref(), Some("active"));
+        assert_ne!(
+            store.account_link_status().unwrap().as_deref(),
+            Some("active")
+        );
         assert!(!store.settings().unwrap().codex_app_server);
         assert_eq!(
             conversation_scope("codex_conversation"),
             Some((wanxiang_core::ToolId::Codex, "sessions/**/*.jsonl"))
         );
-        assert_eq!(conversation_root("codex_conversation", &dsh, &codex), Some(codex.as_path()));
+        assert_eq!(
+            conversation_root("codex_conversation", &dsh, &codex),
+            Some(codex.as_path())
+        );
         assert_eq!(
             conversation_scope("ds_bot_conversation"),
             Some((wanxiang_core::ToolId::DsBot, "bot/usage.sqlite*"))
         );
-        assert_eq!(conversation_root("ds_bot_conversation", &dsh, &codex), Some(dsh.as_path()));
+        assert_eq!(
+            conversation_root("ds_bot_conversation", &dsh, &codex),
+            Some(dsh.as_path())
+        );
         assert!(set_at(&store, "codex_conversation", true, &dsh, &codex).is_err());
         assert!(set_at(&store, "ds_bot_conversation", true, &dsh, &codex).is_err());
         assert!(store.grants().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn harness_cleanup_is_four_direct_child_patterns() {
+        let dir = temp("clean");
+        let store = open_store(&dir);
+        let dsh = dir.join("dsh");
+        let codex = dir.join("codex");
+        std::fs::create_dir_all(dsh.join("cache/job")).unwrap();
+        std::fs::write(dsh.join("cache/item"), b"ok").unwrap();
+        std::fs::write(dsh.join("cache/job/nested"), b"deep").unwrap();
+        std::fs::create_dir_all(dsh.join("bot")).unwrap();
+        std::fs::write(dsh.join("bot/note"), b"no").unwrap();
+        set_at(&store, "harness_cleanup", true, &dsh, &codex).unwrap();
+        let patterns: Vec<_> = store
+            .grants()
+            .unwrap()
+            .into_iter()
+            .map(|grant| grant.pattern)
+            .collect();
+        assert_eq!(
+            patterns,
+            wanxiang_core::CLEANUP_PATTERNS
+                .iter()
+                .map(|pattern| (*pattern).to_string())
+                .collect::<Vec<_>>()
+        );
+        let nested = store
+            .guard()
+            .metadata(
+                wanxiang_core::ToolId::DeepSeekHarness,
+                wanxiang_core::Capability::Cleanup,
+                &dsh.join("cache/job/nested").canonicalize().unwrap(),
+            )
+            .unwrap_err();
+        let protected = store
+            .guard()
+            .metadata(
+                wanxiang_core::ToolId::DeepSeekHarness,
+                wanxiang_core::Capability::Cleanup,
+                &dsh.join("bot/note").canonicalize().unwrap(),
+            )
+            .unwrap_err();
+        assert!(
+            matches!(nested, wanxiang_core::GuardError::PatternMismatch),
+            "{nested:?}"
+        );
+        assert!(
+            matches!(protected, wanxiang_core::GuardError::PatternMismatch),
+            "{protected:?}"
+        );
+        store
+            .guard()
+            .metadata(
+                wanxiang_core::ToolId::DeepSeekHarness,
+                wanxiang_core::Capability::Cleanup,
+                &dsh.join("cache/item").canonicalize().unwrap(),
+            )
+            .unwrap();
+        set_at(&store, "harness_cleanup", false, &dsh, &codex).unwrap();
+        assert!(store.grants().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn space_fixture_replaces_the_dsh_scan_and_cleanup_roots() {
+        let dir = temp("fixture");
+        let root = dir.join("fake-dsh");
+        std::fs::create_dir_all(root.join("cache")).unwrap();
+        let store = open_store(&dir);
+        set_at(
+            &store,
+            "harness_space",
+            true,
+            &dir.join("dsh"),
+            &dir.join("codex"),
+        )
+        .unwrap();
+        std::env::set_var("WANXIANG_SPACE_FIXTURE", &root);
+        let applied = apply_space_fixture(&store).and_then(|_| apply_space_fixture(&store));
+        std::env::remove_var("WANXIANG_SPACE_FIXTURE");
+        applied.unwrap();
+        let grants = store.grants().unwrap();
+        let canonical = root.canonicalize().unwrap();
+        assert!(grants.iter().all(|grant| grant.root == canonical));
+        assert_eq!(
+            grants
+                .iter()
+                .filter(|grant| grant.capability == wanxiang_core::Capability::Cleanup)
+                .count(),
+            4
+        );
+        assert_eq!(
+            grants
+                .iter()
+                .filter(|grant| grant.capability == wanxiang_core::Capability::SpaceScan)
+                .count(),
+            1
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

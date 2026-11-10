@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use wanxiang_core::{
@@ -9,9 +11,35 @@ use wanxiang_core::{
 
 use crate::discover::{self, ToolSnapshot};
 
+#[derive(Default)]
+pub struct ScanSlots {
+    flags: Mutex<HashMap<ToolId, Arc<AtomicBool>>>,
+}
+
+impl ScanSlots {
+    pub fn begin(&self, tool: ToolId) -> Arc<AtomicBool> {
+        let mut flags = self.flags.lock().expect("scan");
+        let flag = flags
+            .entry(tool)
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone();
+        flag.store(false, Ordering::SeqCst);
+        flag
+    }
+
+    pub fn cancel(&self, tool: ToolId) {
+        let mut flags = self.flags.lock().expect("scan");
+        flags
+            .entry(tool)
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .store(true, Ordering::SeqCst);
+    }
+}
+
 pub struct Hub {
     pub store: Arc<Store>,
     pub secrets: SecretStore,
+    pub scans: ScanSlots,
     pub gate: Arc<RefreshGate>,
     pub emit: Arc<dyn Fn(&str) + Send + Sync>,
 }
@@ -23,16 +51,22 @@ impl Hub {
         let supervisor = app.state::<wanxiang_core::Supervisor>();
         let gate = Arc::new(RefreshGate::new(supervisor.handle()));
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let guard = Arc::new(Guard::new(Arc::clone(&gate) as Arc<dyn wanxiang_core::ToolScheduler>, Arc::clone(&clock)));
-        let store = Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?);
+        let guard = Arc::new(Guard::new(
+            Arc::clone(&gate) as Arc<dyn wanxiang_core::ToolScheduler>,
+            Arc::clone(&clock),
+        ));
+        let store =
+            Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?);
         let emit_app = app.clone();
         let emit: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |part: &str| {
             let _ = emit_app.emit("usage-item", part.to_string());
         });
         crate::collect::spawn_refresh(Arc::clone(&store), Arc::clone(&gate), Arc::clone(&emit));
+        crate::measured::apply_space_fixture(&store).map_err(io_err)?;
         Ok(Self {
             store,
             secrets: SecretStore::new(),
+            scans: ScanSlots::default(),
             gate,
             emit,
         })
@@ -94,6 +128,9 @@ fn delete_deepseek_key(hub: State<'_, Hub>) -> Result<(), String> {
 
 #[tauri::command]
 fn deepseek_key_saved(hub: State<'_, Hub>) -> Result<bool, String> {
+    if crate::measured::space_fixture_active() {
+        return Ok(false);
+    }
     hub.secrets.is_saved().map_err(text)
 }
 
@@ -164,8 +201,15 @@ fn usage_page(
         range_end,
         rows: hub.store.usage_rows().map_err(StoreErrorText)?,
         reports: hub.store.usage_reports().map_err(StoreErrorText)?,
-        key_saved: hub.secrets.is_saved().unwrap_or(false),
-        account_linked: hub.store.guard().account_link_active(ToolId::DeepSeekHarness),
+        key_saved: if crate::measured::space_fixture_active() {
+            false
+        } else {
+            hub.secrets.is_saved().unwrap_or(false)
+        },
+        account_linked: hub
+            .store
+            .guard()
+            .account_link_active(ToolId::DeepSeekHarness),
         codex_app_server: settings.codex_app_server,
         codex_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::Codex),
         bot_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::DsBot),
@@ -234,6 +278,10 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         crate::handoff::export_handoff,
         crate::handoff::organize_handoff,
         tool_icons,
+        crate::space::scan_space,
+        crate::space::cancel_scan,
+        crate::space::prepare_cleanup,
+        crate::space::run_cleanup,
     ])
 }
 
@@ -299,15 +347,26 @@ mod tests {
             "export-handoff",
             "organize-handoff",
             "tool-icons",
+            "scan-space",
+            "cancel-scan",
+            "prepare-cleanup",
+            "run-cleanup",
         ];
         let text = include_str!("../capabilities/default.json");
         let value: serde_json::Value = serde_json::from_str(text).unwrap();
         let permissions = value["permissions"].as_array().unwrap();
-        let allows: Vec<&str> = permissions.iter().filter_map(|item| item.as_str().filter(|name| name.starts_with("allow-"))).collect();
+        let allows: Vec<&str> = permissions
+            .iter()
+            .filter_map(|item| item.as_str().filter(|name| name.starts_with("allow-")))
+            .collect();
         assert_eq!(allows.len(), COMMANDS.len());
         for name in COMMANDS {
             let needle = format!("allow-{name}");
-            assert_eq!(allows.iter().filter(|item| **item == needle).count(), 1, "{needle}");
+            assert_eq!(
+                allows.iter().filter(|item| **item == needle).count(),
+                1,
+                "{needle}"
+            );
         }
         assert!(!allows.contains(&"allow-grant"));
         assert!(!text.contains("open-deeplink"));

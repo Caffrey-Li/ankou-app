@@ -99,7 +99,7 @@ fn insert_usage(path: &std::path::Path, day: &str) {
 fn insert_cleanup(path: &std::path::Path) {
     let conn = rusqlite::Connection::open(path).unwrap();
     conn.execute(
-        "INSERT INTO cleanup_history (created_at, summary) VALUES ('2026-11-01', 'fixture')",
+        "INSERT INTO cleanup_history (created_at, tool, entry_count, total_bytes) VALUES ('1700000000', 'cursor', 1, 4)",
         [],
     )
     .unwrap();
@@ -245,13 +245,8 @@ fn retention_cutoff_uses_the_local_day_when_utc_has_moved_ahead() {
     assert_eq!(wanxiang_core::local_calendar_day(now, 0), "2026-11-10");
     let clock = Arc::new(FixedClock(now));
     let guard = Arc::new(Guard::new(Arc::new(Rec), clock.clone()));
-    let store = Store::open_with_offset(
-        &tmp.path.join("wanxiang.sqlite"),
-        guard,
-        clock,
-        -6 * 3600,
-    )
-    .unwrap();
+    let store = Store::open_with_offset(&tmp.path.join("wanxiang.sqlite"), guard, clock, -6 * 3600)
+        .unwrap();
     let db = tmp.path.join("wanxiang.sqlite");
     insert_usage(&db, "2025-11-08");
     insert_usage(&db, "2025-11-09");
@@ -281,6 +276,73 @@ fn default_settings_keep_history_for_twelve_months_and_leave_residency_off() {
     assert!(!settings.launch_at_login);
     assert!(!settings.notifications);
     assert!(!settings.setup_complete);
+}
+
+#[test]
+fn cleanup_history_records_counts_without_paths() {
+    let tmp = Tmp::new();
+    let db = tmp.path.join("wanxiang.sqlite");
+    let store = open(&tmp, guard());
+    store
+        .record_cleanup(wanxiang_core::ToolId::DeepSeekHarness, 2, 48)
+        .unwrap();
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let mut cols = conn
+        .prepare("SELECT name FROM pragma_table_info('cleanup_history')")
+        .unwrap();
+    let names: Vec<String> = cols
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(|c| c.unwrap())
+        .collect();
+    assert!(
+        names.iter().all(|name| name != "path" && name != "summary"),
+        "{names:?}"
+    );
+    let (tool, count, bytes): (String, i64, i64) = conn
+        .query_row(
+            "SELECT tool, entry_count, total_bytes FROM cleanup_history",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(tool, "deepseek_harness");
+    assert_eq!(count, 2);
+    assert_eq!(bytes, 48);
+    let sql = include_str!("../src/store.rs");
+    let start = sql.find("fn record_cleanup").unwrap();
+    let body = &sql[start..start + 500];
+    assert!(!body.contains("path"));
+}
+
+#[test]
+fn old_cleanup_summary_rows_are_dropped() {
+    let tmp = Tmp::new();
+    let db = tmp.path.join("wanxiang.sqlite");
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE cleanup_history (
+            id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            summary TEXT NOT NULL
+        );
+        INSERT INTO cleanup_history (created_at, summary) VALUES ('1', '/tmp/secret');",
+    )
+    .unwrap();
+    drop(conn);
+    let store = open(&tmp, guard());
+    assert!(store.cleanup_history().unwrap().is_empty());
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let mut cols = conn
+        .prepare("SELECT name FROM pragma_table_info('cleanup_history')")
+        .unwrap();
+    let names: Vec<String> = cols
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(|item| item.unwrap())
+        .collect();
+    assert!(!names.iter().any(|name| name == "summary"));
+    assert!(names.iter().any(|name| name == "entry_count"));
 }
 
 #[test]
