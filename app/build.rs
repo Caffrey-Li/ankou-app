@@ -32,6 +32,7 @@ fn main() {
         "place_deeplink",
         "export_handoff",
         "organize_handoff",
+        "tool_icons",
     ];
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(COMMANDS),

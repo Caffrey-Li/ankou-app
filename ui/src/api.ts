@@ -260,3 +260,13 @@ export function placeDeeplink(token: string, text: string) {
 export function exportHandoff(text: string) {
   return call<void>("export_handoff", { text });
 }
+
+export type ToolIconFile = {
+  tool: ToolId;
+  png_base64: string | null;
+};
+
+export function loadToolIcons() {
+  if (!inTauri()) return Promise.resolve([] as ToolIconFile[]);
+  return call<ToolIconFile[]>("tool_icons");
+}

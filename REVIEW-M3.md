@@ -249,3 +249,36 @@ opener 只给了 `opener:allow-open-url`，允许范围只有 `cursor://anyspher
 - `npm test`：11 个文件，0 失败
 
 用户说明原生截图在 `design/native/m3-handoff.png` 和 `design/native/m3-preview.png`。落笔时这两个文件不在工作区里。
+
+## M3.1
+
+仓库里不再打包第三方工具图标。`ui/src/tool-icons/` 已删除。图标由命令 `tool_icons` 在 Rust 里从应用程序包读取，不读用户数据目录。读不到的继续显示原来的字母块。
+
+### 读到的图标
+
+| 工具 | 结果 |
+| --- | --- |
+| Cursor | 有。`read_dir(/Applications)` 确认目录名就是 `Cursor.app`，再用 `NSWorkspace iconForFile` 画成 128×128 PNG |
+| DeepSeek Harness | 有。不按应用包文件夹名匹配。`/Applications` 里唯一一个 `CFBundleIdentifier` 为 `com.deepseek.dsh` 的包，其 `CFBundleName` 是 DeepSeek Harness，因此读取。缓存路径是 `/Applications/DeepSeek Harness.app` |
+| DS Bot | null。没有独立应用，侧栏仍是字母 B |
+| Codex | null。`/Applications` 里没有大小写完全一致的 `Codex.app`。不读 ChatGPT.app。侧栏仍是字母 Cx |
+
+Windows 只有接口：`cfg(target_os = "windows")` 下直接返回四个 null。未实现。
+
+PNG 缓存在应用数据目录的 `icon-cache/`。文件名是应用包路径的哈希，旁边的 stamp 记下路径和 mtime；mtime 变了才重新读取。这次启动写出两张 128×128：Cursor 和 DeepSeek Harness。`wanxiang.sqlite` 仍是 65536 字节，SHA-256 `8e28bcf948764d4106118a703bcfe5a095af56d8a10df043880aaf3a6e641428`。
+
+`img-src` 里本来就有 `data:`，这次没有改其他 CSP 指令。`connect-src` 仍只有 `ipc:` 和 `http://ipc.localhost`。
+
+侧栏截图：`design/native/m3.1-sidebar.png`。Harness 是鲸鱼图标，Cursor 是应用图标，DS Bot 是 B，Codex 是 Cx。
+
+### 窗口拖动
+
+红绿灯那一行（`.traffic`）和工具栏标题与按钮之间的空白（`.toolbar-drag`）加了 `data-tauri-drag-region`。按钮和输入框没有这个属性。capability 只多了 `core:window:allow-start-dragging`。`core:` 开头的权限现在是 `core:event:allow-listen`、`core:event:allow-unlisten`、`core:window:allow-start-dragging`。
+
+原生窗口里按住顶部空白拖了一次。拖动前窗口在 (140, 58)，拖动后在 (172, 60)。窗口能移动。拖完侧栏仍在，图标没有回到字母块。没有点「放入」或「导出」。这次没有出现钥匙串弹窗。
+
+### 测试
+
+- `cargo test --offline --workspace`：通过
+- `npx tsc --noEmit -p ui/tsconfig.json`：通过
+- `npm test`：12 个文件，0 失败

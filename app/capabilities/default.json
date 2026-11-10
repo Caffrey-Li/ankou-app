@@ -5,6 +5,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-start-dragging",
     "allow-list-grants",
     "allow-revoke",
     "allow-get-settings",
@@ -25,6 +26,7 @@
     "allow-prepare-deeplink",
     "allow-place-deeplink",
     "allow-export-handoff",
-    "allow-organize-handoff"
+    "allow-organize-handoff",
+    "allow-tool-icons"
   ]
 }

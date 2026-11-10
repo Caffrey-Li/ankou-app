@@ -247,7 +247,7 @@ export function App() {
   return (
     <div className="window">
       <aside className="sidebar">
-        {windows ? null : <div className="traffic" aria-hidden="true" />}
+        {windows ? null : <div className="traffic" data-tauri-drag-region aria-hidden="true" />}
         <div className="brand">
           <img src={mark} alt="" width={22} height={22} />
           <span>万象小助手</span>
@@ -289,6 +289,7 @@ export function App() {
                       : formatDate(shownDate())}
             </p>
           </div>
+          <div className="toolbar-drag" data-tauri-drag-region />
           {page === "settings" ? null : (
           <div className="toolbar-actions">
             {page === "usage" ? (

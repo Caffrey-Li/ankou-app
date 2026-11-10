@@ -13,6 +13,7 @@ mod collect;
 mod commands;
 mod discover;
 mod handoff;
+mod icons;
 mod measured;
 
 pub fn run() {

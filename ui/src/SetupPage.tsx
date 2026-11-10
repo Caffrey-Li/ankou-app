@@ -3,6 +3,7 @@ import mark from "../../brand/icon-macos.svg";
 import type { Snapshot } from "./api";
 import { finishSetup } from "./api";
 import { presenceLabel, toolSpecs } from "./catalog";
+import { ToolIcon } from "./tool-status";
 import "./setup.css";
 import "./settings.css";
 
@@ -60,9 +61,7 @@ export function SetupPage({
                   aria-expanded={expanded}
                   onClick={() => setOpen(expanded ? "" : spec.id)}
                 >
-                  <span className="mark lg" aria-hidden="true">
-                    {spec.letter}
-                  </span>
+                  <ToolIcon id={spec.id} className="mark lg" />
                   <span className="tool-copy">
                     <strong>{spec.name}</strong>
                     <span>{presenceLabel(presence)}</span>

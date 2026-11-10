@@ -37,8 +37,19 @@ assert.deepEqual(
     "send-summary",
     "set-capability",
     "set-settings",
+    "tool-icons",
   ],
 );
+const csp = JSON.parse(readFileSync(new URL("../app/tauri.conf.json", import.meta.url), "utf8")).app.security
+  .csp;
+const directives = Object.fromEntries(
+  csp.split(";").map((part) => {
+    const [name, ...rest] = part.trim().split(/\s+/);
+    return [name, rest.join(" ")];
+  }),
+);
+assert.match(directives["img-src"], /(^| )data:( |$)/);
+assert.equal(directives["connect-src"], "ipc: http://ipc.localhost");
 assert.equal(allowed.includes("allow-grant"), false);
 assert.equal(allowed.length, invoked.length);
 for (const name of invoked) {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Settings, Snapshot } from "./api";
 import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
 import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
+import { ToolIcon } from "./tool-status";
 import "./settings.css";
 
 export function SettingsPage({
@@ -247,9 +248,7 @@ export function SettingsPage({
             return (
               <div className="tool-block" key={spec.id}>
                 <div className="tool-head">
-                  <span className="mark sm" aria-hidden="true">
-                    {spec.letter}
-                  </span>
+                  <ToolIcon id={spec.id} className="mark sm" />
                   <span className="tool-copy">
                     <strong>{spec.name}</strong>
                     <span>{presenceLabel(presence)}</span>

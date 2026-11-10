@@ -233,7 +233,26 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         crate::handoff::place_deeplink,
         crate::handoff::export_handoff,
         crate::handoff::organize_handoff,
+        tool_icons,
     ])
+}
+
+#[tauri::command]
+fn tool_icons<R: tauri::Runtime>(app: AppHandle<R>) -> Result<Vec<crate::icons::ToolIcon>, String> {
+    let cache = app.path().app_data_dir().map_err(text)?.join("icon-cache");
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        app.run_on_main_thread(move || {
+            let _ = tx.send(crate::icons::tool_icons(&cache));
+        })
+        .map_err(text)?;
+        return rx.recv().map_err(text);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(crate::icons::tool_icons(&cache))
+    }
 }
 
 #[cfg(test)]
@@ -279,6 +298,7 @@ mod tests {
             "place-deeplink",
             "export-handoff",
             "organize-handoff",
+            "tool-icons",
         ];
         let text = include_str!("../capabilities/default.json");
         let value: serde_json::Value = serde_json::from_str(text).unwrap();
@@ -311,5 +331,35 @@ mod tests {
             assert!(!name.starts_with("dialog:"), "{name}");
             assert!(!name.split(':').any(|part| part == "default"), "{name}");
         }
+    }
+
+    #[test]
+    fn capability_core_permissions_are_listen_and_drag() {
+        let text = include_str!("../capabilities/default.json");
+        let value: serde_json::Value = serde_json::from_str(text).unwrap();
+        let core: Vec<&str> = value["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item.as_str().filter(|name| name.starts_with("core:")))
+            .collect();
+        assert_eq!(
+            core,
+            [
+                "core:event:allow-listen",
+                "core:event:allow-unlisten",
+                "core:window:allow-start-dragging",
+            ]
+        );
+    }
+
+    #[test]
+    fn tool_icons_takes_no_caller_path() {
+        let source = include_str!("commands.rs");
+        let start = source.find("fn tool_icons").expect("tool_icons");
+        let end = source[start..].find('{').unwrap() + start;
+        let signature = &source[start..end];
+        assert!(signature.contains("AppHandle"), "{signature}");
+        assert!(!signature.contains("path"), "{signature}");
     }
 }

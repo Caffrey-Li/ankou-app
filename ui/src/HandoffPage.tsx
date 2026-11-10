@@ -11,6 +11,7 @@ import {
 } from "./api";
 import rowsFromFile from "./fixture-m3.json";
 import { IconArrow, IconCheck, IconChevron, IconClose, IconCopy, IconSearch } from "./icons";
+import { ToolIcon } from "./tool-status";
 import "./handoff.css";
 import "./usage.css";
 
@@ -217,7 +218,7 @@ export function HandoffPage({
               aria-pressed={row.id === selected?.id}
               onClick={() => setSelectedId(row.id)}
             >
-              <span className="handoff-mark">{markOf(row.tool)}</span>
+              <ToolIcon id={toolKind(row.tool)} className="handoff-mark" />
               <span>
                 <strong>{row.title}</strong>
                 <small>
@@ -247,7 +248,7 @@ export function HandoffPage({
       {selected ? (
         <section className="handoff-detail" aria-label="对话详情">
           <div className="handoff-head">
-            <span className="handoff-mark">{markOf(selected.tool)}</span>
+            <ToolIcon id={toolKind(selected.tool)} className="handoff-mark" />
             <div>
               <h2>{selected.title}</h2>
               <p>
@@ -469,14 +470,6 @@ function toolLabel(tool: string) {
   if (kind === "ds_bot") return "DS Bot";
   if (kind === "deepseek_harness") return "DeepSeek Harness";
   return "Cursor";
-}
-
-function markOf(tool: string) {
-  const kind = toolKind(tool);
-  if (kind === "codex") return "Cx";
-  if (kind === "ds_bot") return "B";
-  if (kind === "deepseek_harness") return "H";
-  return "C";
 }
 
 export function fixtureHandoffRows() {
