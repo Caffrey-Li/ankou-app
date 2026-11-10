@@ -1,5 +1,7 @@
 //! Cursor 接入占位。
-//! 开发时只用日后的 fixtures，不读取本机 Cursor 数据目录。
+//! 开发时只用夹具，不读取本机 Cursor 数据目录。
+
+use wanxiang_core::{Capability, Guard, GuardError, ToolId};
 
 pub fn availability() -> &'static str {
     "未验证"
@@ -7,6 +9,13 @@ pub fn availability() -> &'static str {
 
 pub fn installed(roaming: &std::path::Path, applications: &std::path::Path) -> bool {
     roaming.join("Cursor").is_dir() || applications.join("Cursor.app").is_dir()
+}
+
+pub fn read_fixture(guard: &Guard) -> Result<&'static str, GuardError> {
+    if !guard.has_grant(ToolId::Cursor, Capability::Conversation) {
+        return Err(GuardError::NotGranted);
+    }
+    Ok(include_str!("../fixtures/conversations.json"))
 }
 
 #[cfg(test)]

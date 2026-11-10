@@ -1,4 +1,5 @@
 mod guard;
+mod handoff;
 mod present;
 mod refresh;
 mod secret;
@@ -6,6 +7,11 @@ mod store;
 mod supervisor;
 mod usage;
 
+pub use handoff::{
+    authorize_summary, cursor_prompt_url, organize_local, place_deeplink, prepare_deeplink, redeem_summary,
+    summary_body, summary_chars, take_recent, write_export, write_export_if_chosen, Deeplink, DeeplinkError,
+    Organized, SummaryError, DEEPLINK_CHARS, DEEPLINK_URL_CHARS, ITEM_PAGES, RECENT_CHARS, RECENT_TURNS,
+};
 pub use guard::{
     classify_cursor_global_key, classify_keychain, lexical_within, Capability, Clock, ConfirmToken,
     CredentialKind, FileMeta, Grant, GrantId, Guard, GuardError, KeychainEntry, PathScope,

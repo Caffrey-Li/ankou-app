@@ -3,12 +3,18 @@
 mod locate;
 mod rollout;
 mod server;
+mod threads;
 
 pub use locate::{find_codex_cli, find_codex_cli_in};
 pub use rollout::{
     combine_rollouts, parse_app_server_result, parse_rollout, read_rollouts, rollout_paths, RolloutUsage,
 };
 pub use server::query_rate_limits;
+pub use threads::{
+    context_percent, list_jsonl, list_threads, parse_jsonl_head, parse_jsonl_text, parse_thread_list,
+    parse_thread_read, read_jsonl, read_thread, thread_list_line, thread_read_line, title_of, ThreadHead,
+    ThreadText,
+};
 
 pub fn availability() -> &'static str {
     "未验证"

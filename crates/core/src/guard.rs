@@ -71,6 +71,23 @@ pub struct ConfirmToken {
     id: [u8; 16],
 }
 
+impl ConfirmToken {
+    pub fn to_hex(&self) -> String {
+        self.id.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    pub fn from_hex(text: &str) -> Option<Self> {
+        if text.len() != 32 {
+            return None;
+        }
+        let mut id = [0u8; 16];
+        for (index, byte) in id.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&text[index * 2..index * 2 + 2], 16).ok()?;
+        }
+        Some(Self { id })
+    }
+}
+
 impl std::fmt::Debug for ConfirmToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("ConfirmToken(..)")
@@ -235,6 +252,7 @@ struct TokenRecord {
     issued_at: SystemTime,
     grant_ids: Vec<GrantId>,
     state: TokenState,
+    unscoped: bool,
 }
 
 struct Inner {
@@ -456,9 +474,63 @@ impl Guard {
                 issued_at,
                 grant_ids,
                 state: TokenState::Live,
+                unscoped: false,
             },
         );
         Ok(ConfirmToken { id })
+    }
+
+    pub fn has_grant(&self, tool: ToolId, capability: Capability) -> bool {
+        let inner = self.lock();
+        inner
+            .grants
+            .iter()
+            .any(|grant| grant.tool == tool && grant.capability == capability && grant.alive.load(Ordering::Acquire))
+    }
+
+    pub fn issue_summary_confirmation(&self, content: &[u8]) -> Result<ConfirmToken, GuardError> {
+        let mut id = [0u8; 16];
+        getrandom::fill(&mut id).map_err(|_| GuardError::Io(io::ErrorKind::Other))?;
+        let issued_at = self.clock.now();
+        let mut inner = self.lock();
+        inner.tokens.insert(
+            id,
+            TokenRecord {
+                tool: ToolId::DeepSeekHarness,
+                capability: Capability::AccountLink,
+                hash: content_hash(content),
+                issued_at,
+                grant_ids: Vec::new(),
+                state: TokenState::Live,
+                unscoped: true,
+            },
+        );
+        Ok(ConfirmToken { id })
+    }
+
+    pub fn redeem_summary_confirmation(&self, token: &ConfirmToken, content: &[u8]) -> Result<(), GuardError> {
+        let now = self.clock.now();
+        let mut inner = self.lock();
+        let Some(record) = inner.tokens.get(&token.id) else {
+            return Err(GuardError::ConfirmationUnknown);
+        };
+        if !record.unscoped {
+            return Err(GuardError::ConfirmationUnknown);
+        }
+        match record.state {
+            TokenState::Used => return Err(GuardError::ConfirmationUsed),
+            TokenState::Void => return Err(GuardError::ConfirmationVoid),
+            TokenState::Live => {}
+        }
+        if expired(record.issued_at, now) {
+            return Err(GuardError::ConfirmationExpired);
+        }
+        if record.hash != content_hash(content) {
+            inner.tokens.get_mut(&token.id).expect("token").state = TokenState::Void;
+            return Err(GuardError::ContentMismatch);
+        }
+        inner.tokens.get_mut(&token.id).expect("token").state = TokenState::Used;
+        Ok(())
     }
 
     pub fn redeem_confirmation(
@@ -470,7 +542,7 @@ impl Guard {
     ) -> Result<(), GuardError> {
         let now = self.clock.now();
         let mut inner = self.lock();
-        let Some((state, stored_tool, stored_capability, hash, issued_at, grant_ids)) =
+        let Some((state, stored_tool, stored_capability, hash, issued_at, grant_ids, unscoped)) =
             inner.tokens.get(&token.id).map(|record| {
                 (
                     record.state,
@@ -479,11 +551,15 @@ impl Guard {
                     record.hash,
                     record.issued_at,
                     record.grant_ids.clone(),
+                    record.unscoped,
                 )
             })
         else {
             return Err(GuardError::ConfirmationUnknown);
         };
+        if unscoped {
+            return Err(GuardError::ConfirmationUnknown);
+        }
         match state {
             TokenState::Used => return Err(GuardError::ConfirmationUsed),
             TokenState::Void => return Err(GuardError::ConfirmationVoid),
@@ -1109,6 +1185,14 @@ unsafe extern "system" {
         size: u32,
         flags: u32,
     ) -> u32;
+}
+
+fn content_hash(content: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"summary");
+    hasher.update((content.len() as u64).to_le_bytes());
+    hasher.update(content);
+    hasher.finalize().into()
 }
 
 fn plan_hash(tool: ToolId, capability: Capability, content: &[u8]) -> [u8; 32] {

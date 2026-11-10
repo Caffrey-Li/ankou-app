@@ -124,6 +124,60 @@ export function IconRefresh() {
   );
 }
 
+export function IconChevron() {
+  return (
+    <Icon
+      viewBox="0 0 14 14"
+      size={14}
+      strokeWidth={1.2}
+      className="icon-strong"
+      paths={["M5.25 3.5L8.75 7L5.25 10.5"]}
+    />
+  );
+}
+
+export function IconPlus() {
+  return (
+    <Icon viewBox="0 0 14 14" size={14} strokeWidth={1.4} className="icon-on-fill" paths={["M7 2.5V11.5", "M2.5 7H11.5"]} />
+  );
+}
+
+export function IconCheck() {
+  return (
+    <Icon viewBox="0 0 13 13" size={13} strokeWidth={1.4} className="icon-strong" paths={["M2.5 6.8L5.2 9.4L10.5 3.6"]} />
+  );
+}
+
+export function IconClose() {
+  return (
+    <Icon viewBox="0 0 14 14" size={14} strokeWidth={1.4} className="icon-strong" paths={["M3.5 3.5L10.5 10.5", "M10.5 3.5L3.5 10.5"]} />
+  );
+}
+
+export function IconCopy() {
+  return (
+    <Icon
+      viewBox="0 0 14 14"
+      size={14}
+      strokeWidth={1.2}
+      className="icon-strong"
+      paths={["M5 3.5H10.5V11H5V3.5Z", "M3.5 5V11.5H9"]}
+    />
+  );
+}
+
+export function IconArrow() {
+  return (
+    <Icon
+      viewBox="0 0 14 14"
+      size={14}
+      strokeWidth={1.4}
+      className="icon-on-fill"
+      paths={["M2.5 7H11", "M8 4L11.2 7L8 10"]}
+    />
+  );
+}
+
 export function IconSearch() {
   return (
     <Icon

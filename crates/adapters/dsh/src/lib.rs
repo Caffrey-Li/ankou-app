@@ -4,10 +4,10 @@
 mod balance;
 mod calls;
 
-pub use balance::{fetch_balance, parse_balance_json};
+pub use balance::{fetch_balance, fetch_summary, parse_balance_json};
 pub use calls::{
-    daily_counts, owner_kind, read_usage_copy, read_usage_set, summarize_calls, usage_db_candidates,
-    CallRow, CallSummary, DayCount, OwnerKind,
+    daily_counts, list_sessions, owner_kind, read_usage_copy, read_usage_set, session_transcript, summarize_calls,
+    usage_db_candidates, CallRow, CallSummary, DayCount, OwnerKind, SessionHead,
 };
 
 pub fn availability() -> &'static str {

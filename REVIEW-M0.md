@@ -4,7 +4,7 @@
 
 ## 改了什么
 
-在 `/Users/caffrey/Projects/Wanxiang` 搭了 Tauri 2 工程。Rust workspace 成员：
+在 `~/Projects/Wanxiang` 搭了 Tauri 2 工程。Rust workspace 成员：
 
 - `crates/core`：`Supervisor`，退出时停后台任务和子进程
 - `crates/adapters/dsh`

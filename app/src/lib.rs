@@ -12,10 +12,15 @@ mod fixture;
 mod collect;
 mod commands;
 mod discover;
+mod handoff;
 mod measured;
 
 pub fn run() {
-    commands::attach(tauri::Builder::default())
+    commands::attach(
+        tauri::Builder::default()
+            .plugin(tauri_plugin_opener::init())
+            .plugin(tauri_plugin_dialog::init()),
+    )
         .manage(Supervisor::new())
         .setup(|app| {
             app.manage(commands::Hub::open(app.handle())?);
@@ -218,13 +223,18 @@ fn open_preview(window: &tauri::WebviewWindow) {
         let Ok(page) = std::env::var("WANXIANG_PREVIEW") else {
             return;
         };
-        if page != "usage" && page != "overview" {
+        if page != "usage" && page != "overview" && page != "handoff" && page != "handoff-preview" {
             return;
         }
         let window = window.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(700));
-            let url = format!("http://127.0.0.1:1420/?page={page}&preview=1");
+            let url = if page == "handoff" || page == "handoff-preview" {
+                let sheet = if page == "handoff-preview" { "&sheet=preview" } else { "" };
+                format!("http://127.0.0.1:1420/?page=handoff&preview=1&compare=1&fixture=m3{sheet}")
+            } else {
+                format!("http://127.0.0.1:1420/?page={page}&preview=1")
+            };
             if let Ok(url) = url.parse() {
                 let _ = window.navigate(url);
             }

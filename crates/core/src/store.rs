@@ -96,6 +96,8 @@ pub struct Settings {
     pub setup_complete: bool,
     #[serde(default)]
     pub codex_app_server: bool,
+    #[serde(default)]
+    pub cursor_deeplink: bool,
 }
 
 impl Default for Settings {
@@ -113,6 +115,7 @@ impl Default for Settings {
             close_to_tray: true,
             setup_complete: false,
             codex_app_server: false,
+            cursor_deeplink: false,
         }
     }
 }
@@ -815,6 +818,7 @@ fn write_settings(conn: &Connection, settings: &Settings) -> Result<(), StoreErr
         ("close_to_tray", bit(settings.close_to_tray)),
         ("setup_complete", bit(settings.setup_complete)),
         ("codex_app_server", bit(settings.codex_app_server)),
+        ("cursor_deeplink", bit(settings.cursor_deeplink)),
     ];
     for (key, value) in pairs {
         conn.execute(
@@ -859,6 +863,7 @@ fn apply_setting(settings: &mut Settings, key: &str, value: &str) {
         "close_to_tray" => settings.close_to_tray = value == "1",
         "setup_complete" => settings.setup_complete = value == "1",
         "codex_app_server" => settings.codex_app_server = value == "1",
+        "cursor_deeplink" => settings.cursor_deeplink = value == "1",
         _ => {}
     }
 }

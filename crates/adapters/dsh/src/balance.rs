@@ -38,6 +38,45 @@ fn minor(info: &serde_json::Value, key: &str) -> Result<i64, UsageError> {
         .ok_or(UsageError::QueryFailed)
 }
 
+pub fn fetch_summary(base: &str, key: &str, body: &str) -> Result<String, UsageError> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .redirects(0)
+        .build();
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let header = format!("Bearer {key}");
+    let response = agent
+        .post(&url)
+        .set("Authorization", &header)
+        .set("Content-Type", "application/json")
+        .send_string(body);
+    drop(header);
+    match response {
+        Ok(response) => {
+            let text = response.into_string().map_err(|_| UsageError::QueryFailed)?;
+            summary_content(&text)
+        }
+        Err(ureq::Error::Status(401 | 403, response)) => {
+            let _ = response.into_string();
+            Err(UsageError::InvalidKey)
+        }
+        Err(ureq::Error::Status(_, response)) => {
+            let _ = response.into_string();
+            Err(UsageError::QueryFailed)
+        }
+        Err(_) => Err(UsageError::Network),
+    }
+}
+
+fn summary_content(text: &str) -> Result<String, UsageError> {
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| UsageError::QueryFailed)?;
+    value
+        .pointer("/choices/0/message/content")
+        .and_then(|item| item.as_str())
+        .map(str::to_string)
+        .ok_or(UsageError::QueryFailed)
+}
+
 pub fn fetch_balance(base: &str, key: &str) -> Result<Vec<BalanceAmount>, UsageError> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(10))

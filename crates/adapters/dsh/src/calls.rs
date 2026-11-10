@@ -101,6 +101,63 @@ pub fn summarize_calls(rows: &[CallRow], since_ms: i64) -> CallSummary {
     }
 }
 
+pub fn list_sessions(
+    guard: &wanxiang_core::Guard,
+    path: &Path,
+) -> Result<Vec<SessionHead>, wanxiang_core::GuardError> {
+    use wanxiang_core::{Capability, GuardError, ToolId};
+    let _opened = guard.open_read(ToolId::DsBot, Capability::Conversation, path)?;
+    drop(_opened);
+    read_session_heads(path).map_err(|err| GuardError::Io(err.kind()))
+}
+
+pub fn session_transcript(
+    guard: &wanxiang_core::Guard,
+    path: &Path,
+) -> Result<Option<String>, wanxiang_core::GuardError> {
+    use wanxiang_core::{Capability, ToolId};
+    let _opened = guard.open_read(ToolId::DsBot, Capability::Conversation, path)?;
+    drop(_opened);
+    Ok(None)
+}
+
+fn read_session_heads(path: &Path) -> std::io::Result<Vec<SessionHead>> {
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+        .map_err(|err| std::io::Error::other(err.to_string()))?;
+    let mut statement = connection
+        .prepare(
+            "SELECT calls.session, MAX(calls.time), COALESCE(owners.name, ''), COALESCE(owners.owner, '')
+             FROM calls
+             LEFT JOIN owners ON owners.session = calls.session
+             GROUP BY calls.session
+             ORDER BY MAX(calls.time) DESC",
+        )
+        .map_err(|err| std::io::Error::other(err.to_string()))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SessionHead {
+                session: row.get(0)?,
+                updated_ms: row.get(1)?,
+                name: row.get(2)?,
+                owner: row.get(3)?,
+            })
+        })
+        .map_err(|err| std::io::Error::other(err.to_string()))?;
+    let mut heads = Vec::new();
+    for row in rows {
+        heads.push(row.map_err(|err| std::io::Error::other(err.to_string()))?);
+    }
+    Ok(heads)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionHead {
+    pub session: String,
+    pub name: String,
+    pub owner: String,
+    pub updated_ms: i64,
+}
+
 pub fn usage_db_candidates(root: &Path) -> Vec<PathBuf> {
     ["bot/usage.sqlite", "bot/usage.sqlite-wal", "bot/usage.sqlite-shm"]
         .into_iter()

@@ -225,6 +225,14 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         get_usage,
         refresh_usage,
         set_capability,
+        crate::handoff::list_conversations,
+        crate::handoff::prepare_handoff,
+        crate::handoff::begin_summary,
+        crate::handoff::send_summary,
+        crate::handoff::prepare_deeplink,
+        crate::handoff::place_deeplink,
+        crate::handoff::export_handoff,
+        crate::handoff::organize_handoff,
     ])
 }
 
@@ -263,20 +271,45 @@ mod tests {
             "get-usage",
             "refresh-usage",
             "set-capability",
+            "list-conversations",
+            "prepare-handoff",
+            "begin-summary",
+            "send-summary",
+            "prepare-deeplink",
+            "place-deeplink",
+            "export-handoff",
+            "organize-handoff",
         ];
         let text = include_str!("../capabilities/default.json");
         let value: serde_json::Value = serde_json::from_str(text).unwrap();
-        let allows: Vec<&str> = value["permissions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|item| item.as_str().filter(|name| name.starts_with("allow-")))
-            .collect();
+        let permissions = value["permissions"].as_array().unwrap();
+        let allows: Vec<&str> = permissions.iter().filter_map(|item| item.as_str().filter(|name| name.starts_with("allow-"))).collect();
         assert_eq!(allows.len(), COMMANDS.len());
         for name in COMMANDS {
             let needle = format!("allow-{name}");
             assert_eq!(allows.iter().filter(|item| **item == needle).count(), 1, "{needle}");
         }
         assert!(!allows.contains(&"allow-grant"));
+        assert!(!text.contains("open-deeplink"));
+        assert!(!text.contains("allow-open-path"));
+        assert!(!text.contains("allow-default-urls"));
+        assert!(!text.contains("opener:default"));
+    }
+
+    #[test]
+    fn capability_has_no_opener_dialog_or_plugin_defaults() {
+        let text = include_str!("../capabilities/default.json");
+        let value: serde_json::Value = serde_json::from_str(text).unwrap();
+        let permissions = value["permissions"].as_array().unwrap();
+        assert!(!permissions.is_empty());
+        for item in permissions {
+            let name = item
+                .as_str()
+                .or_else(|| item.get("identifier").and_then(|id| id.as_str()))
+                .unwrap_or("");
+            assert!(!name.starts_with("opener:"), "{name}");
+            assert!(!name.starts_with("dialog:"), "{name}");
+            assert!(!name.split(':').any(|part| part == "default"), "{name}");
+        }
     }
 }

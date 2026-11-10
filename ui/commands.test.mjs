@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const capability = JSON.parse(
   readFileSync(new URL("../app/capabilities/default.json", import.meta.url), "utf8"),
 );
-const allowed = capability.permissions.filter((item) => item.startsWith("allow-"));
+const allowed = capability.permissions.filter((item) => typeof item === "string" && item.startsWith("allow-"));
 const ui = ["api.ts", "App.tsx", "SettingsPage.tsx", "SetupPage.tsx", "catalog.ts", "UsagePage.tsx"]
   .map((name) => readFileSync(new URL(`./src/${name}`, import.meta.url), "utf8"))
   .join("\n");
@@ -16,17 +16,25 @@ const invoked = [...api.matchAll(/call(?:<[^>]+>)?\("([a-z_]+)"/g)].map((match) 
 assert.deepEqual(
   [...new Set(invoked)].sort(),
   [
+    "begin-summary",
     "clear-history",
     "complete-setup",
     "deepseek-key-saved",
     "delete-deepseek-key",
     "discover-tools",
+    "export-handoff",
     "get-settings",
     "get-usage",
+    "list-conversations",
     "list-grants",
+    "organize-handoff",
+    "place-deeplink",
+    "prepare-deeplink",
+    "prepare-handoff",
     "refresh-usage",
     "revoke",
     "save-deepseek-key",
+    "send-summary",
     "set-capability",
     "set-settings",
   ],

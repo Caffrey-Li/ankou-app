@@ -3,7 +3,8 @@
   "description": "本地主窗口。只放行授权、设置、密钥、历史和用量命令。窗口仍然不能发起网络请求。",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "allow-list-grants",
     "allow-revoke",
     "allow-get-settings",
@@ -16,6 +17,14 @@
     "allow-complete-setup",
     "allow-get-usage",
     "allow-refresh-usage",
-    "allow-set-capability"
+    "allow-set-capability",
+    "allow-list-conversations",
+    "allow-prepare-handoff",
+    "allow-begin-summary",
+    "allow-send-summary",
+    "allow-prepare-deeplink",
+    "allow-place-deeplink",
+    "allow-export-handoff",
+    "allow-organize-handoff"
   ]
 }

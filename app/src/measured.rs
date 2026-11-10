@@ -5,6 +5,22 @@ use wanxiang_core::{Capability, PathScope, Store, ToolId};
 const BOT_PATTERN: &str = "bot/usage.sqlite*";
 const CODEX_PATTERN: &str = "sessions/**/*.jsonl";
 
+pub fn conversation_scope(kind: &str) -> Option<(ToolId, &'static str)> {
+    match kind {
+        "codex_conversation" => Some((ToolId::Codex, CODEX_PATTERN)),
+        "ds_bot_conversation" => Some((ToolId::DsBot, BOT_PATTERN)),
+        _ => None,
+    }
+}
+
+pub fn conversation_root<'a>(kind: &str, dsh: &'a Path, codex: &'a Path) -> Option<&'a Path> {
+    match kind {
+        "codex_conversation" => Some(codex),
+        "ds_bot_conversation" => Some(dsh),
+        _ => None,
+    }
+}
+
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
@@ -26,6 +42,10 @@ pub fn set_at(store: &Store, kind: &str, on: bool, dsh: &Path, codex: &Path) -> 
             let mut settings = store.settings().map_err(show)?;
             settings.codex_app_server = on;
             store.set_settings(&settings).map_err(show)
+        }
+        "codex_conversation" | "ds_bot_conversation" => {
+            let _ = (conversation_scope(kind), conversation_root(kind, dsh, codex));
+            Err("尚未验证，不能授权".to_string())
         }
         _ => Err("没有这项授权".to_string()),
     }
@@ -65,7 +85,7 @@ mod tests {
 
     use wanxiang_core::{Clock, Guard, RefreshGate, Store, Supervisor, SystemClock, ToolScheduler};
 
-    use super::set_at;
+    use super::{conversation_root, conversation_scope, set_at};
 
     fn temp(name: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("wanxiang-measured-{name}-{}", std::process::id()));
@@ -107,6 +127,19 @@ mod tests {
         assert!(store.grants().unwrap().is_empty());
         assert_ne!(store.account_link_status().unwrap().as_deref(), Some("active"));
         assert!(!store.settings().unwrap().codex_app_server);
+        assert_eq!(
+            conversation_scope("codex_conversation"),
+            Some((wanxiang_core::ToolId::Codex, "sessions/**/*.jsonl"))
+        );
+        assert_eq!(conversation_root("codex_conversation", &dsh, &codex), Some(codex.as_path()));
+        assert_eq!(
+            conversation_scope("ds_bot_conversation"),
+            Some((wanxiang_core::ToolId::DsBot, "bot/usage.sqlite*"))
+        );
+        assert_eq!(conversation_root("ds_bot_conversation", &dsh, &codex), Some(dsh.as_path()));
+        assert!(set_at(&store, "codex_conversation", true, &dsh, &codex).is_err());
+        assert!(set_at(&store, "ds_bot_conversation", true, &dsh, &codex).is_err());
+        assert!(store.grants().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

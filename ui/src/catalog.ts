@@ -128,9 +128,9 @@ export const toolSpecs: ToolSpec[] = [
         badge: "暂不提供",
       },
       {
-        capability: "insert_content",
+        capability: "create_conversation",
         title: "放入新对话",
-        detail: "官方深链预填，尚未实测；验证前改用复制",
+        detail: "官方深链，默认关闭",
         badge: unverified,
       },
       {

@@ -52,12 +52,12 @@ fn talk(mut stdin: ChildStdin, stdout: impl std::io::Read + Send + 'static) -> R
     Ok(parse_app_server_result(&response))
 }
 
-fn write_line(stdin: &mut ChildStdin, line: &str) -> Result<(), UsageError> {
+pub(crate) fn write_line(stdin: &mut ChildStdin, line: &str) -> Result<(), UsageError> {
     writeln!(stdin, "{line}").map_err(|_| UsageError::AppServer)?;
     stdin.flush().map_err(|_| UsageError::AppServer)
 }
 
-fn next_id(rx: &mpsc::Receiver<String>, id: i64) -> Result<Value, UsageError> {
+pub(crate) fn next_id(rx: &mpsc::Receiver<String>, id: i64) -> Result<Value, UsageError> {
     let deadline = std::time::Instant::now() + READ_TIMEOUT;
     loop {
         let left = deadline.saturating_duration_since(std::time::Instant::now());

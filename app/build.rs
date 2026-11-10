@@ -24,6 +24,14 @@ fn main() {
         "get_usage",
         "refresh_usage",
         "set_capability",
+        "list_conversations",
+        "prepare_handoff",
+        "begin_summary",
+        "send_summary",
+        "prepare_deeplink",
+        "place_deeplink",
+        "export_handoff",
+        "organize_handoff",
     ];
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(COMMANDS),

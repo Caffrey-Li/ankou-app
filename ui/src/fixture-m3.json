@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fixture-cursor",
+    "tool": "Cursor",
+    "title": "夹具对话",
+    "updated": "10 分钟前",
+    "clock": "18:32",
+    "percent": 81,
+    "status": "运行中",
+    "cwd": null,
+    "context": "",
+    "source": "夹具"
+  },
+  {
+    "id": "fixture-codex",
+    "tool": "Codex",
+    "title": "Codex 00000000",
+    "updated": "1 小时前",
+    "clock": "17:40",
+    "percent": 19,
+    "status": "",
+    "cwd": "/Users/example/projects/demo",
+    "context": "",
+    "source": "本机记录"
+  },
+  {
+    "id": "fixture-bot",
+    "tool": "DS Bot",
+    "title": "示例 Bot",
+    "updated": "今天",
+    "clock": "09:12",
+    "percent": null,
+    "status": "",
+    "cwd": null,
+    "context": "暂不提供",
+    "source": "用量记录"
+  }
+]

@@ -26,5 +26,6 @@ assert.match(source, /更早没有本机记录，不补算/);
 assert.match(source, /按各工具自身周期，不受上方日期影响/);
 assert.match(source, /刷新中/);
 assert.match(source, /已实测 2026-11-09/);
-assert.match(source, /其余工具运行正常/);
+assert.equal(source.includes("其余工具运行正常"), false);
+assert.match(source, /个对话超过提醒阈值/);
 assert.match(source, /已授权/);

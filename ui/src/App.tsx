@@ -1,26 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import mark from "../../brand/mark.svg";
-import {
-  emptyUsage,
-  fallbackSnapshot,
-  inTauri,
-  loadSnapshot,
-  loadUsage,
-  refreshUsage,
-  type Snapshot,
-  type UsageView,
-} from "./api";
+import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, type ConversationRow, type Snapshot, type UsageView } from "./api";
 import { loadDevFixture } from "./fixture";
-import {
-  IconBubble,
-  IconChart,
-  IconClock,
-  IconDisk,
-  IconHome,
-  IconRefresh,
-  IconSearch,
-  IconSet,
-} from "./icons";
+import { fixtureHandoffRows, HandoffFilters, HandoffPage, handoffSubtitle, type HandoffFilter } from "./HandoffPage";
+import { IconBubble, IconChart, IconClock, IconDisk, IconHome, IconPlus, IconRefresh, IconSearch, IconSet } from "./icons";
 import { SettingsPage } from "./SettingsPage";
 import { SetupPage } from "./SetupPage";
 import { OverviewToolRows, SidebarTools, toolMarks } from "./tool-status";
@@ -50,20 +33,31 @@ function formatDate(date: Date) {
   return `${weekdays[date.getDay()]} · ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 }
 
-const fixtureClock = import.meta.env.DEV && new URLSearchParams(window.location.search).get("fixture") === "m2";
+const fixtureKind = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("fixture") : null;
+const fixtureClock = fixtureKind === "m2" || fixtureKind === "m3";
 
 function shownDate() {
   return fixtureClock ? new Date(2026, 9, 25) : new Date();
 }
 
-function attentionItems(usage: UsageView, keySaved: boolean) {
-  const items: { title: string; detail: string; action: string; quiet: boolean }[] = [];
+function attentionItems(usage: UsageView, keySaved: boolean, overThreshold: number) {
+  const items: { title: string; detail: string; action: string; quiet: boolean; to: "settings" | "handoff" }[] = [];
   if (!keySaved) {
     items.push({
       title: "余额密钥未保存",
       detail: "保存后才能查询 DeepSeek 余额",
       action: "去设置",
       quiet: true,
+      to: "settings",
+    });
+  }
+  if (overThreshold > 0) {
+    items.push({
+      title: `${overThreshold} 个对话超过提醒阈值`,
+      detail: "可以交接后再继续",
+      action: "去交接",
+      quiet: false,
+      to: "handoff",
     });
   }
   const names = new Set<string>();
@@ -79,6 +73,7 @@ function attentionItems(usage: UsageView, keySaved: boolean) {
       detail: "用量不再计入，直到重新授权",
       action: "重新授权",
       quiet: false,
+      to: "settings",
     });
   }
   return items;
@@ -109,6 +104,13 @@ export function App() {
   const [customEnd, setCustomEnd] = useState("");
   const [ready, setReady] = useState(!inTauri());
   const [refreshing, setRefreshing] = useState(false);
+  const [handoffFilter, setHandoffFilter] = useState<HandoffFilter>("all");
+  const [handoffQuery, setHandoffQuery] = useState("");
+  const [previewRequest, setPreviewRequest] = useState(0);
+  const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const fixtureM3 = fixtureKind === "m3";
+  const sheet = new URLSearchParams(window.location.search).get("sheet");
+  const handoffSheet = sheet === "preview" || sheet === "confirm" ? sheet : "";
   const [pending, setPending] = useState<RefreshPending>({
     ds_bot: false,
     balance: false,
@@ -125,8 +127,9 @@ export function App() {
   const marks = toolMarks(snapshot.tools, usage.details, fixture);
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
-  const notices = attentionItems(usage, keySaved);
-  const authorized = marks.filter((mark) => mark.presence === "authorized").length;
+  const threshold = snapshot.settings.context_threshold_percent;
+  const handoffRows = fixtureM3 ? fixtureHandoffRows() : conversations;
+  const overThreshold = handoffRows.filter((row) => row.percent != null && row.percent >= threshold).length;
   function onRefresh() {
     if (!inTauri() || refreshing) return;
     setRefreshing(true);
@@ -186,6 +189,17 @@ export function App() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!inTauri() || fixtureM3) return;
+    let alive = true;
+    void listConversations().then((page) => {
+      if (alive) setConversations(page.rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [fixtureM3]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -268,9 +282,11 @@ export function App() {
                 ? "阈值、刷新、授权与常驻"
                 : page === "usage"
                   ? `${rangesLabel(range)} · ${usage.range_label}`
-                  : page === "overview"
-                    ? overviewSubtitle(authorized, notices.length)
-                    : formatDate(shownDate())}
+                    : page === "overview" || page === "handoff"
+                      ? page === "handoff"
+                        ? handoffSubtitle(handoffRows, threshold)
+                        : formatDate(shownDate())
+                      : formatDate(shownDate())}
             </p>
           </div>
           {page === "settings" ? null : (
@@ -286,6 +302,14 @@ export function App() {
                   setCustomEnd(end);
                 }}
               />
+            ) : page === "handoff" ? (
+              <>
+                <HandoffFilters filter={handoffFilter} onFilter={setHandoffFilter} />
+                <button type="button" className="primary-button toolbar-create" onClick={() => setPreviewRequest((value) => value + 1)}>
+                  <IconPlus />
+                  新建交接
+                </button>
+              </>
             ) : (
               <div className="glass-pill">
                 <IconClock />
@@ -314,7 +338,7 @@ export function App() {
               >
                 <IconRefresh />
               </button>
-            ) : (
+            ) : page === "handoff" ? null : (
               <button type="button" className="glass-icon" aria-label="搜索">
                 <IconSearch />
               </button>
@@ -334,7 +358,13 @@ export function App() {
           <UsagePage usage={usage} pending={pending} onSettings={() => setPage("settings")} />
         ) : page === "overview" ? (
           <div className="overview-page">
-            <Attention usage={usage} keySaved={keySaved} onSettings={() => setPage("settings")} />
+            <Attention
+              usage={usage}
+              keySaved={keySaved}
+              overThreshold={overThreshold}
+              onSettings={() => setPage("settings")}
+              onHandoff={() => setPage("handoff")}
+            />
             <div className="overview-row">
               <QuotaCard usage={usage} pending={pending} onOpen={() => setPage("usage")} />
               <section className="overview-card placeholder-card">
@@ -343,7 +373,9 @@ export function App() {
                   <span>对话</span>
                   <span className="quota-chev" aria-hidden="true">›</span>
                 </div>
-                <p className="overview-pending">尚未接入</p>
+                <p className="overview-pending">
+                  {overThreshold > 0 ? `${overThreshold} 个对话超过提醒阈值` : "尚未接入"}
+                </p>
               </section>
               <section className="overview-card placeholder-card">
                 <div className="quota-title">
@@ -364,6 +396,16 @@ export function App() {
               <OverviewToolRows marks={marks} onOpen={() => setPage("settings")} />
             </section>
           </div>
+        ) : page === "handoff" ? (
+          <HandoffPage
+            rows={handoffRows}
+            threshold={threshold}
+            filter={handoffFilter}
+            query={handoffQuery}
+            sheet={handoffSheet}
+            previewRequest={previewRequest}
+            onQuery={setHandoffQuery}
+          />
         ) : (
         <section className="empty" aria-label="页面内容">
           <p className="lead">主窗口已就绪，这一页还没有数据。</p>
@@ -376,12 +418,6 @@ export function App() {
       </main>
     </div>
   );
-}
-
-function overviewSubtitle(authorized: number, notices: number) {
-  if (authorized > 0 && notices === 0) return "其余工具运行正常";
-  if (authorized > 0) return `已授权 ${authorized} 个工具`;
-  return "";
 }
 
 function mergeUsage(current: UsageView, part: string, next: UsageView): UsageView {
@@ -422,13 +458,17 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
 function Attention({
   usage,
   keySaved,
+  overThreshold,
   onSettings,
+  onHandoff,
 }: {
   usage: UsageView;
   keySaved: boolean;
+  overThreshold: number;
   onSettings: () => void;
+  onHandoff: () => void;
 }) {
-  const items = attentionItems(usage, keySaved);
+  const items = attentionItems(usage, keySaved, overThreshold);
   if (items.length === 0) {
     return (
       <section className="overview-card attention attention-ok">
@@ -456,7 +496,7 @@ function Attention({
           <button
             type="button"
             className={item.quiet ? "attention-action quiet" : "attention-action"}
-            onClick={onSettings}
+            onClick={() => (item.to === "handoff" ? onHandoff() : onSettings())}
           >
             {item.action}
           </button>

@@ -16,6 +16,7 @@ export type Settings = {
   close_to_tray: boolean;
   setup_complete: boolean;
   codex_app_server: boolean;
+  cursor_deeplink: boolean;
 };
 
 export type StoredGrant = {
@@ -52,6 +53,7 @@ export const defaultSettings: Settings = {
   close_to_tray: true,
   setup_complete: false,
   codex_app_server: false,
+  cursor_deeplink: false,
 };
 
 export function inTauri() {
@@ -198,4 +200,63 @@ export function refreshUsage() {
 export function finishSetup() {
   if (!inTauri()) return Promise.resolve();
   return call<void>("complete_setup");
+}
+
+export type ConversationRow = {
+  id: string;
+  tool: string;
+  title: string;
+  updated: string;
+  percent: number | null;
+  cwd: string | null;
+  status: string;
+  context: string;
+  source: string;
+};
+
+export type ConversationPage = {
+  rows: ConversationRow[];
+  notes: string[];
+};
+
+export function listConversations() {
+  if (!inTauri()) return Promise.resolve({ rows: [], notes: [] } satisfies ConversationPage);
+  return call<ConversationPage>("list_conversations");
+}
+
+export function prepareHandoff(tool: string, id: string) {
+  return call<{ text: string; truncated: boolean; note: string }>("prepare_handoff", { tool, id });
+}
+
+export function organizeHandoff(text: string) {
+  return call<{
+    goal: string;
+    progress: string;
+    unfinished: string;
+    decisions: string;
+    next: string;
+    unknown: string;
+    sources: string;
+    note: string;
+  }>("organize_handoff", { text });
+}
+
+export function beginSummary(transcript: string) {
+  return call<{ token: string; body: string; chars: number }>("begin_summary", { transcript });
+}
+
+export function sendSummary(token: string, body: string) {
+  return call<string>("send_summary", { token, body });
+}
+
+export function prepareDeeplink(text: string) {
+  return call<string>("prepare_deeplink", { text });
+}
+
+export function placeDeeplink(token: string, text: string) {
+  return call<void>("place_deeplink", { token, text });
+}
+
+export function exportHandoff(text: string) {
+  return call<void>("export_handoff", { text });
 }
