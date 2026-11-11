@@ -461,6 +461,7 @@ fn outside_protected_and_secret_entries_are_refused() {
             files: 1,
             dev: 1,
             ino: 1,
+            modified: 0,
         },
         CleanEntry {
             rel: PathBuf::from("bot/usage.sqlite"),
@@ -468,6 +469,7 @@ fn outside_protected_and_secret_entries_are_refused() {
             files: 1,
             dev: 1,
             ino: 1,
+            modified: 0,
         },
         CleanEntry {
             rel: PathBuf::from("auth.json"),
@@ -475,6 +477,7 @@ fn outside_protected_and_secret_entries_are_refused() {
             files: 1,
             dev: 1,
             ino: 1,
+            modified: 0,
         },
     ];
     let token = issue(&guard, ToolId::DeepSeekHarness, &entries);

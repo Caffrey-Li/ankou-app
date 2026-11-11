@@ -277,6 +277,7 @@ export type SpaceEntry = {
   files: number;
   dev: number;
   ino: number;
+  modified: number;
   weak: boolean;
 };
 

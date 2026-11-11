@@ -46,6 +46,7 @@ pub fn ui_entry(rel: &str, bytes: u64, files: u64, dev: u64, ino: u64) -> Option
         files,
         dev,
         ino,
+        modified: 0,
     })
 }
 
@@ -67,6 +68,7 @@ pub struct CleanEntry {
     pub files: u64,
     pub dev: u64,
     pub ino: u64,
+    pub modified: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -594,6 +596,7 @@ fn list_units(
                     files: content.files,
                     dev: meta.dev,
                     ino: meta.ino,
+                    modified: modified_secs(&path),
                 });
             }
             Err(err) => note_stat_err(acc, &err),
@@ -860,6 +863,15 @@ fn real_stat(path: &Path) -> io::Result<Meta> {
     })
 }
 
+fn modified_secs(path: &Path) -> u64 {
+    fs::symlink_metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
 fn ids(meta: &fs::Metadata) -> (u64, u64, u64) {
     #[cfg(unix)]
     {
@@ -1085,6 +1097,7 @@ mod tests {
             files: 0,
             dev: 1,
             ino: 1,
+            modified: 0,
         };
         let mut stat = |path: &Path| {
             assert!(

@@ -38,6 +38,7 @@ pub struct EntryView {
     pub files: u64,
     pub dev: u64,
     pub ino: u64,
+    pub modified: u64,
     pub weak: bool,
 }
 
@@ -137,6 +138,7 @@ pub fn scan_tool(store: &Store, tool: &str, cancel: &AtomicBool) -> Result<Space
                     files: entry.files,
                     dev: entry.dev,
                     ino: entry.ino,
+                    modified: entry.modified,
                     weak,
                 }
             })
@@ -309,8 +311,24 @@ mod tests {
         std::fs::create_dir_all(dsh.join("cache")).unwrap();
         std::fs::write(dsh.join("cache/item"), b"abcd").unwrap();
         let store = open(&dir);
-        crate::measured::set_at(&store, "harness_space", true, &dsh, &dir.join("codex")).unwrap();
-        crate::measured::set_at(&store, "harness_cleanup", true, &dsh, &dir.join("codex")).unwrap();
+        crate::measured::set_at(
+            &store,
+            "harness_space",
+            true,
+            &dsh,
+            &dir.join("codex"),
+            &dir.join("cursor"),
+        )
+        .unwrap();
+        crate::measured::set_at(
+            &store,
+            "harness_cleanup",
+            true,
+            &dsh,
+            &dir.join("codex"),
+            &dir.join("cursor"),
+        )
+        .unwrap();
         let view = scan_tool(&store, "deepseek_harness", &AtomicBool::new(false)).unwrap();
         assert_eq!(view.entries.len(), 1);
         assert_eq!(view.entries[0].rel, "cache/item");

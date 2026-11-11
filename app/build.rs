@@ -38,8 +38,9 @@ fn main() {
         "prepare_cleanup",
         "run_cleanup",
     ];
-    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
-        tauri_build::AppManifest::new().commands(COMMANDS),
-    ))
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
+    )
     .expect("生成 Tauri 权限失败");
 }

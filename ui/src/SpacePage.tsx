@@ -15,10 +15,10 @@ export const fixtureSpaceSummary = {
 };
 
 const fixtureEntries: SpaceEntry[] = [
-  { rel: "cache/job", bytes: 620_000_000, files: 20, dev: 1, ino: 1, weak: false },
-  { rel: "logs/session.log", bytes: 180_000_000, files: 1, dev: 1, ino: 2, weak: false },
-  { rel: "attachments/v1/tmp/clip", bytes: 100_000_000, files: 4, dev: 1, ino: 3, weak: false },
-  { rel: "storages/session_projcache/blob", bytes: 80_000_000, files: 2, dev: 1, ino: 4, weak: true },
+  { rel: "cache/job", bytes: 620_000_000, files: 20, dev: 1, ino: 1, modified: 30, weak: false },
+  { rel: "logs/session.log", bytes: 180_000_000, files: 1, dev: 1, ino: 2, modified: 20, weak: false },
+  { rel: "attachments/v1/tmp/clip", bytes: 100_000_000, files: 4, dev: 1, ino: 3, modified: 10, weak: false },
+  { rel: "storages/session_projcache/blob", bytes: 80_000_000, files: 2, dev: 1, ino: 4, modified: 5, weak: true },
 ];
 
 const fixtureScan: SpaceScan = {
@@ -31,32 +31,41 @@ const fixtureScan: SpaceScan = {
   trash_supported: true,
 };
 
-const copy: Record<string, { name: string; path: string; note: string }> = {
-  "cache/job": { name: "运行缓存", path: "~/.dsh/cache", note: "下次启动自动重建" },
-  "logs/session.log": { name: "日志", path: "~/.dsh/logs", note: "不影响对话" },
-  "attachments/v1/tmp/clip": { name: "附件临时文件", path: "~/.dsh/attachments/v1/tmp", note: "未发送的临时附件会丢弃" },
-  "storages/session_projcache/blob": {
-    name: "会话项目缓存",
-    path: "storages/session_projcache",
-    note: "可能影响恢复速度",
-  },
-};
+const KB = 1_000;
+const MB = 1_000_000;
 
-function formatBytes(bytes: number) {
+export function formatBytes(bytes: number) {
   if (bytes >= GB) return `${(bytes / GB).toFixed(2)} GB`;
-  if (bytes >= 1_000_000) return `${Math.round(bytes / 1_000_000)} MB`;
+  if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+  if (bytes >= KB) return `${Math.round(bytes / KB)} KB`;
   return `${bytes} B`;
 }
 
-function entryCopy(entry: SpaceEntry) {
-  if (copy[entry.rel]) return copy[entry.rel];
-  if (entry.rel.startsWith("cache/")) return { name: "运行缓存", path: entry.rel, note: "下次启动自动重建" };
-  if (entry.rel.startsWith("logs/")) return { name: "日志", path: entry.rel, note: "不影响对话" };
-  if (entry.rel.startsWith("attachments/v1/tmp/")) return { name: "附件临时文件", path: entry.rel, note: "未发送的临时附件会丢弃" };
-  if (entry.rel.startsWith("storages/session_projcache/")) {
-    return { name: "会话项目缓存", path: entry.rel, note: "可能影响恢复速度" };
-  }
-  return { name: entry.rel.split("/").pop() || entry.rel, path: entry.rel, note: "" };
+const groups = [
+  { id: "cache", name: "运行缓存", prefix: "cache/", note: "下次启动自动重建" },
+  { id: "logs", name: "日志", prefix: "logs/", note: "不影响对话" },
+  { id: "tmp", name: "附件临时文件", prefix: "attachments/v1/tmp/", note: "未发送的临时附件会丢弃" },
+  { id: "proj", name: "会话项目缓存", prefix: "storages/session_projcache/", note: "可能影响恢复速度" },
+];
+
+export function groupEntries(entries: SpaceEntry[]) {
+  return groups
+    .map((group) => ({
+      ...group,
+      entries: entries
+        .filter((entry) => entry.rel.startsWith(group.prefix))
+        .slice()
+        .sort((a, b) => a.modified - b.modified || a.rel.localeCompare(b.rel)),
+    }))
+    .filter((group) => group.entries.length > 0);
+}
+
+export function groupMark(entries: SpaceEntry[], checked: Record<string, boolean>) {
+  const marked = entries.filter((entry) => checked[entry.rel]).length;
+  return {
+    checked: marked === entries.length && marked > 0,
+    indeterminate: marked > 0 && marked < entries.length,
+  };
 }
 
 export function SpacePage({
@@ -75,7 +84,10 @@ export function SpacePage({
   onStamp: (stamp: string) => void;
 }) {
   const [live, setLive] = useState<SpaceScan | null>(null);
+  const [cursorScan, setCursorScan] = useState<SpaceScan | null>(null);
+  const [codexScan, setCodexScan] = useState<SpaceScan | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -109,16 +121,32 @@ export function SpacePage({
     setScanning(true);
     setNotice("");
     try {
-      const next = await scanSpace("deepseek_harness");
-      setLive(next);
+      const [harness, cursor, codex] = await Promise.all([
+        scanSpace("deepseek_harness").catch(() => null),
+        scanSpace("cursor").catch(() => null),
+        scanSpace("codex").catch(() => null),
+      ]);
+      setCursorScan(cursor);
+      setCodexScan(codex);
+      if (!harness) {
+        setNotice("扫描没有完成");
+        return;
+      }
+      setLive(harness);
       setChecked({});
       onStamp(stampNow());
-      if (next.cancelled) setNotice("扫描已取消");
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "扫描没有完成");
+      if (harness.cancelled) setNotice("扫描已取消");
     } finally {
       setScanning(false);
     }
+  }
+
+  function toggleGroup(items: SpaceEntry[], on: boolean) {
+    setChecked((current) => {
+      const next = { ...current };
+      for (const item of items) next[item.rel] = on;
+      return next;
+    });
   }
 
   async function onCleanup() {
@@ -163,15 +191,15 @@ export function SpacePage({
       <section className="space-metrics">
         <Metric label="已知占用" value={scan ? formatBytes(known) : "尚未扫描"} warn={false} />
         <Metric label="超过阈值" value={scan ? (over ? "1 个工具" : "0 个工具") : "—"} warn={over} />
-        <Metric label="可清理" value={scan ? formatBytes(cleanable) : "—"} warn={false} />
+        <Metric label="可清理" value={scan ? `约 ${formatBytes(cleanable)}` : "—"} warn={false} />
         <Metric label="未扫描" value={scan ? `${scan.unscanned} 处` : "—"} warn={false} />
         <span className="space-metrics-note">重复目录只统计一次；对话、记忆与账户数据始终受保护</span>
       </section>
       <div className="space-body">
         <aside className="space-tools">
           <ToolRow mark="H" name="DeepSeek Harness" size={scan ? formatBytes(known) : "尚未扫描"} active over={over} share={cleanShare} meter={Boolean(scan)} />
-          <ToolRow mark="C" name="Cursor" size="未扫描" active={false} over={false} share={0} meter={false} />
-          <ToolRow mark="Cx" name="ChatGPT" size="只统计" active={false} over={false} share={0} meter={false} />
+          <ToolRow mark="C" name="Cursor" size={cursorScan ? formatBytes(cursorScan.protected_bytes + cursorScan.cleanable_bytes) : "未扫描"} active={false} over={false} share={0} meter={Boolean(cursorScan)} />
+          <ToolRow mark="Cx" name="ChatGPT" size={codexScan ? formatBytes(codexScan.protected_bytes + codexScan.cleanable_bytes) : "只统计"} active={false} over={false} share={0} meter={Boolean(codexScan)} />
           <ToolRow mark="B" name="DS Bot" size="—" active={false} over={false} share={0} meter={false} note="已计入 Harness（共用 ~/.dsh）" />
           <p>ChatGPT 无可安全清理的证据，只统计不清理</p>
         </aside>
@@ -193,33 +221,68 @@ export function SpacePage({
           </div>
           <p className="space-legend">
             <span>受保护 {scan ? formatBytes(protectedBytes) : "—"}</span>
-            <span>可清理 {scan ? formatBytes(cleanable) : "—"}</span>
+            <span>可清理 {scan ? `约 ${formatBytes(cleanable)}` : "—"}</span>
           </p>
           <h2>可清理</h2>
           {entries.length === 0 ? (
             <p className="space-empty">这一项还没有可清理的内容。</p>
           ) : (
             <ul className="space-entries">
-              {entries.map((entry) => {
-                const item = entryCopy(entry);
+              {groupEntries(entries).map((group) => {
+                const mark = groupMark(group.entries, checked);
+                const open = Boolean(openGroups[group.id]);
+                const weak = group.entries.some((entry) => entry.weak);
+                const bytes = group.entries.reduce((sum, entry) => sum + entry.bytes, 0);
                 return (
-                  <li key={entry.rel}>
-                    <label>
+                  <li key={group.id}>
+                    <div className="space-category">
                       <Check
-                        checked={Boolean(checked[entry.rel])}
-                        onChange={(event) => setChecked((current) => ({ ...current, [entry.rel]: event.target.checked }))}
+                        aria-label={group.name}
+                        checked={mark.checked}
+                        indeterminate={mark.indeterminate}
+                        onChange={() => toggleGroup(group.entries, !mark.checked)}
                       />
-                      <span>
+                      <button
+                        type="button"
+                        className="space-expand"
+                        aria-expanded={open}
+                        onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
+                      >
                         <strong>
-                          {item.name}
-                          {entry.weak && <em>证据不足</em>}
+                          {group.name}
+                          {weak && <em>证据不足</em>}
                         </strong>
                         <small>
-                          {item.path} · {item.note}
+                          {group.entries.length} 项 · {group.note}
                         </small>
-                      </span>
-                      <b>{formatBytes(entry.bytes)}</b>
-                    </label>
+                      </button>
+                      <b>约 {formatBytes(bytes)}</b>
+                    </div>
+                    {open ? (
+                      <ul className="space-children">
+                        {group.entries.map((entry) => {
+                          const name = entry.rel.split("/").pop() || entry.rel;
+                          return (
+                            <li key={entry.rel}>
+                              <label>
+                                <Check
+                                  aria-label={name}
+                                  checked={Boolean(checked[entry.rel])}
+                                  onChange={(event) =>
+                                    setChecked((current) => ({ ...current, [entry.rel]: event.target.checked }))
+                                  }
+                                />
+                                <span>
+                                  <strong>{name}</strong>
+                                  <small>{entry.rel}</small>
+                                </span>
+                                <b>{formatBytes(entry.bytes)}</b>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
                   </li>
                 );
               })}
@@ -234,7 +297,7 @@ export function SpacePage({
           {notice && <p className="space-notice">{notice}</p>}
           <footer>
             <span>
-              已选 {selected.length} 项 · 预计释放 {formatBytes(selectedBytes)}
+              已选 {selected.length} 项 · 预计释放 约 {formatBytes(selectedBytes)}
               {quit && <small>{quit}</small>}
             </span>
             <button type="button" disabled={cleanupDisabled} onClick={() => setConfirming(true)}>
@@ -271,7 +334,7 @@ export function SpacePage({
           </div>
           <h2>清理完成</h2>
           <p>
-            实际释放 {fixture || sheet === "result" ? "800 MB" : formatBytes(releasedBytes)}（预计{" "}
+            实际释放 {fixture || sheet === "result" ? "620 MB" : formatBytes(releasedBytes)}（预计{" "}
             {fixture || sheet === "result" ? "800 MB" : formatBytes(estimateBytes)}）
           </p>
           <ul>

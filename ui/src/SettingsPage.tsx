@@ -371,6 +371,10 @@ function measuredKind(tool: ToolId, capability: CapabilityId, title: string) {
   if (tool === "ds_bot" && capability === "usage" && title === "用量") return "ds_bot_usage";
   if (tool === "codex" && capability === "usage" && title === "用量与额度窗口") return "codex_usage";
   if (capability === "account_link" && title === "DeepSeek 账户 · 余额") return "deepseek_balance";
+  if (tool === "deepseek_harness" && capability === "space_scan" && title === "空间") return "harness_space";
+  if (tool === "deepseek_harness" && capability === "cleanup" && title === "清理") return "harness_cleanup";
+  if (tool === "cursor" && capability === "space_scan" && title === "空间扫描") return "cursor_space";
+  if (tool === "codex" && capability === "space_scan" && title === "空间扫描") return "codex_space";
   return null;
 }
 

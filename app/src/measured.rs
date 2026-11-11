@@ -24,7 +24,20 @@ pub fn conversation_root<'a>(kind: &str, dsh: &'a Path, codex: &'a Path) -> Opti
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
-    set_at(store, kind, on, &home.join(".dsh"), &home.join(".codex"))
+    set_at(
+        store,
+        kind,
+        on,
+        &home.join(".dsh"),
+        &home.join(".codex"),
+        &cursor_support(&home),
+    )
+}
+
+fn cursor_support(home: &Path) -> std::path::PathBuf {
+    home.join("Library")
+        .join(format!("{} {}", "Application", "Support"))
+        .join("Cursor")
 }
 
 pub fn apply_space_fixture(store: &Store) -> Result<(), String> {
@@ -40,8 +53,8 @@ pub fn apply_space_fixture(store: &Store) -> Result<(), String> {
             store.revoke(grant.id).map_err(show)?;
         }
     }
-    set_at(store, "harness_space", true, &root, &root)?;
-    set_at(store, "harness_cleanup", true, &root, &root)
+    set_at(store, "harness_space", true, &root, &root, &root)?;
+    set_at(store, "harness_cleanup", true, &root, &root, &root)
 }
 
 #[cfg(debug_assertions)]
@@ -69,7 +82,14 @@ fn space_fixture_root() -> Option<std::path::PathBuf> {
     None
 }
 
-pub fn set_at(store: &Store, kind: &str, on: bool, dsh: &Path, codex: &Path) -> Result<(), String> {
+pub fn set_at(
+    store: &Store,
+    kind: &str,
+    on: bool,
+    dsh: &Path,
+    codex: &Path,
+    cursor: &Path,
+) -> Result<(), String> {
     match kind {
         "ds_bot_usage" => set_path(
             store,
@@ -92,6 +112,15 @@ pub fn set_at(store: &Store, kind: &str, on: bool, dsh: &Path, codex: &Path) -> 
             ToolId::DeepSeekHarness,
             Capability::SpaceScan,
             dsh,
+            "**",
+            on,
+        ),
+        "codex_space" => set_path(store, ToolId::Codex, Capability::SpaceScan, codex, "**", on),
+        "cursor_space" => set_path(
+            store,
+            ToolId::Cursor,
+            Capability::SpaceScan,
+            cursor,
             "**",
             on,
         ),
@@ -172,7 +201,9 @@ mod tests {
 
     use wanxiang_core::{Clock, Guard, RefreshGate, Store, Supervisor, SystemClock, ToolScheduler};
 
-    use super::{apply_space_fixture, conversation_root, conversation_scope, set_at};
+    use super::{
+        apply_space_fixture, conversation_root, conversation_scope, cursor_support, set, set_at,
+    };
 
     fn temp(name: &str) -> std::path::PathBuf {
         let path =
@@ -200,24 +231,88 @@ mod tests {
         let store = open_store(&dir);
         let dsh = dir.join("dsh");
         let codex = dir.join("codex");
-        set_at(&store, "ds_bot_usage", true, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "ds_bot_usage",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert_eq!(store.grants().unwrap()[0].pattern, "bot/usage.sqlite*");
         assert_eq!(store.grants().unwrap()[0].root, dsh.canonicalize().unwrap());
-        set_at(&store, "codex_usage", true, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "codex_usage",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert!(store.grants().unwrap().iter().any(|grant| {
             grant.pattern == "sessions/**/*.jsonl" && grant.root == codex.canonicalize().unwrap()
         }));
-        set_at(&store, "deepseek_balance", true, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "deepseek_balance",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert_eq!(
             store.account_link_status().unwrap().as_deref(),
             Some("active")
         );
-        set_at(&store, "codex_app_server", true, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "codex_app_server",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert!(store.settings().unwrap().codex_app_server);
-        set_at(&store, "ds_bot_usage", false, &dsh, &codex).unwrap();
-        set_at(&store, "codex_usage", false, &dsh, &codex).unwrap();
-        set_at(&store, "deepseek_balance", false, &dsh, &codex).unwrap();
-        set_at(&store, "codex_app_server", false, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "ds_bot_usage",
+            false,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
+        set_at(
+            &store,
+            "codex_usage",
+            false,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
+        set_at(
+            &store,
+            "deepseek_balance",
+            false,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
+        set_at(
+            &store,
+            "codex_app_server",
+            false,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert!(store.grants().unwrap().is_empty());
         assert_ne!(
             store.account_link_status().unwrap().as_deref(),
@@ -240,8 +335,24 @@ mod tests {
             conversation_root("ds_bot_conversation", &dsh, &codex),
             Some(dsh.as_path())
         );
-        assert!(set_at(&store, "codex_conversation", true, &dsh, &codex).is_err());
-        assert!(set_at(&store, "ds_bot_conversation", true, &dsh, &codex).is_err());
+        assert!(set_at(
+            &store,
+            "codex_conversation",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor")
+        )
+        .is_err());
+        assert!(set_at(
+            &store,
+            "ds_bot_conversation",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor")
+        )
+        .is_err());
         assert!(store.grants().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -257,7 +368,15 @@ mod tests {
         std::fs::write(dsh.join("cache/job/nested"), b"deep").unwrap();
         std::fs::create_dir_all(dsh.join("bot")).unwrap();
         std::fs::write(dsh.join("bot/note"), b"no").unwrap();
-        set_at(&store, "harness_cleanup", true, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "harness_cleanup",
+            true,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         let patterns: Vec<_> = store
             .grants()
             .unwrap()
@@ -303,7 +422,15 @@ mod tests {
                 &dsh.join("cache/item").canonicalize().unwrap(),
             )
             .unwrap();
-        set_at(&store, "harness_cleanup", false, &dsh, &codex).unwrap();
+        set_at(
+            &store,
+            "harness_cleanup",
+            false,
+            &dsh,
+            &codex,
+            &dir.join("cursor"),
+        )
+        .unwrap();
         assert!(store.grants().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -320,6 +447,7 @@ mod tests {
             true,
             &dir.join("dsh"),
             &dir.join("codex"),
+            &dir.join("cursor"),
         )
         .unwrap();
         std::env::set_var("WANXIANG_SPACE_FIXTURE", &root);
@@ -343,6 +471,111 @@ mod tests {
                 .count(),
             1
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn codex_and_cursor_space_grants_cannot_read_or_clean() {
+        let dir = temp("space-only");
+        let store = open_store(&dir);
+        let dsh = dir.join("dsh");
+        let codex = dir.join("codex");
+        let cursor = dir.join("cursor");
+        std::fs::create_dir_all(&cursor).unwrap();
+        std::fs::write(codex.join("note"), b"x").unwrap();
+        std::fs::write(cursor.join("item"), b"db").unwrap();
+        set_at(&store, "codex_space", true, &dsh, &codex, &cursor).unwrap();
+        set_at(&store, "cursor_space", true, &dsh, &codex, &cursor).unwrap();
+        let grants = store.grants().unwrap();
+        assert!(grants.iter().any(|grant| {
+            grant.tool == wanxiang_core::ToolId::Codex
+                && grant.capability == wanxiang_core::Capability::SpaceScan
+                && grant.pattern == "**"
+                && grant.root == codex.canonicalize().unwrap()
+        }));
+        assert!(grants.iter().any(|grant| {
+            grant.tool == wanxiang_core::ToolId::Cursor
+                && grant.capability == wanxiang_core::Capability::SpaceScan
+                && grant.pattern == "**"
+                && grant.root == cursor.canonicalize().unwrap()
+        }));
+        let guard = store.guard();
+        let note = codex.join("note").canonicalize().unwrap();
+        let db = cursor.join("item").canonicalize().unwrap();
+        assert!(matches!(
+            guard.open_read(
+                wanxiang_core::ToolId::Codex,
+                wanxiang_core::Capability::SpaceScan,
+                &note
+            ),
+            Err(wanxiang_core::GuardError::NotGranted)
+        ));
+        assert!(matches!(
+            guard.open_read(
+                wanxiang_core::ToolId::Cursor,
+                wanxiang_core::Capability::SpaceScan,
+                &db
+            ),
+            Err(wanxiang_core::GuardError::NotGranted)
+        ));
+        guard
+            .metadata(
+                wanxiang_core::ToolId::Codex,
+                wanxiang_core::Capability::SpaceScan,
+                &note,
+            )
+            .unwrap();
+        guard
+            .metadata(
+                wanxiang_core::ToolId::Cursor,
+                wanxiang_core::Capability::SpaceScan,
+                &db,
+            )
+            .unwrap();
+        assert!(matches!(
+            guard.issue_confirmation(
+                wanxiang_core::ToolId::Codex,
+                wanxiang_core::Capability::Cleanup,
+                b"plan"
+            ),
+            Err(wanxiang_core::GuardError::NotGranted)
+        ));
+        assert!(matches!(
+            guard.issue_confirmation(
+                wanxiang_core::ToolId::Cursor,
+                wanxiang_core::Capability::Cleanup,
+                b"plan"
+            ),
+            Err(wanxiang_core::GuardError::NotGranted)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn space_kinds_grant_the_fixed_roots() {
+        let dir = temp("gate");
+        let store = open_store(&dir);
+        let previous_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", &dir);
+        std::fs::create_dir_all(dir.join(".dsh")).unwrap();
+        std::fs::create_dir_all(dir.join(".codex")).unwrap();
+        std::fs::create_dir_all(cursor_support(&dir)).unwrap();
+        set(&store, "harness_space", true).unwrap();
+        set(&store, "harness_cleanup", true).unwrap();
+        set(&store, "codex_space", true).unwrap();
+        set(&store, "cursor_space", true).unwrap();
+        let grants = store.grants().unwrap();
+        assert!(grants.iter().any(|grant| {
+            grant.tool == wanxiang_core::ToolId::Codex
+                && grant.root == dir.join(".codex").canonicalize().unwrap()
+        }));
+        assert!(grants.iter().any(|grant| {
+            grant.tool == wanxiang_core::ToolId::Cursor
+                && grant.root == cursor_support(&dir).canonicalize().unwrap()
+        }));
+        if let Some(home) = previous_home {
+            std::env::set_var("HOME", home);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

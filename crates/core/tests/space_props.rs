@@ -51,6 +51,7 @@ proptest! {
             files,
             dev,
             ino,
+            modified: 0,
         };
         let right = CleanEntry {
             rel: PathBuf::from("cache/a"),
@@ -58,6 +59,7 @@ proptest! {
             files,
             dev,
             ino: ino + 1,
+            modified: 0,
         };
         let forward = canonical_bytes(ToolId::DeepSeekHarness, &[left.clone(), right.clone()]);
         let backward = canonical_bytes(ToolId::DeepSeekHarness, &[right.clone(), left.clone()]);
@@ -86,6 +88,7 @@ proptest! {
             files: listed_files,
             dev: listed_dev,
             ino: listed_ino,
+            modified: 0,
         };
         let changed = content_changed(&entry, now_bytes, now_files, now_dev, now_ino);
         prop_assert_eq!(
