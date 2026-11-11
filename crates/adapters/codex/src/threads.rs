@@ -101,7 +101,7 @@ pub fn title_of(head: &ThreadHead) -> String {
         return name.to_string();
     }
     let prefix: String = head.id.chars().take(8).collect();
-    format!("Codex {prefix}")
+    format!("ChatGPT {prefix}")
 }
 
 pub fn parse_jsonl_head(text: &str) -> Option<ThreadHead> {

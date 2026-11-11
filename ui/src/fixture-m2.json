@@ -7,7 +7,7 @@
   ],
   "cards": [
     {
-      "name": "Codex · 5 小时窗口",
+      "name": "ChatGPT · 5 小时窗口",
       "value": "6%",
       "note": "本机记录",
       "percent": 6,
@@ -15,7 +15,7 @@
       "link": null
     },
     {
-      "name": "Codex · 7 天窗口",
+      "name": "ChatGPT · 7 天窗口",
       "value": "1%",
       "note": "本机记录",
       "percent": 1,
@@ -168,7 +168,7 @@
   ],
   "details": [
     {
-      "name": "Codex",
+      "name": "ChatGPT",
       "tokens": "372,274",
       "calls": "—",
       "fee": "不提供",

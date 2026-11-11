@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use wanxiang_adapter_codex::installed as codex_installed;
@@ -32,7 +32,7 @@ pub fn snapshot(roots: &HostRoots, grants: &[StoredGrant]) -> Vec<ToolSnapshot> 
         ),
         (
             ToolId::Codex,
-            codex_installed(&roots.home, &roots.applications),
+            codex_installed(&roots.home, &roots.applications, codex_bundle_id),
         ),
     ];
     found
@@ -80,6 +80,18 @@ pub fn production_roots() -> HostRoots {
 
 fn folder(left: &str, right: &str) -> String {
     format!("{left} {right}")
+}
+
+fn codex_bundle_id(app: &Path) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::icons::bundle_identifier(app)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        None
+    }
 }
 
 #[cfg(test)]

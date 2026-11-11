@@ -85,4 +85,6 @@ fn ipc_names_match_the_ui_contract() {
         summary_mode: sorted(&[SummaryMode::Ask, SummaryMode::Local, SummaryMode::Ai]),
     };
     assert_eq!(actual, expected);
+    assert!(expected.tool_id.iter().any(|name| name == "codex"));
+    assert!(expected.tool_id.iter().all(|name| name != "chatgpt"));
 }

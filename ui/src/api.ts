@@ -164,18 +164,18 @@ export const emptyUsage: UsageView = {
   banner: [
     "Cursor 用量暂不提供，未计入",
     "Harness 用量暂不提供，未计入",
-    "Codex 未授权，未计入",
+    "ChatGPT 未授权，未计入",
     "DS Bot 未授权，未计入",
   ],
   cards: [
-    { name: "Codex", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
-    { name: "Codex · 窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "ChatGPT", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "ChatGPT · 窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
     { name: "DeepSeek 账户", value: "—", note: "未保存密钥", percent: null, reset: null, link: null },
     { name: "Cursor", value: "—", note: "暂不提供", percent: null, reset: null, link: null },
   ],
   days: [],
   details: [
-    { name: "Codex", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
+    { name: "ChatGPT", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
     { name: "DeepSeek Harness", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },
     { name: "DS Bot", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
     { name: "Cursor", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },

@@ -487,12 +487,12 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
     };
   }
   if (part === "windows") {
-    const fresh = next.cards.filter((card) => card.name.startsWith("Codex"));
-    const rest = current.cards.filter((card) => !card.name.startsWith("Codex"));
+    const fresh = next.cards.filter((card) => card.name.startsWith("ChatGPT"));
+    const rest = current.cards.filter((card) => !card.name.startsWith("ChatGPT"));
     return { ...current, cards: [...fresh, ...rest] };
   }
   if (part === "ds_bot" || part === "codex") {
-    const name = part === "ds_bot" ? "DS Bot" : "Codex";
+    const name = part === "ds_bot" ? "DS Bot" : "ChatGPT";
     return {
       ...current,
       total: next.total,

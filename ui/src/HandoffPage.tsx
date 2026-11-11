@@ -34,7 +34,7 @@ export type HandoffRow = {
 const fixtureRows = rowsFromFile as HandoffRow[];
 
 export const handoffCopy = {
-  missingServer: "Codex 应用未运行，没有读到本机会话",
+  missingServer: "ChatGPT 应用未运行，没有读到本机会话",
   deleted: "这条对话已经不在，无法交接",
   tooLong: "超过 8000 字，不能打开深链。全文仍可复制。",
   summaryFailed: "摘要没有生成。编辑还在，可以改用本地整理或重试。",
@@ -303,7 +303,7 @@ export function HandoffPage({
             <button type="button" className="handoff-choice" onClick={() => void copyText()}>
               <span>
                 <strong>换到其他工具</strong>
-                <small>Codex、DS Bot、Harness · 复制后手动粘贴</small>
+                <small>ChatGPT、DS Bot、Harness · 复制后手动粘贴</small>
               </span>
               <IconChevron />
             </button>
@@ -467,7 +467,7 @@ function toolKind(tool: string) {
 
 function toolLabel(tool: string) {
   const kind = toolKind(tool);
-  if (kind === "codex") return "Codex";
+  if (kind === "codex") return "ChatGPT";
   if (kind === "ds_bot") return "DS Bot";
   if (kind === "deepseek_harness") return "DeepSeek Harness";
   return "Cursor";

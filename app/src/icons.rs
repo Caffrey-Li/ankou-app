@@ -82,22 +82,7 @@ fn app_with_bundle_id(
     want: &str,
     bundle_id: &impl Fn(&Path) -> Option<String>,
 ) -> Option<PathBuf> {
-    let mut found = None;
-    for entry in fs::read_dir(root).ok()?.flatten() {
-        let path = entry.path();
-        let name = entry.file_name();
-        if !name.to_str().is_some_and(|name| name.ends_with(".app")) || !path.is_dir() {
-            continue;
-        }
-        if bundle_id(&path).as_deref() != Some(want) {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        found = Some(path);
-    }
-    found
+    wanxiang_adapter_codex::app_with_bundle_id(root, want, bundle_id)
 }
 
 fn assemble(
@@ -221,7 +206,7 @@ fn base64_encode(bytes: Vec<u8>) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn bundle_identifier(app: &Path) -> Option<String> {
+pub(crate) fn bundle_identifier(app: &Path) -> Option<String> {
     use objc2_foundation::{NSBundle, NSString};
 
     objc2::rc::autoreleasepool(|_| {
@@ -479,6 +464,37 @@ mod tests {
         };
         assert_eq!(bundle_identifier(&path).as_deref(), Some(CODEX_BUNDLE_ID));
         assert_eq!(path.parent(), Some(Path::new("/Applications")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn chat_bundle_is_not_installed_and_codex_bundle_is() {
+        let root = temp_apps("bundle-id");
+        let home = root.join("home");
+        fs::create_dir_all(&home).unwrap();
+        for (label, bundle_id, installed) in [
+            ("chat-apps", "com.openai.chat", false),
+            ("codex-apps", "com.openai.codex", true),
+        ] {
+            let apps = root.join(label);
+            let contents = apps.join("ChatGPT.app").join("Contents");
+            fs::create_dir_all(&contents).unwrap();
+            fs::write(
+                contents.join("Info.plist"),
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>{bundle_id}</string></dict></plist>"#
+                ),
+            )
+            .unwrap();
+            assert_eq!(
+                wanxiang_adapter_codex::installed(&home, &apps, bundle_identifier),
+                installed,
+                "{bundle_id}"
+            );
+        }
+        let _ = fs::remove_dir_all(root);
     }
 
     #[cfg(target_os = "macos")]

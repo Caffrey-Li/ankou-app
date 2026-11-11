@@ -54,7 +54,7 @@ fn server_list_drops_cwd_and_keeps_documented_fields() {
     assert_eq!(head.preview, "摘");
     assert_eq!(head.status, "idle");
     assert!(head.cwd.is_none());
-    assert_eq!(title_of(&head), "Codex thread-1");
+    assert_eq!(title_of(&head), "ChatGPT thread-1");
     assert!(head.used_tokens.is_none());
     assert!(context_percent(head.used_tokens, head.window_tokens).is_none());
 }
@@ -72,7 +72,7 @@ fn jsonl_context_uses_last_usage_over_the_window() {
     let head = parse_jsonl_head(text).unwrap();
     assert_eq!(head.cwd.as_deref(), Some("/Users/example/projects/demo"));
     assert_eq!(context_percent(head.used_tokens, head.window_tokens), Some(80));
-    assert_eq!(title_of(&head), "Codex 00000000");
+    assert_eq!(title_of(&head), "ChatGPT 00000000");
     let (body, truncated) = wanxiang_adapter_codex::parse_jsonl_text(text);
     assert_eq!(body, "你好");
     assert!(!truncated);

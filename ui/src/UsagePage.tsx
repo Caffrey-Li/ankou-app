@@ -123,7 +123,7 @@ export function UsagePage({
         {usage.cards.map((card, index) => (
           <article key={`${card.name}-${index}`} className="quota-tile">
             <h3>{cardTitle(card.name)}</h3>
-            {pending.windows && card.name.startsWith("Codex") ? (
+            {pending.windows && card.name.startsWith("ChatGPT") ? (
               <p className="quota-plain">刷新中</p>
             ) : pending.balance && card.name === "DeepSeek 账户" ? (
               <p className="quota-plain">刷新中</p>
@@ -184,7 +184,7 @@ export function UsagePage({
           <div className="chart-legend">
             <span><i className="swatch harness" />Harness</span>
             <span><i className="swatch bot" />DS Bot</span>
-            <span><i className="swatch codex" />Codex</span>
+            <span><i className="swatch codex" />ChatGPT</span>
           </div>
         </div>
         <div className="usage-chart" aria-label="按日本机记录">
@@ -240,7 +240,7 @@ export function UsagePage({
               <span className="source">来源</span>
             </div>
             {usage.details.map((row) => {
-              const waiting = (row.name === "DS Bot" && pending.ds_bot) || (row.name === "Codex" && pending.codex);
+              const waiting = (row.name === "DS Bot" && pending.ds_bot) || (row.name === "ChatGPT" && pending.codex);
               return (
               <div key={row.name} className="detail-row">
                 <span className="detail-name">{row.name}</span>
@@ -292,7 +292,7 @@ export function QuotaCard({
           <>
             <Ring percent={codex?.percent ?? null} />
             <div>
-              <strong>{codex?.name ?? "Codex"}</strong>
+              <strong>{codex?.name ?? "ChatGPT"}</strong>
               {codex?.reset ? <p className="reset-line">{codex.reset}</p> : null}
               <p className="quota-status">{codex?.note}</p>
             </div>

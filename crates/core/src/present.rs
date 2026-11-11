@@ -107,13 +107,13 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         "Harness 用量暂不提供，未计入".to_string(),
     ];
     match facts.codex_access {
-        RecordAccess::Unauthorized => banner.push("Codex 未授权，未计入".to_string()),
-        RecordAccess::NeedsReauth => banner.push("Codex 需要重新授权，未计入".to_string()),
+        RecordAccess::Unauthorized => banner.push("ChatGPT 未授权，未计入".to_string()),
+        RecordAccess::NeedsReauth => banner.push("ChatGPT 需要重新授权，未计入".to_string()),
         RecordAccess::Authorized => {
             if !facts.codex_app_server {
                 if let Some((_, at)) = report(facts, "codex", "tokens") {
                     banner.push(format!(
-                        "Codex 显示 {} 的数据（应用未运行）",
+                        "ChatGPT 显示 {} 的数据（应用未运行）",
                         hhmm(at, facts.offset_secs)
                     ));
                 }
@@ -184,7 +184,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             })
             .collect(),
         details: vec![
-            counted_detail("Codex", facts.codex_access, codex_tokens, None, true),
+            counted_detail("ChatGPT", facts.codex_access, codex_tokens, None, true),
             withheld_detail("DeepSeek Harness"),
             counted_detail("DS Bot", facts.bot_access, bot_tokens, bot_calls, false),
             withheld_detail("Cursor"),
@@ -405,8 +405,8 @@ fn codex_cards(
     };
     if let Some(note) = gap {
         return vec![
-            status_card("Codex", note, true),
-            status_card("Codex · 窗口", note, true),
+            status_card("ChatGPT", note, true),
+            status_card("ChatGPT · 窗口", note, true),
         ];
     }
     if hidden || windows.is_empty() {
@@ -420,8 +420,8 @@ fn codex_cards(
             }
         };
         return vec![
-            status_card("Codex", note, false),
-            status_card("Codex · 窗口", note, false),
+            status_card("ChatGPT", note, false),
+            status_card("ChatGPT · 窗口", note, false),
         ];
     }
     let live = latest_amount(facts, "codex", "window_source") == Some(1);
@@ -437,7 +437,7 @@ fn codex_cards(
         .iter()
         .take(2)
         .map(|window| UsageCard {
-            name: format!("Codex · {}", window_title(window.minutes)),
+            name: format!("ChatGPT · {}", window_title(window.minutes)),
             value: format!("{}%", window.percent),
             note: origin.clone(),
             percent: Some(window.percent),
@@ -448,7 +448,7 @@ fn codex_cards(
         })
         .collect();
     if cards.len() == 1 {
-        cards.push(status_card("Codex · 窗口", "无本机记录", false));
+        cards.push(status_card("ChatGPT · 窗口", "无本机记录", false));
     }
     cards
 }

@@ -171,9 +171,9 @@ export function SpacePage({
         <aside className="space-tools">
           <ToolRow mark="H" name="DeepSeek Harness" size={scan ? formatBytes(known) : "尚未扫描"} active over={over} share={cleanShare} meter={Boolean(scan)} />
           <ToolRow mark="C" name="Cursor" size="未扫描" active={false} over={false} share={0} meter={false} />
-          <ToolRow mark="Cx" name="Codex" size="只统计" active={false} over={false} share={0} meter={false} />
+          <ToolRow mark="Cx" name="ChatGPT" size="只统计" active={false} over={false} share={0} meter={false} />
           <ToolRow mark="B" name="DS Bot" size="—" active={false} over={false} share={0} meter={false} note="已计入 Harness（共用 ~/.dsh）" />
-          <p>Codex 无可安全清理的证据，只统计不清理</p>
+          <p>ChatGPT 无可安全清理的证据，只统计不清理</p>
         </aside>
         <section className="space-detail">
           <header>

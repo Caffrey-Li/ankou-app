@@ -326,12 +326,12 @@ export function SettingsPage({
                     {spec.id === "codex" ? (
                       <div className="cap-row">
                         <Check
-                          aria-label="Codex app-server"
+                          aria-label="ChatGPT app-server"
                           checked={snapshot.settings.codex_app_server}
                           onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
                         />
                         <span className="cap-copy">
-                          <strong>Codex app-server</strong>
+                          <strong>ChatGPT app-server</strong>
                           <span>已实测 2026-11-09</span>
                         </span>
                       </div>

@@ -151,7 +151,7 @@ export const toolSpecs: ToolSpec[] = [
   {
     id: "codex",
     letter: "Cx",
-    name: "Codex",
+    name: "ChatGPT",
     caps: [
       {
         capability: "usage",

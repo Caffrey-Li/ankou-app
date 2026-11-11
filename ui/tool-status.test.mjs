@@ -24,7 +24,7 @@ try {
     { name: "DeepSeek Harness", tokens: "暂不提供", calls: "暂不提供", fee: "不提供", source: "—" },
     { name: "DS Bot", tokens: "需要重新授权", calls: "需要重新授权", fee: "不提供", source: "需要重新授权" },
     { name: "Cursor", tokens: "未授权", calls: "未授权", fee: "不提供", source: "未授权" },
-    { name: "Codex", tokens: "12", calls: "1", fee: "不提供", source: "本机记录" },
+    { name: "ChatGPT", tokens: "12", calls: "1", fee: "不提供", source: "本机记录" },
   ];
   const marks = toolMarks(tools, details, true);
   const side = renderToStaticMarkup(createElement(SidebarTools, { marks }));

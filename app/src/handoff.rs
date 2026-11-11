@@ -192,28 +192,28 @@ fn conversations(hub: &Hub) -> ConversationPage {
                             rows.push(row_from_head("codex", &head, false));
                         }
                     }
-                    Err(_) => notes.push("Codex 应用未运行，没有读到本机会话".to_string()),
+                    Err(_) => notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string()),
                 }
             } else {
-                notes.push("Codex 应用未运行，没有读到本机会话".to_string());
+                notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string());
             }
         }
         if !from_server {
-            notes.retain(|note| note != "Codex 应用未运行，没有读到本机会话");
+            notes.retain(|note| note != "ChatGPT 应用未运行，没有读到本机会话");
             match list_jsonl(hub.store.guard(), &grant.root) {
                 Ok(heads) => {
                     if heads.is_empty() && server_on {
-                        notes.push("Codex 应用未运行，没有读到本机会话".to_string());
+                        notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string());
                     }
                     for head in heads {
                         rows.push(row_from_head("codex", &head, true));
                     }
                 }
-                Err(_) => notes.push("Codex 对话未授权".to_string()),
+                Err(_) => notes.push("ChatGPT 对话未授权".to_string()),
             }
         }
     } else {
-        notes.push("Codex 对话未授权".to_string());
+        notes.push("ChatGPT 对话未授权".to_string());
     }
     let bot = grants.iter().find(|grant| {
         grant.tool == ToolId::DsBot
@@ -368,7 +368,7 @@ fn codex_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
             && grant.capability == Capability::Conversation
             && grant.status == GrantStatus::Active
     }) else {
-        return Err("Codex 对话未授权".to_string());
+        return Err("ChatGPT 对话未授权".to_string());
     };
     let settings = hub.store.settings().map_err(|err| err.to_string())?;
     if settings.codex_app_server {
@@ -397,13 +397,13 @@ fn codex_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
     let path = find_rollout(hub.store.guard(), &grant.root, id);
     let Some(path) = path else {
         return Err(if settings.codex_app_server {
-            "Codex 应用未运行，没有读到本机会话".to_string()
+            "ChatGPT 应用未运行，没有读到本机会话".to_string()
         } else {
             "这条对话已经不在，无法交接".to_string()
         });
     };
     let (text, truncated) =
-        read_jsonl(hub.store.guard(), &path).map_err(|_| "Codex 对话未授权".to_string())?;
+        read_jsonl(hub.store.guard(), &path).map_err(|_| "ChatGPT 对话未授权".to_string())?;
     Ok(HandoffDraft {
         text,
         truncated,

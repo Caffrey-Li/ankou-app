@@ -435,7 +435,7 @@ button.space-overview {
   font-size: 15px;
 }
 
-.space-dialog div {
+.space-dialog > div:not(.space-dialog-icon) {
   display: flex;
   flex-direction: column;
   gap: 8px;
