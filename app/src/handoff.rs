@@ -31,10 +31,104 @@ pub struct ConversationRow {
     pub source: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceStatus {
+    Unauthorized,
+    NeedsReauth,
+    ReadFailed,
+    ServerUnavailable,
+    NoRecords,
+    Ok,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Auth {
+    Missing,
+    Active,
+    NeedsReauth,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ServerAttempt {
+    Skipped,
+    Failed,
+    Listed(usize),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum LocalRead {
+    Unread,
+    Empty,
+    Rows,
+    Denied,
+}
+
+fn codex_status(auth: Auth, server: ServerAttempt, local: LocalRead) -> SourceStatus {
+    match auth {
+        Auth::Missing => SourceStatus::Unauthorized,
+        Auth::NeedsReauth => SourceStatus::NeedsReauth,
+        Auth::Active => match server {
+            ServerAttempt::Listed(0) => SourceStatus::NoRecords,
+            ServerAttempt::Listed(_) => SourceStatus::Ok,
+            ServerAttempt::Failed => match local {
+                LocalRead::Rows => SourceStatus::Ok,
+                LocalRead::Empty => SourceStatus::ServerUnavailable,
+                LocalRead::Denied | LocalRead::Unread => SourceStatus::ReadFailed,
+            },
+            ServerAttempt::Skipped => match local {
+                LocalRead::Rows => SourceStatus::Ok,
+                LocalRead::Empty => SourceStatus::NoRecords,
+                LocalRead::Denied | LocalRead::Unread => SourceStatus::ReadFailed,
+            },
+        },
+    }
+}
+
+fn bot_status(auth: Auth, local: LocalRead) -> SourceStatus {
+    match auth {
+        Auth::Missing => SourceStatus::Unauthorized,
+        Auth::NeedsReauth => SourceStatus::NeedsReauth,
+        Auth::Active => match local {
+            LocalRead::Rows => SourceStatus::Ok,
+            LocalRead::Empty => SourceStatus::NoRecords,
+            LocalRead::Denied | LocalRead::Unread => SourceStatus::ReadFailed,
+        },
+    }
+}
+
+fn conversation_auth<'a>(
+    grants: &'a [wanxiang_core::StoredGrant],
+    tool: ToolId,
+) -> (Auth, Option<&'a wanxiang_core::StoredGrant>) {
+    let active = grants.iter().find(|grant| {
+        grant.tool == tool
+            && grant.capability == Capability::Conversation
+            && grant.status == GrantStatus::Active
+    });
+    if active.is_some() {
+        return (Auth::Active, active);
+    }
+    let reauth = grants.iter().any(|grant| {
+        grant.tool == tool
+            && grant.capability == Capability::Conversation
+            && grant.status == GrantStatus::NeedsReauth
+    });
+    (
+        if reauth {
+            Auth::NeedsReauth
+        } else {
+            Auth::Missing
+        },
+        None,
+    )
+}
+
 #[derive(Clone, serde::Serialize)]
 pub struct ConversationPage {
     pub rows: Vec<ConversationRow>,
-    pub notes: Vec<String>,
+    pub codex: SourceStatus,
+    pub ds_bot: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -168,18 +262,14 @@ pub struct OrganizedView {
 fn conversations(hub: &Hub) -> ConversationPage {
     let grants = hub.store.grants().unwrap_or_default();
     let mut rows = Vec::new();
-    let mut notes = Vec::new();
-    let codex = grants.iter().find(|grant| {
-        grant.tool == ToolId::Codex
-            && grant.capability == Capability::Conversation
-            && grant.status == GrantStatus::Active
-    });
-    if let Some(grant) = codex {
+    let (codex_auth, codex_grant) = conversation_auth(&grants, ToolId::Codex);
+    let (codex_server, codex_local) = if let Some(grant) = codex_grant {
         let server_on = hub
             .store
             .settings()
             .ok()
             .is_some_and(|settings| settings.codex_app_server);
+        let mut server = ServerAttempt::Skipped;
         let mut from_server = false;
         if server_on {
             if let Some(bin) = find_codex_cli(&std::env::var("PATH").unwrap_or_default()) {
@@ -188,42 +278,47 @@ fn conversations(hub: &Hub) -> ConversationPage {
                 match list_threads(&hub.gate.supervisor(), command) {
                     Ok(heads) => {
                         from_server = true;
+                        server = ServerAttempt::Listed(heads.len());
                         for head in heads {
                             rows.push(row_from_head("codex", &head, false));
                         }
                     }
-                    Err(_) => notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string()),
+                    Err(_) => server = ServerAttempt::Failed,
                 }
-            } else {
-                notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string());
             }
         }
-        if !from_server {
-            notes.retain(|note| note != "ChatGPT 应用未运行，没有读到本机会话");
+        let local = if from_server {
+            LocalRead::Unread
+        } else {
             match list_jsonl(hub.store.guard(), &grant.root) {
                 Ok(heads) => {
-                    if heads.is_empty() && server_on {
-                        notes.push("ChatGPT 应用未运行，没有读到本机会话".to_string());
-                    }
+                    let read = if heads.is_empty() {
+                        LocalRead::Empty
+                    } else {
+                        LocalRead::Rows
+                    };
                     for head in heads {
                         rows.push(row_from_head("codex", &head, true));
                     }
+                    read
                 }
-                Err(_) => notes.push("ChatGPT 对话未授权".to_string()),
+                Err(_) => LocalRead::Denied,
             }
-        }
+        };
+        (server, local)
     } else {
-        notes.push("ChatGPT 对话未授权".to_string());
-    }
-    let bot = grants.iter().find(|grant| {
-        grant.tool == ToolId::DsBot
-            && grant.capability == Capability::Conversation
-            && grant.status == GrantStatus::Active
-    });
-    if let Some(grant) = bot {
+        (ServerAttempt::Skipped, LocalRead::Unread)
+    };
+    let (bot_auth, bot_grant) = conversation_auth(&grants, ToolId::DsBot);
+    let bot_local = if let Some(grant) = bot_grant {
         let db = grant.root.join("bot/usage.sqlite");
         match list_sessions(hub.store.guard(), &db) {
             Ok(heads) => {
+                let read = if heads.is_empty() {
+                    LocalRead::Empty
+                } else {
+                    LocalRead::Rows
+                };
                 for head in heads {
                     let title = if head.name.is_empty() {
                         head.session.clone()
@@ -242,14 +337,13 @@ fn conversations(hub: &Hub) -> ConversationPage {
                         source: "usage_sqlite".to_string(),
                     });
                 }
+                read
             }
-            Err(_) => notes.push("DS Bot 对话未授权".to_string()),
+            Err(_) => LocalRead::Denied,
         }
     } else {
-        notes.push("DS Bot 对话未授权".to_string());
-    }
-    notes.push("Harness 对话暂不提供".to_string());
-    notes.push("Cursor 对话未验证".to_string());
+        LocalRead::Unread
+    };
     if std::env::var_os("WANXIANG_CURSOR_FIXTURE").is_some() {
         if let Ok(text) = read_fixture(hub.store.guard()) {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
@@ -286,7 +380,11 @@ fn conversations(hub: &Hub) -> ConversationPage {
             }
         }
     }
-    ConversationPage { rows, notes }
+    ConversationPage {
+        rows,
+        codex: codex_status(codex_auth, codex_server, codex_local),
+        ds_bot: bot_status(bot_auth, bot_local),
+    }
 }
 
 fn row_from_head(
@@ -482,5 +580,282 @@ mod tests {
         assert!(!body.contains("fn open_deeplink"));
         assert!(!body.contains("osascript"));
         assert!(!body.contains("Command::new(\"open\")"));
+    }
+
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+
+    use wanxiang_core::{
+        Capability, Clock, PathScope, RefreshGate, SecretStore, Store, Supervisor, SystemClock, ToolId,
+        ToolScheduler,
+    };
+
+    use super::{bot_status, codex_status, conversations, Auth, LocalRead, ServerAttempt, SourceStatus};
+    use crate::commands::{Hub, ScanSlots};
+
+    fn expect_codex(auth: Auth, server: ServerAttempt, local: LocalRead, status: SourceStatus) {
+        assert_eq!(
+            codex_status(auth, server, local),
+            status,
+            "auth={auth:?} server={server:?} local={local:?}"
+        );
+    }
+
+    #[test]
+    fn codex_status_covers_each_outcome() {
+        expect_codex(Auth::Missing, ServerAttempt::Skipped, LocalRead::Unread, SourceStatus::Unauthorized);
+        expect_codex(Auth::Missing, ServerAttempt::Failed, LocalRead::Empty, SourceStatus::Unauthorized);
+        expect_codex(Auth::Missing, ServerAttempt::Skipped, LocalRead::Rows, SourceStatus::Unauthorized);
+        expect_codex(Auth::Active, ServerAttempt::Skipped, LocalRead::Empty, SourceStatus::NoRecords);
+        expect_codex(Auth::Active, ServerAttempt::Skipped, LocalRead::Rows, SourceStatus::Ok);
+        expect_codex(Auth::Active, ServerAttempt::Skipped, LocalRead::Denied, SourceStatus::ReadFailed);
+        expect_codex(Auth::Active, ServerAttempt::Skipped, LocalRead::Unread, SourceStatus::ReadFailed);
+        expect_codex(Auth::Active, ServerAttempt::Failed, LocalRead::Empty, SourceStatus::ServerUnavailable);
+        expect_codex(Auth::Active, ServerAttempt::Failed, LocalRead::Rows, SourceStatus::Ok);
+        expect_codex(Auth::Active, ServerAttempt::Failed, LocalRead::Denied, SourceStatus::ReadFailed);
+        expect_codex(Auth::Active, ServerAttempt::Failed, LocalRead::Unread, SourceStatus::ReadFailed);
+        expect_codex(Auth::Active, ServerAttempt::Listed(0), LocalRead::Unread, SourceStatus::NoRecords);
+        expect_codex(Auth::Active, ServerAttempt::Listed(3), LocalRead::Denied, SourceStatus::Ok);
+        for server in [ServerAttempt::Skipped, ServerAttempt::Failed, ServerAttempt::Listed(0), ServerAttempt::Listed(2)] {
+            for local in [LocalRead::Unread, LocalRead::Empty, LocalRead::Rows, LocalRead::Denied] {
+                expect_codex(Auth::NeedsReauth, server, local, SourceStatus::NeedsReauth);
+            }
+        }
+    }
+
+    #[test]
+    fn ds_bot_status_has_no_server_failure() {
+        assert_eq!(bot_status(Auth::Missing, LocalRead::Rows), SourceStatus::Unauthorized);
+        assert_eq!(bot_status(Auth::Active, LocalRead::Empty), SourceStatus::NoRecords);
+        assert_eq!(bot_status(Auth::Active, LocalRead::Rows), SourceStatus::Ok);
+        assert_eq!(bot_status(Auth::Active, LocalRead::Denied), SourceStatus::ReadFailed);
+        assert_eq!(bot_status(Auth::Active, LocalRead::Unread), SourceStatus::ReadFailed);
+        assert_eq!(bot_status(Auth::NeedsReauth, LocalRead::Denied), SourceStatus::NeedsReauth);
+        assert_eq!(bot_status(Auth::NeedsReauth, LocalRead::Rows), SourceStatus::NeedsReauth);
+        for local in [LocalRead::Unread, LocalRead::Empty, LocalRead::Rows, LocalRead::Denied] {
+            assert_ne!(bot_status(Auth::Active, local), SourceStatus::ServerUnavailable);
+            assert_ne!(bot_status(Auth::Missing, local), SourceStatus::ServerUnavailable);
+            assert_ne!(bot_status(Auth::NeedsReauth, local), SourceStatus::ServerUnavailable);
+            assert_ne!(bot_status(Auth::Active, local), SourceStatus::NeedsReauth);
+        }
+    }
+
+    #[test]
+    fn source_status_names_match_the_ui_contract() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/src/__fixtures__/ipc-names.json");
+        let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let mut expected: Vec<String> = value["source_status"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item.as_str().unwrap().to_string())
+            .collect();
+        expected.sort();
+        let mut actual: Vec<String> = [
+            SourceStatus::Unauthorized,
+            SourceStatus::NeedsReauth,
+            SourceStatus::ReadFailed,
+            SourceStatus::ServerUnavailable,
+            SourceStatus::NoRecords,
+            SourceStatus::Ok,
+        ]
+        .into_iter()
+        .map(|status| match serde_json::to_value(status).unwrap() {
+            serde_json::Value::String(name) => name,
+            other => panic!("枚举应序列化成字符串，实际是 {other}"),
+        })
+        .collect();
+        actual.sort();
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual,
+            vec![
+                "needs_reauth".to_string(),
+                "no_records".to_string(),
+                "ok".to_string(),
+                "read_failed".to_string(),
+                "server_unavailable".to_string(),
+                "unauthorized".to_string(),
+            ]
+        );
+    }
+
+    fn temp_hub(name: &str) -> (PathBuf, Hub) {
+        let dir = std::env::temp_dir().join(format!("wanxiang-handoff-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("codex")).unwrap();
+        std::fs::create_dir_all(dir.join("dsh").join("bot")).unwrap();
+        (dir.clone(), open_hub(&dir))
+    }
+
+    fn open_hub(dir: &Path) -> Hub {
+        let supervisor = Supervisor::new();
+        let gate = Arc::new(RefreshGate::new(supervisor.handle()));
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        let guard = Arc::new(wanxiang_core::Guard::new(
+            Arc::clone(&gate) as Arc<dyn ToolScheduler>,
+            Arc::clone(&clock),
+        ));
+        let store = Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).unwrap());
+        let hub = Hub {
+            store,
+            secrets: SecretStore::new(),
+            scans: ScanSlots::default(),
+            gate,
+            emit: Arc::new(|_| {}),
+        };
+        hub
+    }
+
+    fn grant(hub: &Hub, tool: ToolId, root: &Path, pattern: &str) {
+        hub.store
+            .grant(
+                tool,
+                Capability::Conversation,
+                PathScope {
+                    root: root.to_path_buf(),
+                    pattern: pattern.to_string(),
+                },
+            )
+            .unwrap();
+    }
+
+    fn empty_bot_db(path: &Path) {
+        let status = std::process::Command::new("sqlite3")
+            .arg(path)
+            .arg(
+                "CREATE TABLE calls (key TEXT, session TEXT, time INTEGER, provider TEXT, model TEXT, kind TEXT, live INTEGER, input INTEGER, cache_read INTEGER, cache_write INTEGER, output INTEGER);
+                 CREATE TABLE owners (session TEXT, owner TEXT, name TEXT);",
+            )
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    fn page_statuses(page: &super::ConversationPage) -> (SourceStatus, SourceStatus) {
+        let value = serde_json::to_value(page).unwrap();
+        assert!(value.get("notes").is_none());
+        let codex = serde_json::from_value(value["codex"].clone()).unwrap();
+        let bot = serde_json::from_value(value["ds_bot"].clone()).unwrap();
+        (codex, bot)
+    }
+
+    #[test]
+    fn both_sources_are_unauthorized_when_nothing_is_granted() {
+        let (dir, hub) = temp_hub("none");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::Unauthorized, SourceStatus::Unauthorized));
+        assert!(page.rows.iter().all(|row| row.tool == "cursor"));
+        assert!(!hub.store.settings().unwrap().codex_app_server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn one_unauthorized_and_one_without_records() {
+        let (dir, hub) = temp_hub("mix-codex");
+        grant(&hub, ToolId::Codex, &dir.join("codex"), "sessions/**/*.jsonl");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::NoRecords, SourceStatus::Unauthorized));
+        assert!(page.rows.iter().all(|row| row.tool == "cursor"));
+
+        let (dir, hub) = temp_hub("mix-bot");
+        empty_bot_db(&dir.join("dsh/bot/usage.sqlite"));
+        grant(&hub, ToolId::DsBot, &dir.join("dsh"), "bot/usage.sqlite*");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::Unauthorized, SourceStatus::NoRecords));
+        assert!(page.rows.iter().all(|row| row.tool == "cursor"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn granted_reads_report_records_or_an_empty_list() {
+        let (dir, hub) = temp_hub("rows");
+        let codex = dir.join("codex");
+        std::fs::create_dir_all(codex.join("sessions/2026/01/01")).unwrap();
+        std::fs::write(
+            codex.join("sessions/2026/01/01/demo.jsonl"),
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"demo\",\"timestamp\":\"2026-01-01T00:00:00Z\"},\"timestamp\":\"2026-01-01T00:00:00Z\"}\n",
+        )
+        .unwrap();
+        grant(&hub, ToolId::Codex, &codex, "sessions/**/*.jsonl");
+        empty_bot_db(&dir.join("dsh/bot/usage.sqlite"));
+        let status = std::process::Command::new("sqlite3")
+            .arg(dir.join("dsh/bot/usage.sqlite"))
+            .arg("INSERT INTO calls VALUES ('k', 's', 10, 'p', 'm', 'chat', 1, 1, 0, 0, 1); INSERT INTO owners VALUES ('s', 'bot:demo', '示例');")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        grant(&hub, ToolId::DsBot, &dir.join("dsh"), "bot/usage.sqlite*");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::Ok, SourceStatus::Ok));
+        assert_eq!(page.rows.iter().filter(|row| row.tool == "codex").count(), 1);
+        assert_eq!(page.rows.iter().filter(|row| row.tool == "ds_bot").count(), 1);
+        assert!(!hub.store.settings().unwrap().codex_app_server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_empty_grant_is_no_records_and_not_server_unavailable() {
+        let (dir, hub) = temp_hub("empty-both");
+        grant(&hub, ToolId::Codex, &dir.join("codex"), "sessions/**/*.jsonl");
+        empty_bot_db(&dir.join("dsh/bot/usage.sqlite"));
+        grant(&hub, ToolId::DsBot, &dir.join("dsh"), "bot/usage.sqlite*");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::NoRecords, SourceStatus::NoRecords));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn needs_reauth_is_not_treated_as_missing_or_a_failed_read() {
+        let (dir, hub) = temp_hub("reauth");
+        grant(&hub, ToolId::Codex, &dir.join("codex"), "sessions/**/*.jsonl");
+        empty_bot_db(&dir.join("dsh/bot/usage.sqlite"));
+        grant(&hub, ToolId::DsBot, &dir.join("dsh"), "bot/usage.sqlite*");
+        drop(hub);
+        for name in ["codex", "dsh"] {
+            let live = dir.join(name);
+            let moved = dir.join(format!("{name}-moved"));
+            std::fs::rename(&live, &moved).unwrap();
+            std::fs::create_dir_all(&live).unwrap();
+        }
+        std::fs::create_dir_all(dir.join("dsh/bot")).unwrap();
+        let hub = open_hub(&dir);
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::NeedsReauth, SourceStatus::NeedsReauth));
+        assert!(page.rows.iter().all(|row| row.tool == "cursor"));
+        assert!(!hub.store.settings().unwrap().codex_app_server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_granted_read_error_is_read_failed() {
+        let (dir, hub) = temp_hub("read-fail");
+        let codex = dir.join("codex");
+        std::fs::create_dir_all(codex.join("sessions/2026/01/01")).unwrap();
+        let blocked = codex.join("sessions/2026/01/01/blocked.jsonl");
+        std::fs::write(&blocked, "{}\n").unwrap();
+        let mut permissions = std::fs::metadata(&blocked).unwrap().permissions();
+        permissions.set_readonly(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            permissions.set_mode(0);
+        }
+        std::fs::set_permissions(&blocked, permissions).unwrap();
+        grant(&hub, ToolId::Codex, &codex, "sessions/**/*.jsonl");
+        std::fs::write(dir.join("dsh/bot/usage.sqlite"), b"not a database").unwrap();
+        grant(&hub, ToolId::DsBot, &dir.join("dsh"), "bot/usage.sqlite*");
+        let page = conversations(&hub);
+        assert_eq!(page_statuses(&page), (SourceStatus::ReadFailed, SourceStatus::ReadFailed));
+        assert!(page.rows.iter().all(|row| row.tool == "cursor"));
+        assert!(!hub.store.settings().unwrap().codex_app_server);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&blocked).unwrap().permissions();
+            permissions.set_mode(0o644);
+            std::fs::set_permissions(&blocked, permissions).unwrap();
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

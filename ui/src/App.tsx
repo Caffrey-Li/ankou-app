@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import mark from "../../brand/mark.svg";
-import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, type ConversationRow, type Snapshot, type UsageView } from "./api";
+import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, type ConversationRow, type Snapshot, type SourceStatus, type UsageView } from "./api";
 import { loadDevFixture } from "./fixture";
-import { fixtureHandoffRows, HandoffFilters, HandoffPage, handoffSubtitle, type HandoffFilter } from "./HandoffPage";
+import { fixtureHandoffRows, HandoffFilters, HandoffPage, handoffSubtitle, sourcesWhenListFails, type ConversationSources, type HandoffFilter } from "./HandoffPage";
 import { IconBubble, IconChart, IconClock, IconDisk, IconHome, IconPlus, IconRefresh, IconSearch, IconSet } from "./icons";
 import { SettingsPage } from "./SettingsPage";
 import { fixtureSpaceSummary, SpacePage } from "./SpacePage";
@@ -35,6 +35,26 @@ function formatDate(date: Date) {
 }
 
 const fixtureKind = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("fixture") : null;
+
+function fixtureStatus(value: string | null): SourceStatus {
+  if (
+    value === "unauthorized" ||
+    value === "needs_reauth" ||
+    value === "read_failed" ||
+    value === "server_unavailable" ||
+    value === "no_records" ||
+    value === "ok"
+  ) {
+    return value;
+  }
+  return "unauthorized";
+}
+
+function scriptedSources(): ConversationSources | null {
+  if (fixtureKind !== "handoff") return null;
+  const params = new URLSearchParams(window.location.search);
+  return { codex: fixtureStatus(params.get("codex")), ds_bot: fixtureStatus(params.get("bot")) };
+}
 const fixtureClock = fixtureKind === "m2" || fixtureKind === "m3" || fixtureKind === "m4";
 
 function shownDate() {
@@ -120,6 +140,7 @@ export function App() {
   const [spaceRequest, setSpaceRequest] = useState(0);
   const [spaceStamp, setSpaceStamp] = useState(fixtureKind === "m4" ? "19:10" : "");
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [sources, setSources] = useState<ConversationSources | null>(null);
   const fixtureM3 = fixtureKind === "m3";
   const fixtureM4 = fixtureKind === "m4";
   const sheet = new URLSearchParams(window.location.search).get("sheet");
@@ -141,7 +162,11 @@ export function App() {
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
   const threshold = snapshot.settings.context_threshold_percent;
+  const scripted = scriptedSources();
   const handoffRows = fixtureM3 ? fixtureHandoffRows() : conversations;
+  const handoffSources: ConversationSources | null = fixtureM3
+    ? { codex: "ok", ds_bot: "ok" }
+    : scripted ?? sources;
   const overThreshold = handoffRows.filter((row) => row.percent != null && row.percent >= threshold).length;
   function onRefresh() {
     if (!inTauri() || refreshing) return;
@@ -204,11 +229,18 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!inTauri() || fixtureM3 || fixtureM4) return;
+    if (!inTauri() || fixtureM3 || fixtureM4 || fixtureKind === "handoff") return;
     let alive = true;
-    void listConversations().then((page) => {
-      if (alive) setConversations(page.rows);
-    });
+    void listConversations()
+      .then((page) => {
+        if (!alive) return;
+        setConversations(page.rows);
+        setSources({ codex: page.codex, ds_bot: page.ds_bot });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSources(sourcesWhenListFails());
+      });
     return () => {
       alive = false;
     };
@@ -297,7 +329,7 @@ export function App() {
                   ? `${rangesLabel(range)} · ${usage.range_label}`
                     : page === "overview" || page === "handoff"
                       ? page === "handoff"
-                        ? handoffSubtitle(handoffRows, threshold)
+                        ? handoffSubtitle(handoffRows, handoffSources, threshold)
                         : formatDate(shownDate())
                       : page === "space"
                         ? `按工具统计本机已知占用 · 阈值 ${snapshot.settings.space_threshold_gb} GB`
@@ -447,6 +479,7 @@ export function App() {
         ) : page === "handoff" ? (
           <HandoffPage
             rows={handoffRows}
+            sources={handoffSources}
             threshold={threshold}
             filter={handoffFilter}
             query={handoffQuery}

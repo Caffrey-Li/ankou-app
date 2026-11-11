@@ -18,3 +18,4 @@ assert.deepEqual(names.capability, stringUnion(catalog, "CapabilityId"));
 assert.deepEqual(names.tool_presence, stringUnion(catalog, "Presence"));
 assert.deepEqual(names.grant_status, stringUnion(api, "GrantStatus"));
 assert.deepEqual(names.summary_mode, stringUnion(api, "SummaryMode"));
+assert.deepEqual(names.source_status, stringUnion(api, "SourceStatus"));

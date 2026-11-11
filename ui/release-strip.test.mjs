@@ -23,6 +23,9 @@ const built = files(join(root, "ui", "dist"))
   .join("\n");
 assert.equal(built.includes("12.34"), false);
 assert.equal(built.includes("fixture-m2"), false);
+assert.equal(built.includes('get("bot")'), false);
+assert.equal(built.includes('get("codex")'), false);
+assert.equal(built.includes("fixture=handoff"), false);
 for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set", "WANXIANG_SPACE_FIXTURE"]) {
   assert.equal(built.includes(needle), false, needle);
 }

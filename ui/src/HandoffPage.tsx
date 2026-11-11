@@ -8,6 +8,7 @@ import {
   prepareDeeplink,
   prepareHandoff,
   sendSummary,
+  type SourceStatus,
 } from "./api";
 import { Check } from "./Check";
 import rowsFromFile from "./fixture-m3.json";
@@ -53,9 +54,41 @@ const sections = [
   ["资料位置", "夹具，不读取本机对话库"],
 ] as const;
 
-export function handoffSubtitle(rows: HandoffRow[], threshold: number) {
+export type ConversationSources = {
+  codex: SourceStatus;
+  ds_bot: SourceStatus;
+};
+
+const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
+  unauthorized: "未授权，可在设置里开启",
+  needs_reauth: "授权需要重新确认，可在设置里处理",
+  read_failed: "读取失败，没有读到本机会话",
+  server_unavailable: handoffCopy.missingServer,
+  no_records: "没有本机对话",
+};
+
+export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources | null, threshold: number) {
+  if (!sources) return "";
+  if (sources.codex === "unauthorized" && sources.ds_bot === "unauthorized") return "未授权";
   const over = rows.filter((row) => row.percent != null && row.percent >= threshold).length;
   return `${rows.length} 条对话 · ${over} 条超过提醒阈值`;
+}
+
+export function sourcesWhenListFails(): ConversationSources {
+  return { codex: "read_failed", ds_bot: "read_failed" };
+}
+
+export function handoffEmptyLines(sources: ConversationSources | null) {
+  if (!sources) return [];
+  const tools = [
+    ["codex", "ChatGPT", sources.codex],
+    ["ds_bot", "DS Bot", sources.ds_bot],
+  ] as const;
+  return tools.flatMap(([tool, label, status]) => {
+    if (status === "ok") return [];
+    const tone = status === "no_records" ? "note" : "alert";
+    return [{ tool, text: `${label}：${emptyReason[status]}`, tone }];
+  });
 }
 
 export function HandoffFilters({
@@ -83,6 +116,7 @@ export function HandoffFilters({
 
 export function HandoffPage({
   rows,
+  sources,
   threshold,
   filter,
   query,
@@ -91,6 +125,7 @@ export function HandoffPage({
   onQuery,
 }: {
   rows: HandoffRow[];
+  sources: ConversationSources | null;
   threshold: number;
   filter: HandoffFilter;
   query: string;
@@ -330,7 +365,9 @@ export function HandoffPage({
         </section>
       ) : (
         <section className="handoff-detail">
-          <p className="handoff-alert">{handoffCopy.missingServer}</p>
+          {handoffEmptyLines(sources).map((line) => (
+            <p key={line.tool} className={line.tone === "note" ? "handoff-note" : "handoff-alert"}>{line.text}</p>
+          ))}
         </section>
       )}
       {open === "preview" ? (

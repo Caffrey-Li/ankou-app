@@ -214,13 +214,28 @@ export type ConversationRow = {
   source: string;
 };
 
+export type SourceStatus =
+  | "needs_reauth"
+  | "no_records"
+  | "ok"
+  | "read_failed"
+  | "server_unavailable"
+  | "unauthorized";
+
 export type ConversationPage = {
   rows: ConversationRow[];
-  notes: string[];
+  codex: SourceStatus;
+  ds_bot: SourceStatus;
 };
 
 export function listConversations() {
-  if (!inTauri()) return Promise.resolve({ rows: [], notes: [] } satisfies ConversationPage);
+  if (!inTauri()) {
+    return Promise.resolve({
+      rows: [],
+      codex: "unauthorized",
+      ds_bot: "unauthorized",
+    } satisfies ConversationPage);
+  }
   return call<ConversationPage>("list_conversations");
 }
 
