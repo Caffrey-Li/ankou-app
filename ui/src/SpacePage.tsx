@@ -1,29 +1,32 @@
 import { useEffect, useState } from "react";
 import { cancelScan, prepareCleanup, runCleanup, scanSpace, type CleanupItem, type SpaceEntry, type SpaceScan } from "./api";
+import { inTauri } from "./api";
 import { Check } from "./Check";
 import { IconCheck, IconLock, IconTrash } from "./icons";
+import { ToolIcon } from "./tool-status";
 import "./space.css";
 
 const GB = 1_000_000_000;
 
 export const fixtureSpaceSummary = {
   tool: "DeepSeek Harness",
-  size: "6.40 GB",
+  size: "8.2 GB",
   threshold: "5 GB",
-  protected: "5.42 GB",
-  cleanable: "0.98 GB",
+  protected: "6.2 GB",
+  cleanable: "2.0 GB",
 };
 
+// 夹具数字与 Figma 20:223 一致，只在开发对照时使用。
 const fixtureEntries: SpaceEntry[] = [
-  { rel: "cache/job", bytes: 620_000_000, files: 20, dev: 1, ino: 1, modified: 30, weak: false },
-  { rel: "logs/session.log", bytes: 180_000_000, files: 1, dev: 1, ino: 2, modified: 20, weak: false },
-  { rel: "attachments/v1/tmp/clip", bytes: 100_000_000, files: 4, dev: 1, ino: 3, modified: 10, weak: false },
-  { rel: "storages/session_projcache/blob", bytes: 80_000_000, files: 2, dev: 1, ino: 4, modified: 5, weak: true },
+  { rel: "cache/job", bytes: 1_100_000_000, files: 20, dev: 1, ino: 1, modified: 30, weak: false },
+  { rel: "logs/session.log", bytes: 320_000_000, files: 1, dev: 1, ino: 2, modified: 20, weak: false },
+  { rel: "attachments/v1/tmp/clip", bytes: 180_000_000, files: 4, dev: 1, ino: 3, modified: 10, weak: false },
+  { rel: "storages/session_projcache/blob", bytes: 410_000_000, files: 2, dev: 1, ino: 4, modified: 5, weak: true },
 ];
 
 const fixtureScan: SpaceScan = {
-  protected_bytes: 5_420_000_000,
-  cleanable_bytes: 980_000_000,
+  protected_bytes: 6_200_000_000,
+  cleanable_bytes: 2_010_000_000,
   unscanned: 1,
   cancelled: false,
   quit: null,
@@ -31,22 +34,55 @@ const fixtureScan: SpaceScan = {
   trash_supported: true,
 };
 
+const fixtureCursorScan: SpaceScan = {
+  protected_bytes: 3_100_000_000,
+  cleanable_bytes: 0,
+  unscanned: 0,
+  cancelled: false,
+  quit: null,
+  entries: [],
+  trash_supported: true,
+};
+
+const fixtureCodexScan: SpaceScan = { ...fixtureCursorScan, protected_bytes: 2_600_000_000 };
+
 const KB = 1_000;
 const MB = 1_000_000;
 
-export function formatBytes(bytes: number) {
-  if (bytes >= GB) return `${(bytes / GB).toFixed(2)} GB`;
+export function formatBytes(bytes: number, digits = 2) {
+  if (bytes >= GB) return `${(bytes / GB).toFixed(digits)} GB`;
   if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
   if (bytes >= KB) return `${Math.round(bytes / KB)} KB`;
   return `${bytes} B`;
 }
 
+/** 数字和单位分开，指标与工具行用一位小数（Figma 20:316「14.6 GB」）。 */
+export function splitSize(bytes: number) {
+  const [value, unit = ""] = formatBytes(bytes, 1).split(" ");
+  return { value, unit };
+}
+
 const groups = [
-  { id: "cache", name: "运行缓存", prefix: "cache/", note: "下次启动自动重建" },
-  { id: "logs", name: "日志", prefix: "logs/", note: "不影响对话" },
-  { id: "tmp", name: "附件临时文件", prefix: "attachments/v1/tmp/", note: "未发送的临时附件会丢弃" },
-  { id: "proj", name: "会话项目缓存", prefix: "storages/session_projcache/", note: "可能影响恢复速度" },
+  { id: "cache", name: "运行缓存", prefix: "cache/", path: "~/.dsh/cache", note: "下次启动自动重建" },
+  { id: "logs", name: "日志", prefix: "logs/", path: "~/.dsh/logs", note: "不影响对话" },
+  { id: "tmp", name: "附件临时文件", prefix: "attachments/v1/tmp/", path: "~/.dsh/attachments/v1/tmp", note: "未发送的临时附件会丢失" },
+  { id: "proj", name: "会话项目缓存", prefix: "storages/session_projcache/", path: "storages/session_projcache", note: "可能影响恢复速度" },
 ];
+
+export type SpaceToolId = "deepseek_harness" | "cursor" | "codex" | "ds_bot";
+
+const toolNames: Record<SpaceToolId, string> = {
+  deepseek_harness: "DeepSeek Harness",
+  cursor: "Cursor",
+  codex: "ChatGPT",
+  ds_bot: "DS Bot",
+};
+
+/** 只统计、不清理的工具的说明（决策：Cursor 与 ChatGPT 全部受保护）。 */
+export const statOnlyNote: Record<"cursor" | "codex", string> = {
+  cursor: "Cursor 的数据全部受保护，万象只统计占用，不清理",
+  codex: "ChatGPT 无可安全重建的证据，只统计不清理",
+};
 
 export function groupEntries(entries: SpaceEntry[]) {
   return groups
@@ -75,7 +111,11 @@ export function SpacePage({
   thresholdGb,
   scanRequest,
   onStamp,
+  onSummary,
+  initialTool = "deepseek_harness",
 }: {
+  onSummary?: (summary: { tool: string; known: number; protectedBytes: number; cleanable: number }) => void;
+  initialTool?: SpaceToolId;
   fixture: boolean;
   windows: boolean;
   sheet: "" | "confirm" | "result";
@@ -86,6 +126,7 @@ export function SpacePage({
   const [live, setLive] = useState<SpaceScan | null>(null);
   const [cursorScan, setCursorScan] = useState<SpaceScan | null>(null);
   const [codexScan, setCodexScan] = useState<SpaceScan | null>(null);
+  const [tool, setTool] = useState<SpaceToolId>(initialTool);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
@@ -96,6 +137,8 @@ export function SpacePage({
   const [releasedBytes, setReleasedBytes] = useState(0);
   const [estimateBytes, setEstimateBytes] = useState(0);
   const scan = fixture ? fixtureScan : live;
+  const cursor = fixture ? fixtureCursorScan : cursorScan;
+  const codex = fixture ? fixtureCodexScan : codexScan;
   const entries = scan?.entries ?? [];
   const selected = entries.filter((entry) => checked[entry.rel]);
   const selectedBytes = selected.reduce((sum, entry) => sum + entry.bytes, 0);
@@ -103,15 +146,27 @@ export function SpacePage({
   const cleanable = scan?.cleanable_bytes ?? 0;
   const protectedBytes = scan?.protected_bytes ?? 0;
   const over = known > thresholdGb * GB;
+  const cursorKnown = cursor ? cursor.protected_bytes + cursor.cleanable_bytes : 0;
+  const codexKnown = codex ? codex.protected_bytes + codex.cleanable_bytes : 0;
+  const anyScan = Boolean(scan || cursor || codex);
+  const allKnown = known + cursorKnown + codexKnown;
+  const overCount = [known, cursorKnown, codexKnown].filter((bytes) => bytes > thresholdGb * GB).length;
+  const unscannedCount = (scan?.unscanned ?? 0) + (cursor?.unscanned ?? 0) + (codex?.unscanned ?? 0);
+  const barMax = Math.max(known, cursorKnown, codexKnown, 1);
   const quit = scan?.quit ?? null;
   const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
-  const cleanShare = known > 0 ? Math.round((cleanable / known) * 100) : 0;
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
 
   useEffect(() => {
     if (scanRequest === 0) return;
     void onScan();
   }, [scanRequest]);
+
+  // 打开页面时自动做一次只读扫描（只统计大小），不必再手动点刷新
+  useEffect(() => {
+    if (!fixture && !anyScan && scanRequest === 0 && inTauri()) void onScan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onScan() {
     if (fixture) {
@@ -133,6 +188,12 @@ export function SpacePage({
         return;
       }
       setLive(harness);
+      onSummary?.({
+        tool: "DeepSeek Harness",
+        known: harness.protected_bytes + harness.cleanable_bytes,
+        protectedBytes: harness.protected_bytes,
+        cleanable: harness.cleanable_bytes,
+      });
       setChecked({});
       onStamp(stampNow());
       if (harness.cancelled) setNotice("扫描已取消");
@@ -164,7 +225,14 @@ export function SpacePage({
       setReleasedBytes(done.total_bytes);
       setResult(done.items);
       setChecked({});
-      setLive(await scanSpace("deepseek_harness"));
+      const after = await scanSpace("deepseek_harness");
+      setLive(after);
+      onSummary?.({
+        tool: "DeepSeek Harness",
+        known: after.protected_bytes + after.cleanable_bytes,
+        protectedBytes: after.protected_bytes,
+        cleanable: after.cleanable_bytes,
+      });
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "清理没有完成");
     } finally {
@@ -189,123 +257,161 @@ export function SpacePage({
         </div>
       )}
       <section className="space-metrics">
-        <Metric label="已知占用" value={scan ? formatBytes(known) : "尚未扫描"} warn={false} />
-        <Metric label="超过阈值" value={scan ? (over ? "1 个工具" : "0 个工具") : "—"} warn={over} />
-        <Metric label="可清理" value={scan ? `约 ${formatBytes(cleanable)}` : "—"} warn={false} />
-        <Metric label="未扫描" value={scan ? `${scan.unscanned} 处` : "—"} warn={false} />
-        <span className="space-metrics-note">重复目录只统计一次；对话、记忆与账户数据始终受保护</span>
+        <Metric label="已知占用" bytes={anyScan ? allKnown : null} />
+        <Metric label="超过阈值" value={anyScan ? String(overCount) : null} unit="个工具" tone={overCount > 0 ? "warn" : ""} />
+        <Metric label="可清理" bytes={scan ? cleanable : null} />
+        <Metric label="未扫描" value={anyScan ? String(unscannedCount) : null} unit="处" tone="quiet" />
+        <span className="space-metrics-note">重叠目录只统计一次；对话、记忆与账户数据始终受保护</span>
       </section>
       <div className="space-body">
-        <aside className="space-tools">
-          <ToolRow mark="H" name="DeepSeek Harness" size={scan ? formatBytes(known) : "尚未扫描"} active over={over} share={cleanShare} meter={Boolean(scan)} />
-          <ToolRow mark="C" name="Cursor" size={cursorScan ? formatBytes(cursorScan.protected_bytes + cursorScan.cleanable_bytes) : "未扫描"} active={false} over={false} share={0} meter={Boolean(cursorScan)} />
-          <ToolRow mark="Cx" name="ChatGPT" size={codexScan ? formatBytes(codexScan.protected_bytes + codexScan.cleanable_bytes) : "只统计"} active={false} over={false} share={0} meter={Boolean(codexScan)} />
-          <ToolRow mark="B" name="DS Bot" size="—" active={false} over={false} share={0} meter={false} note="已计入 Harness（共用 ~/.dsh）" />
-          <p>ChatGPT 无可安全清理的证据，只统计不清理</p>
+        <aside className="space-tools" aria-label="工具">
+          <ToolRow
+            id="deepseek_harness"
+            selected={tool === "deepseek_harness"}
+            onSelect={setTool}
+            size={scan ? formatBytes(known, 1) : "未扫描"}
+            over={over}
+            bar={scan ? { width: known / barMax, protectedBytes, cleanable } : null}
+          />
+          <ToolRow
+            id="cursor"
+            selected={tool === "cursor"}
+            onSelect={setTool}
+            size={cursor ? formatBytes(cursorKnown, 1) : "未扫描"}
+            over={cursorKnown > thresholdGb * GB}
+            bar={cursor ? { width: cursorKnown / barMax, protectedBytes: cursor.protected_bytes, cleanable: 0 } : null}
+          />
+          <ToolRow
+            id="codex"
+            selected={tool === "codex"}
+            onSelect={setTool}
+            size={codex ? formatBytes(codexKnown, 1) : "未扫描"}
+            over={codexKnown > thresholdGb * GB}
+            bar={codex ? { width: codexKnown / barMax, protectedBytes: codex.protected_bytes, cleanable: 0 } : null}
+          />
+          <ToolRow id="ds_bot" selected={tool === "ds_bot"} onSelect={setTool} size="—" over={false} bar={null} note="已计入 Harness（共用 ~/.dsh）" />
+          <p>{statOnlyNote.codex}</p>
         </aside>
-        <section className="space-detail">
-          <header>
-            <span className="space-mark">H</span>
-            <div>
-              <strong>DeepSeek Harness</strong>
-              <span>
-                {scan
-                  ? `已知占用 ${formatBytes(known)} · 阈值 ${thresholdGb} GB · 另有 ${scan.unscanned} 处未扫描`
-                  : "尚未扫描"}
-              </span>
-            </div>
-          </header>
-          <div className="space-stack" aria-hidden="true">
-            <i style={{ width: `${100 - cleanShare}%` }} />
-            <b style={{ width: `${cleanShare}%` }} />
-          </div>
-          <p className="space-legend">
-            <span>受保护 {scan ? formatBytes(protectedBytes) : "—"}</span>
-            <span>可清理 {scan ? `约 ${formatBytes(cleanable)}` : "—"}</span>
-          </p>
-          <h2>可清理</h2>
-          {entries.length === 0 ? (
-            <p className="space-empty">这一项还没有可清理的内容。</p>
-          ) : (
-            <ul className="space-entries">
-              {groupEntries(entries).map((group) => {
-                const mark = groupMark(group.entries, checked);
-                const open = Boolean(openGroups[group.id]);
-                const weak = group.entries.some((entry) => entry.weak);
-                const bytes = group.entries.reduce((sum, entry) => sum + entry.bytes, 0);
-                return (
-                  <li key={group.id}>
-                    <div className="space-category">
-                      <Check
-                        aria-label={group.name}
-                        checked={mark.checked}
-                        indeterminate={mark.indeterminate}
-                        onChange={() => toggleGroup(group.entries, !mark.checked)}
-                      />
-                      <button
-                        type="button"
-                        className="space-expand"
-                        aria-expanded={open}
-                        onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
-                      >
-                        <strong>
-                          {group.name}
-                          {weak && <em>证据不足</em>}
-                        </strong>
-                        <small>
-                          {group.entries.length} 项 · {group.note}
-                        </small>
-                      </button>
-                      <b>约 {formatBytes(bytes)}</b>
-                    </div>
-                    {open ? (
-                      <ul className="space-children">
-                        {group.entries.map((entry) => {
-                          const name = entry.rel.split("/").pop() || entry.rel;
-                          return (
-                            <li key={entry.rel}>
-                              <label>
-                                <Check
-                                  aria-label={name}
-                                  checked={Boolean(checked[entry.rel])}
-                                  onChange={(event) =>
-                                    setChecked((current) => ({ ...current, [entry.rel]: event.target.checked }))
-                                  }
-                                />
-                                <span>
-                                  <strong>{name}</strong>
-                                  <small>{entry.rel}</small>
-                                </span>
-                                <b>{formatBytes(entry.bytes)}</b>
-                              </label>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : null}
-                  </li>
-                );
-              })}
+        {tool === "deepseek_harness" ? (
+          <section className="space-detail" aria-label="DeepSeek Harness">
+            <DetailHead
+              id="deepseek_harness"
+              meta={
+                scan
+                  ? `已知占用 ${formatBytes(known, 1)} · 阈值 ${thresholdGb} GB · 另有 ${scan.unscanned} 处未扫描`
+                  : "尚未扫描"
+              }
+            />
+            <StackBar protectedBytes={protectedBytes} cleanable={cleanable} known={Boolean(scan)} />
+            <h2>可清理</h2>
+            {entries.length === 0 ? (
+              <p className="space-empty">{scan ? "这一项还没有可清理的内容。" : "扫描后列出可清理的内容。"}</p>
+            ) : (
+              <ul className="space-entries">
+                {groupEntries(entries).map((group) => {
+                  const mark = groupMark(group.entries, checked);
+                  const open = Boolean(openGroups[group.id]);
+                  const weak = group.entries.some((entry) => entry.weak);
+                  const bytes = group.entries.reduce((sum, entry) => sum + entry.bytes, 0);
+                  const many = group.entries.length > 1;
+                  return (
+                    <li key={group.id}>
+                      <div className="space-category">
+                        <Check
+                          aria-label={group.name}
+                          checked={mark.checked}
+                          indeterminate={mark.indeterminate}
+                          onChange={() => toggleGroup(group.entries, !mark.checked)}
+                        />
+                        <button
+                          type="button"
+                          className="space-expand"
+                          aria-expanded={many ? open : undefined}
+                          disabled={!many}
+                          onClick={() => setOpenGroups((current) => ({ ...current, [group.id]: !open }))}
+                        >
+                          <strong>
+                            {group.name}
+                            {weak && <em className="tag ochre">证据不足</em>}
+                          </strong>
+                          <small>
+                            {group.path}
+                            {many ? ` · ${group.entries.length} 项` : ""} · {group.note}
+                          </small>
+                        </button>
+                        <b>{formatBytes(bytes)}</b>
+                      </div>
+                      {many && open ? (
+                        <ul className="space-children">
+                          {group.entries.map((entry) => {
+                            const name = entry.rel.split("/").pop() || entry.rel;
+                            return (
+                              <li key={entry.rel}>
+                                <label>
+                                  <Check
+                                    aria-label={name}
+                                    checked={Boolean(checked[entry.rel])}
+                                    onChange={(event) =>
+                                      setChecked((current) => ({ ...current, [entry.rel]: event.target.checked }))
+                                    }
+                                  />
+                                  <span>
+                                    <strong>{name}</strong>
+                                    <small>{entry.rel}</small>
+                                  </span>
+                                  <b>{formatBytes(entry.bytes)}</b>
+                                </label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <h2>受保护</h2>
+            <ul className="space-protected">
+              <li>
+                <IconLock />
+                <span>对话、记忆、账户与其余用户数据</span>
+                <b>{scan ? formatBytes(protectedBytes, 1) : "—"}</b>
+              </li>
             </ul>
-          )}
-          <h2>受保护</h2>
-          <p className="space-protected-row">
-            <IconLock />
-            <span>其余用户数据</span>
-            <b>{scan ? formatBytes(protectedBytes) : "尚未扫描"}</b>
-          </p>
-          {notice && <p className="space-notice">{notice}</p>}
-          <footer>
-            <span>
-              已选 {selected.length} 项 · 预计释放 约 {formatBytes(selectedBytes)}
-              {quit && <small>{quit}</small>}
-            </span>
-            <button type="button" disabled={cleanupDisabled} onClick={() => setConfirming(true)}>
-              <IconTrash />
-              {windows ? "Windows 暂不支持" : "清理所选项"}
-            </button>
-          </footer>
-        </section>
+            {notice && <p className="space-notice">{notice}</p>}
+            <footer>
+              <span>
+                <strong>
+                  已选 {selected.length} 项 · 预计释放 {formatBytes(selectedBytes)}
+                </strong>
+                {quit ? <small>{quit}</small> : <small>建议先退出 DeepSeek Harness</small>}
+              </span>
+              <button type="button" disabled={cleanupDisabled} onClick={() => setConfirming(true)}>
+                <IconTrash />
+                {windows ? "Windows 暂不支持" : "清理所选项…"}
+              </button>
+            </footer>
+          </section>
+        ) : tool === "ds_bot" ? (
+          <section className="space-detail" aria-label="DS Bot">
+            <DetailHead id="ds_bot" meta="与 DeepSeek Harness 共用 ~/.dsh" />
+            <p className="space-explain">
+              DS Bot 的数据和 DeepSeek Harness 存在同一个目录里，占用已经计入 Harness，这里不重复统计。清理也在 Harness 里进行。
+            </p>
+            <div className="space-detail-actions">
+              <button type="button" className="space-secondary" onClick={() => setTool("deepseek_harness")}>
+                查看 DeepSeek Harness
+              </button>
+            </div>
+          </section>
+        ) : (
+          <StatOnlyDetail
+            id={tool}
+            scan={tool === "cursor" ? cursor : codex}
+            thresholdGb={thresholdGb}
+          />
+        )}
       </div>
       {dialog === "confirm" && (
         <dialog className="space-dialog" open>
@@ -379,53 +485,150 @@ function stampNow() {
   return `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
 }
 
-function Metric({ label, value, warn }: { label: string; value: string; warn: boolean }) {
+function Metric({
+  label,
+  bytes,
+  value,
+  unit,
+  tone = "",
+}: {
+  label: string;
+  bytes?: number | null;
+  value?: string | null;
+  unit?: string;
+  tone?: "" | "warn" | "quiet";
+}) {
+  let shown: { value: string; unit: string } | null = null;
+  if (bytes !== undefined && bytes !== null) shown = splitSize(bytes);
+  else if (value !== undefined && value !== null) shown = { value, unit: unit ?? "" };
   return (
-    <div>
+    <div className="space-metric">
       <span>{label}</span>
-      <strong className={warn ? "warn" : ""}>{value}</strong>
+      {shown ? (
+        <strong className={tone}>
+          {shown.value}
+          {shown.unit && <small>{shown.unit}</small>}
+        </strong>
+      ) : (
+        <strong className="quiet">—</strong>
+      )}
     </div>
   );
 }
 
+function DetailHead({ id, meta }: { id: SpaceToolId; meta: string }) {
+  return (
+    <header>
+      <ToolIcon id={id} className="space-mark large" />
+      <div>
+        <strong>{toolNames[id]}</strong>
+        <span>{meta}</span>
+      </div>
+    </header>
+  );
+}
+
+function StackBar({ protectedBytes, cleanable, known }: { protectedBytes: number; cleanable: number; known: boolean }) {
+  const total = protectedBytes + cleanable;
+  const share = total > 0 ? (cleanable / total) * 100 : 0;
+  return (
+    <>
+      <div className="space-stack" aria-hidden="true">
+        {known && total > 0 ? (
+          <>
+            <i style={{ flexGrow: 100 - share }} />
+            {cleanable > 0 && <b style={{ flexGrow: share }} />}
+          </>
+        ) : null}
+      </div>
+      <p className="space-legend">
+        <span>
+          <i className="protected" />
+          受保护 {known ? formatBytes(protectedBytes, 1) : "—"}
+        </span>
+        {cleanable > 0 || !known ? (
+          <span>
+            <i className="clean" />
+            可清理 {known ? formatBytes(cleanable, 1) : "—"}
+          </span>
+        ) : null}
+      </p>
+    </>
+  );
+}
+
+function StatOnlyDetail({ id, scan, thresholdGb }: { id: "cursor" | "codex"; scan: SpaceScan | null; thresholdGb: number }) {
+  const total = scan ? scan.protected_bytes + scan.cleanable_bytes : 0;
+  return (
+    <section className="space-detail" aria-label={toolNames[id]}>
+      <DetailHead
+        id={id}
+        meta={
+          scan
+            ? `已知占用 ${formatBytes(total, 1)} · 阈值 ${thresholdGb} GB${scan.unscanned > 0 ? ` · 另有 ${scan.unscanned} 处未扫描` : ""}`
+            : "未扫描：在设置里开启空间扫描授权后，点右上角刷新"
+        }
+      />
+      <StackBar protectedBytes={scan ? total : 0} cleanable={0} known={Boolean(scan)} />
+      <h2>可清理</h2>
+      <p className="space-empty">{statOnlyNote[id]}。</p>
+      <h2>受保护</h2>
+      <ul className="space-protected">
+        <li>
+          <IconLock />
+          <span>全部内容</span>
+          <b>{scan ? formatBytes(total, 1) : "—"}</b>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
 function ToolRow({
-  mark,
-  name,
+  id,
+  selected,
+  onSelect,
   size,
-  active,
   over,
-  share,
-  meter,
+  bar,
   note,
 }: {
-  mark: string;
-  name: string;
+  id: SpaceToolId;
+  selected: boolean;
+  onSelect: (id: SpaceToolId) => void;
   size: string;
-  active: boolean;
   over: boolean;
-  share: number;
-  meter: boolean;
+  bar: { width: number; protectedBytes: number; cleanable: number } | null;
   note?: string;
 }) {
+  const total = bar ? bar.protectedBytes + bar.cleanable : 0;
   return (
-    <button type="button" className={active ? "active" : ""}>
-      <span className="space-mark">{mark}</span>
+    <button
+      type="button"
+      className={selected ? "active" : ""}
+      aria-pressed={selected}
+      onClick={() => onSelect(id)}
+    >
+      <ToolIcon id={id} className="space-mark" />
       <span className="space-tool-copy">
         <strong>
-          {name}
-          {over && <em>超过阈值</em>}
+          {toolNames[id]}
+          {over && <em className="tag ochre">超过阈值</em>}
         </strong>
-        <i>
-          {meter ? (
-            <>
-              <b style={{ width: `${100 - share}%` }} />
-              <b className="clean" style={{ width: `${share}%` }} />
-            </>
-          ) : null}
-        </i>
-        {note && <small>{note}</small>}
+        {note ? (
+          <small>{note}</small>
+        ) : (
+          <i className="space-meter" aria-hidden="true">
+            {bar && total > 0 ? (
+              <span style={{ width: `${Math.min(1, Math.max(bar.width, 0.04)) * 100}%` }}>
+                <b style={{ flexGrow: bar.protectedBytes }} />
+                {bar.cleanable > 0 && <b className="clean" style={{ flexGrow: bar.cleanable }} />}
+              </span>
+            ) : null}
+          </i>
+        )}
       </span>
-      <b>{size}</b>
+      <b className={size === "未扫描" || size === "—" ? "quiet" : ""}>{size}</b>
     </button>
   );
 }

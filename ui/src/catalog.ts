@@ -15,12 +15,13 @@ export type CapRow = {
   capability: CapabilityId;
   title: string;
   detail: string;
-  badge: "未验证" | "暂不提供" | "已实测";
+  badge: "未验证" | "暂不提供" | "已实测" | "复制后粘贴";
 };
 
 export type ToolTag = {
   label: string;
-  badge: "未验证" | "暂不提供" | "已实测";
+  capability: CapabilityId;
+  badge: "未验证" | "暂不提供" | "已实测" | "复制后粘贴";
 };
 
 export type ToolSpec = {
@@ -31,7 +32,6 @@ export type ToolSpec = {
   tags: ToolTag[];
 };
 
-const unverified = "未验证" as const;
 
 export const toolSpecs: ToolSpec[] = [
   {
@@ -39,35 +39,35 @@ export const toolSpecs: ToolSpec[] = [
     letter: "H",
     name: "DeepSeek Harness",
     caps: [
-      { capability: "usage", title: "用量", detail: "读取本地用量记录", badge: unverified },
-      { capability: "conversation", title: "对话", detail: "读取对话以准备交接", badge: unverified },
+      { capability: "usage", title: "用量", detail: "读取本机会话里的调用用量，不含 Bot 工作区", badge: "已实测" },
+      { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
       {
         capability: "account_link",
         title: "DeepSeek 账户 · 余额",
-        detail: "已实测 2026-11-09",
+        detail: "用你保存的 API 密钥查询余额",
         badge: "已实测",
       },
       {
         capability: "space_scan",
         title: "空间",
-        detail: "已实测 2026-11-10",
+        detail: "统计本机目录大小，不读取内容",
         badge: "已实测",
       },
       {
         capability: "cleanup",
         title: "清理",
-        detail: "已实测 2026-11-10",
+        detail: "每次清理前逐项列出并确认",
         badge: "已实测",
       },
-      { capability: "insert_content", title: "放入", detail: "尚未实测", badge: unverified },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
     ],
     tags: [
-      { label: "用量", badge: unverified },
-      { label: "对话", badge: unverified },
-      { label: "DeepSeek 账户 · 余额", badge: "已实测" },
-      { label: "空间", badge: "已实测" },
-      { label: "清理", badge: "已实测" },
-      { label: "放入", badge: unverified },
+      { label: "用量", capability: "usage", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "DeepSeek 账户 · 余额", capability: "account_link", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "清理", capability: "cleanup", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
     ],
   },
   {
@@ -75,21 +75,21 @@ export const toolSpecs: ToolSpec[] = [
     letter: "B",
     name: "DS Bot",
     caps: [
-      { capability: "usage", title: "用量", detail: "已实测 2026-11-09", badge: "已实测" },
+      { capability: "usage", title: "用量", detail: "读取 Bot 本机用量记录", badge: "已实测" },
       {
         capability: "account_link",
         title: "DeepSeek 账户 · 余额",
-        detail: "已实测 2026-11-09",
+        detail: "用你保存的 API 密钥查询余额",
         badge: "已实测",
       },
-      { capability: "conversation", title: "Bot 与群聊", detail: "尚未实测", badge: unverified },
-      { capability: "insert_content", title: "交接方式", detail: "尚未实测", badge: unverified },
+      { capability: "conversation", title: "Bot 与群聊", detail: "列出 Bot 与群聊，交接时读取所选会话", badge: "已实测" },
+      { capability: "insert_content", title: "交接方式", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
     ],
     tags: [
-      { label: "用量", badge: "已实测" },
-      { label: "DeepSeek 账户 · 余额", badge: "已实测" },
-      { label: "Bot 与群聊", badge: unverified },
-      { label: "交接方式", badge: unverified },
+      { label: "用量", capability: "usage", badge: "已实测" },
+      { label: "DeepSeek 账户 · 余额", capability: "account_link", badge: "已实测" },
+      { label: "Bot 与群聊", capability: "conversation", badge: "已实测" },
+      { label: "交接方式", capability: "insert_content", badge: "复制后粘贴" },
     ],
   },
   {
@@ -99,27 +99,21 @@ export const toolSpecs: ToolSpec[] = [
     caps: [
       {
         capability: "conversation",
-        title: "对话列表与上下文占用",
-        detail: "标题、更新时间、上下文比例 · 只读",
-        badge: unverified,
-      },
-      {
-        capability: "conversation",
-        title: "读取对话内容",
-        detail: "仅在你发起交接时读取所选对话",
-        badge: unverified,
+        title: "对话",
+        detail: "列出对话与上下文占用，交接时读取所选对话 · 只读",
+        badge: "已实测",
       },
       {
         capability: "space_scan",
         title: "空间扫描",
-        detail: "已实测 2026-11-10",
+        detail: "统计本机目录大小，不读取内容",
         badge: "已实测",
       },
       {
         capability: "cleanup",
         title: "清理",
-        detail: "每次清理前逐项列出并确认",
-        badge: unverified,
+        detail: "Cursor 的缓存清理暂不提供",
+        badge: "暂不提供",
       },
       {
         capability: "usage",
@@ -130,22 +124,21 @@ export const toolSpecs: ToolSpec[] = [
       {
         capability: "create_conversation",
         title: "放入新对话",
-        detail: "官方深链，默认关闭",
-        badge: unverified,
+        detail: "实测 Cursor 的 Agents 窗口不接收深链，交接改为复制后粘贴",
+        badge: "暂不提供",
       },
       {
         capability: "protected_location",
         title: "访问受系统保护的位置",
-        detail: "macOS 需在「隐私与安全性」中授予",
-        badge: unverified,
+        detail: "当前读取的位置不受系统保护，无需授予",
+        badge: "暂不提供",
       },
     ],
     tags: [
-      { label: "对话列表", badge: unverified },
-      { label: "读取内容", badge: unverified },
-      { label: "空间", badge: "已实测" },
-      { label: "用量", badge: "暂不提供" },
-      { label: "放入", badge: unverified },
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
     ],
   },
   {
@@ -156,23 +149,23 @@ export const toolSpecs: ToolSpec[] = [
       {
         capability: "usage",
         title: "用量与额度窗口",
-        detail: "已实测 2026-11-09",
+        detail: "读取本机会话记录里的用量与额度",
         badge: "已实测",
       },
       {
         capability: "space_scan",
         title: "空间扫描",
-        detail: "已实测 2026-11-10",
+        detail: "统计本机目录大小，不读取内容",
         badge: "已实测",
       },
-      { capability: "conversation", title: "对话", detail: "尚未实测", badge: unverified },
-      { capability: "insert_content", title: "放入", detail: "尚未实测", badge: unverified },
+      { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
     ],
     tags: [
-      { label: "用量与额度窗口", badge: "已实测" },
-      { label: "空间", badge: "已实测" },
-      { label: "对话", badge: unverified },
-      { label: "放入", badge: unverified },
+      { label: "用量与额度窗口", capability: "usage", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
     ],
   },
 ];

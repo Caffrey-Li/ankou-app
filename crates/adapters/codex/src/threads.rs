@@ -100,8 +100,69 @@ pub fn title_of(head: &ThreadHead) -> String {
     if let Some(name) = head.name.as_ref().map(|name| name.trim()).filter(|name| !name.is_empty()) {
         return name.to_string();
     }
+    if let Some(line) = head.preview.lines().map(str::trim).find(|line| !line.is_empty()) {
+        let mut title: String = line.chars().take(40).collect();
+        if line.chars().count() > 40 {
+            title.push('…');
+        }
+        return title;
+    }
     let prefix: String = head.id.chars().take(8).collect();
     format!("ChatGPT {prefix}")
+}
+
+/// 用户真正输入的第一句话，跳过系统注入的环境与说明块。
+fn user_preview(kind: Option<&str>, payload: Option<&Value>) -> Option<String> {
+    let payload = payload?;
+    let text = match (kind, payload.get("type").and_then(|item| item.as_str())) {
+        (Some("event_msg"), Some("user_message")) => payload
+            .get("message")
+            .and_then(|item| item.as_str())
+            .map(str::to_string),
+        (Some("response_item"), Some("message"))
+            if payload.get("role").and_then(|item| item.as_str()) == Some("user") =>
+        {
+            payload
+                .get("content")
+                .and_then(|item| item.as_array())
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.get("text").and_then(|text| text.as_str()))
+                        .find(|text| !injected(text))
+                        .map(str::to_string)
+                })
+        }
+        _ => None,
+    }?;
+    let text = text.trim();
+    (!text.is_empty() && !injected(text)).then(|| text.to_string())
+}
+
+fn injected(text: &str) -> bool {
+    let text = text.trim_start();
+    text.starts_with('<')
+        || text.starts_with("# AGENTS.md")
+        || text.starts_with("# Context from my IDE")
+        // IDE 附带的文件清单与宿主程序的提示，也不是用户说的话
+        || text.starts_with("# Files mentioned by the user")
+        || text.starts_with("Host notice:")
+        || text.starts_with("Retained source order")
+        // 压缩或接续时系统注入的历史说明，不是用户说的话
+        || text.starts_with("The following is the Codex agent history")
+        || text.starts_with(">>>")
+        || text.starts_with("```")
+        || transcript_line(text)
+}
+
+/// 压缩记录里的「[1] user: …」「[2] assistant: …」这类转录行。
+fn transcript_line(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix('[') else {
+        return false;
+    };
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    digits > 0
+        && (rest[digits..].starts_with("] user:") || rest[digits..].starts_with("] assistant:"))
 }
 
 pub fn parse_jsonl_head(text: &str) -> Option<ThreadHead> {
@@ -111,12 +172,25 @@ pub fn parse_jsonl_head(text: &str) -> Option<ThreadHead> {
     let mut updated = None;
     let mut used = None;
     let mut window = None;
+    let mut preview = String::new();
+    let mut typed = String::new();
     for line in text.lines() {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
         let kind = value.get("type").and_then(|item| item.as_str());
         let payload = value.get("payload");
+        // 用户在界面里输入的话（event_msg）优先；压缩后注入的 user 消息只作后备
+        if typed.is_empty() && kind == Some("event_msg") {
+            if let Some(text) = user_preview(kind, payload) {
+                typed = text.chars().take(200).collect();
+            }
+        }
+        if preview.is_empty() {
+            if let Some(text) = user_preview(kind, payload) {
+                preview = text.chars().take(200).collect();
+            }
+        }
         if kind == Some("session_meta") {
             if let Some(payload) = payload {
                 id = payload.get("id").and_then(|item| item.as_str()).map(str::to_string);
@@ -143,10 +217,13 @@ pub fn parse_jsonl_head(text: &str) -> Option<ThreadHead> {
         }
     }
     let id = id?;
+    if !typed.is_empty() {
+        preview = typed;
+    }
     Some(ThreadHead {
         id,
         name: None,
-        preview: String::new(),
+        preview,
         created_at: created.unwrap_or_default(),
         updated_at: updated.unwrap_or_default(),
         status: String::new(),

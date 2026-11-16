@@ -1,11 +1,12 @@
 {
   "identifier": "default",
   "description": "本地主窗口。只放行授权、设置、密钥、历史和用量命令。窗口仍然不能发起网络请求。",
-  "windows": ["main"],
+  "windows": ["main", "tray"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
     "allow-list-grants",
     "allow-revoke",
     "allow-get-settings",
@@ -31,6 +32,9 @@
     "allow-scan-space",
     "allow-cancel-scan",
     "allow-prepare-cleanup",
-    "allow-run-cleanup"
+    "allow-run-cleanup",
+    "allow-open-privacy-settings",
+    "allow-send-notice",
+    "allow-tray-action"
   ]
 }

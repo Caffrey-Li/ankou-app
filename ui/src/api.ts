@@ -84,7 +84,11 @@ export async function loadSnapshot(): Promise<Snapshot> {
     call<Settings>("get_settings"),
     call<ToolSnapshot[]>("discover_tools"),
     call<StoredGrant[]>("list_grants"),
-    call<boolean>("deepseek_key_saved"),
+    // 钥匙串可能在等系统确认框：最多等 1.5 秒，界面先画出来
+    Promise.race([
+      call<boolean>("deepseek_key_saved").catch(() => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+    ]),
   ]);
   return { settings, tools, grants, keySaved };
 }
@@ -114,6 +118,21 @@ export function revokeGrant(id: number) {
   return call<void>("revoke", { id });
 }
 
+export function trayAction(action: "overview" | "settings" | "handoff" | "space" | "quit") {
+  if (!inTauri()) return Promise.resolve();
+  return call<void>("tray_action", { action });
+}
+
+export function sendNotice(title: string, body: string) {
+  if (!inTauri()) return Promise.resolve(false);
+  return call<boolean>("send_notice", { title, body });
+}
+
+export function openPrivacySettings() {
+  if (!inTauri()) return Promise.resolve();
+  return call<void>("open_privacy_settings");
+}
+
 export function setCapability(kind: string, on: boolean) {
   if (!inTauri()) return Promise.resolve();
   return call<void>("set_capability", { kind, on });
@@ -132,6 +151,7 @@ export type UsageDay = {
   label: string;
   codex: number | null;
   bot: number | null;
+  harness?: number | null;
 };
 
 export type UsageDetail = {
@@ -163,20 +183,20 @@ export const emptyUsage: UsageView = {
   stamp: "—",
   banner: [
     "Cursor 用量暂不提供，未计入",
-    "Harness 用量暂不提供，未计入",
+    "Harness 未授权，未计入",
     "ChatGPT 未授权，未计入",
     "DS Bot 未授权，未计入",
   ],
   cards: [
-    { name: "ChatGPT", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
-    { name: "ChatGPT · 窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "ChatGPT · 5 小时窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
+    { name: "ChatGPT · 7 天窗口", value: "—", note: "未授权", percent: null, reset: null, link: "去设置授权" },
     { name: "DeepSeek 账户", value: "—", note: "未保存密钥", percent: null, reset: null, link: null },
     { name: "Cursor", value: "—", note: "暂不提供", percent: null, reset: null, link: null },
   ],
   days: [],
   details: [
     { name: "ChatGPT", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
-    { name: "DeepSeek Harness", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },
+    { name: "DeepSeek Harness", tokens: "未授权", calls: "未授权", fee: "不提供", source: "未授权" },
     { name: "DS Bot", tokens: "未授权", calls: "未授权", fee: "暂不提供", source: "未授权" },
     { name: "Cursor", tokens: "暂不提供", calls: "暂不提供", fee: "暂不提供", source: "暂不提供" },
   ],
@@ -226,6 +246,8 @@ export type ConversationPage = {
   rows: ConversationRow[];
   codex: SourceStatus;
   ds_bot: SourceStatus;
+  harness?: SourceStatus;
+  cursor?: SourceStatus;
 };
 
 export function listConversations() {
@@ -234,6 +256,8 @@ export function listConversations() {
       rows: [],
       codex: "unauthorized",
       ds_bot: "unauthorized",
+      harness: "unauthorized",
+      cursor: "unauthorized",
     } satisfies ConversationPage);
   }
   return call<ConversationPage>("list_conversations");

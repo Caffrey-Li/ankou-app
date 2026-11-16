@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { TrayPanel } from "./TrayPanel";
 import "./shell.css";
 import "./tokens.css";
 
@@ -25,8 +26,13 @@ function fitWindowFill() {
   );
 }
 
-fitWindowFill();
-window.addEventListener("resize", fitWindowFill);
+const view = window.location.hash === "#tray" ? "tray" : new URLSearchParams(window.location.search).get("view");
+if (view === "tray") {
+  document.documentElement.dataset.view = "tray";
+} else {
+  fitWindowFill();
+  window.addEventListener("resize", fitWindowFill);
+}
 
 const compare = new URLSearchParams(window.location.search).get("compare") === "1";
 if (compare) {
@@ -41,6 +47,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    {view === "tray" ? <TrayPanel /> : <App />}
   </StrictMode>,
 );

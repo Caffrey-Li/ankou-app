@@ -239,6 +239,33 @@ impl Store {
         Ok(read_settings(&conn)?)
     }
 
+    /// 是否已保存 DeepSeek Key 的本地记号。读这个不碰钥匙串，避免启动时弹出钥匙串确认。
+    pub fn key_saved_flag(&self) -> Result<Option<bool>, StoreError> {
+        let conn = self.conn.lock().expect("key flag");
+        let value: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'meta.deepseek_key_saved'",
+                [],
+                |row| row.get(0),
+            )
+            .map(Some)
+            .or_else(|err| match err {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                _ => Err(StoreError::Database),
+            })?;
+        Ok(value.map(|value| value == "1"))
+    }
+
+    pub fn set_key_saved_flag(&self, saved: bool) -> Result<(), StoreError> {
+        let conn = self.conn.lock().expect("key flag");
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('meta.deepseek_key_saved', ?1)",
+            params![if saved { "1" } else { "0" }],
+        )
+        .map_err(|_| StoreError::Database)?;
+        Ok(())
+    }
+
     pub fn set_settings(&self, settings: &Settings) -> Result<(), StoreError> {
         validate(settings)?;
         let conn = self.conn.lock().expect("settings");
@@ -698,9 +725,8 @@ impl Store {
             load_rows(&conn)?
         };
         for row in rows {
-            if row.status != GrantStatus::Active {
-                continue;
-            }
+            // 「需要重新授权」只由这里的启动核对写入（撤销会直接删除记录），所以每次启动
+            // 都对有效和待重新授权的记录重新核对：目录没变（路径与 inode 相同）就自动恢复。
             let expected = RootStamp {
                 path: row.root.clone(),
                 dev: row.dev,
@@ -715,19 +741,31 @@ impl Store {
                 },
                 &expected,
             ) {
-                Ok(id) => {
+                Ok((id, stamp)) => {
                     self.live.lock().expect("live").insert(row.id, id);
+                    if stamp.dev != row.dev || row.status != GrantStatus::Active {
+                        let conn = self.conn.lock().expect("restore");
+                        conn.execute(
+                            "UPDATE grants SET dev = ?1, status = 'active' WHERE id = ?2",
+                            params![stamp.dev.to_string(), row.id],
+                        )
+                        .map_err(|_| StoreError::Database)?;
+                    }
                 }
                 Err(GuardError::NeedsReauth)
                 | Err(GuardError::RootMissing)
                 | Err(GuardError::RootNotDirectory) => {
-                    let conn = self.conn.lock().expect("restore");
-                    conn.execute(
-                        "UPDATE grants SET status = 'needs_reauth' WHERE id = ?1",
-                        [row.id],
-                    )
-                    .map_err(|_| StoreError::Database)?;
+                    if row.status != GrantStatus::NeedsReauth {
+                        let conn = self.conn.lock().expect("restore");
+                        conn.execute(
+                            "UPDATE grants SET status = 'needs_reauth' WHERE id = ?1",
+                            [row.id],
+                        )
+                        .map_err(|_| StoreError::Database)?;
+                    }
                 }
+                // 已经是「需要重新授权」的记录再核对出别的错误，保持原状，不能让整个存储打不开。
+                Err(_) if row.status == GrantStatus::NeedsReauth => {}
                 Err(err) => return Err(StoreError::Guard(err)),
             }
         }

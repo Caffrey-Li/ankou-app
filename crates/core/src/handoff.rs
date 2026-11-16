@@ -127,6 +127,9 @@ pub fn organize_local(text: &str) -> Organized {
         }
     }
     if !seen {
+        if let Some(organized) = organize_turns(text) {
+            return organized;
+        }
         return Organized {
             goal: String::new(),
             progress: text.to_string(),
@@ -148,6 +151,78 @@ pub fn organize_local(text: &str) -> Organized {
         sources: bins[6].clone(),
         note: String::new(),
     }
+}
+
+/// 原始对话（「用户：」「助手：」开头的段落）的本地整理：只摘取原文，不做理解。
+fn organize_turns(text: &str) -> Option<Organized> {
+    let mut turns: Vec<(bool, String)> = Vec::new();
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("用户：") {
+            turns.push((true, rest.to_string()));
+        } else if let Some(rest) = line.strip_prefix("助手：") {
+            turns.push((false, rest.to_string()));
+        } else if let Some(last) = turns.last_mut() {
+            last.1.push('\n');
+            last.1.push_str(line);
+        }
+    }
+    if turns.is_empty() {
+        return None;
+    }
+    let clip = |text: &str, max: usize| -> String {
+        let text = text.trim();
+        if text.chars().count() <= max {
+            text.to_string()
+        } else {
+            let mut out: String = text.chars().take(max).collect();
+            out.push('…');
+            out
+        }
+    };
+    let bullet = |text: &str, max: usize| -> String {
+        clip(text, max)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .enumerate()
+            .map(|(index, line)| {
+                if index == 0 {
+                    format!("· {}", line.trim())
+                } else {
+                    format!("  {}", line.trim())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let users: Vec<&String> = turns.iter().filter(|(user, _)| *user).map(|(_, text)| text).collect();
+    let replies: Vec<&String> = turns.iter().filter(|(user, _)| !*user).map(|(_, text)| text).collect();
+    let goal = users.first().map(|text| clip(text.as_str(), 400)).unwrap_or_default();
+    let progress = replies[replies.len().saturating_sub(2)..]
+        .iter()
+        .map(|text| bullet(text.as_str(), 600))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let last_is_user = turns.last().is_some_and(|(user, _)| *user);
+    let unfinished = if last_is_user {
+        users.last().map(|text| bullet(text.as_str(), 400)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let next = if users.len() > 1 {
+        users.last().map(|text| format!("1. 接着处理：{}", clip(text.as_str(), 300))).unwrap_or_default()
+    } else {
+        "1. 先读完进展，再决定下一步".to_string()
+    };
+    Some(Organized {
+        goal,
+        progress,
+        unfinished,
+        decisions: String::new(),
+        next,
+        unknown: "· 本地整理只摘取原文，没有理解内容；需要概括时改用 AI 摘要".to_string(),
+        sources: format!("对话 {} 段（用户 {}、助手 {}）", turns.len(), users.len(), replies.len()),
+        note: String::new(),
+    })
 }
 
 pub fn summary_body(transcript: &str) -> String {

@@ -110,28 +110,55 @@ fn get_settings(hub: State<'_, Hub>) -> Result<Settings, String> {
 }
 
 #[tauri::command]
-fn set_settings(hub: State<'_, Hub>, settings: Settings) -> Result<(), String> {
-    hub.store.set_settings(&settings).map_err(text)
+fn set_settings<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    hub: State<'_, Hub>,
+    settings: Settings,
+) -> Result<(), String> {
+    hub.store.set_settings(&settings).map_err(text)?;
+    crate::system::apply(&app, &settings)
+}
+
+#[tauri::command]
+fn send_notice<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    hub: State<'_, Hub>,
+    title: String,
+    body: String,
+) -> Result<bool, String> {
+    let settings = hub.store.settings().map_err(text)?;
+    crate::system::notify(&app, &settings, &title, &body)
 }
 
 #[tauri::command]
 fn save_deepseek_key(hub: State<'_, Hub>, key: String) -> Result<(), String> {
     let result = hub.secrets.save(&key).map_err(text);
     drop(key);
-    result
+    result?;
+    hub.store.set_key_saved_flag(true).map_err(text)
 }
 
 #[tauri::command]
 fn delete_deepseek_key(hub: State<'_, Hub>) -> Result<(), String> {
-    hub.secrets.delete().map_err(text)
+    hub.secrets.delete().map_err(text)?;
+    hub.store.set_key_saved_flag(false).map_err(text)
 }
 
+/// 先看本地记号；只有从没记过（旧版本保存的 Key）才去钥匙串确认一次，并且不在主线程上等。
 #[tauri::command]
-fn deepseek_key_saved(hub: State<'_, Hub>) -> Result<bool, String> {
+async fn deepseek_key_saved(hub: State<'_, Hub>) -> Result<bool, String> {
     if crate::measured::space_fixture_active() {
         return Ok(false);
     }
-    hub.secrets.is_saved().map_err(text)
+    if let Some(saved) = hub.store.key_saved_flag().map_err(text)? {
+        return Ok(saved);
+    }
+    let saved = tauri::async_runtime::spawn_blocking(|| SecretStore::new().is_saved())
+        .await
+        .map_err(text)?
+        .map_err(text)?;
+    hub.store.set_key_saved_flag(saved).map_err(text)?;
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -204,7 +231,8 @@ fn usage_page(
         key_saved: if crate::measured::space_fixture_active() {
             false
         } else {
-            hub.secrets.is_saved().unwrap_or(false)
+            // 本地记号，不在主线程上读钥匙串（新签名的包会弹系统确认框）
+            hub.store.key_saved_flag().ok().flatten().unwrap_or(false)
         },
         account_linked: hub
             .store
@@ -213,6 +241,10 @@ fn usage_page(
         codex_app_server: settings.codex_app_server,
         codex_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::Codex),
         bot_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::DsBot),
+        harness_access: record_access(
+            &hub.store.grants().map_err(StoreErrorText)?,
+            ToolId::DeepSeekHarness,
+        ),
     }))
 }
 
@@ -282,7 +314,49 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         crate::space::cancel_scan,
         crate::space::prepare_cleanup,
         crate::space::run_cleanup,
+        open_privacy_settings,
+        send_notice,
+        tray_action,
     ])
+}
+
+/// 快速面板上的按钮：收起面板，再打开主窗口到对应页面，或退出。
+#[tauri::command]
+fn tray_action<R: tauri::Runtime>(app: AppHandle<R>, action: String) -> Result<(), String> {
+    if let Some(panel) = app.get_webview_window("tray") {
+        let _ = panel.hide();
+    }
+    match action.as_str() {
+        "quit" => {
+            if let Some(supervisor) = app.try_state::<wanxiang_core::Supervisor>() {
+                supervisor.shutdown();
+            }
+            app.exit(0);
+            Ok(())
+        }
+        "overview" | "settings" | "handoff" | "space" | "usage" => {
+            let window = app
+                .get_webview_window("main")
+                .ok_or_else(|| "找不到主窗口".to_string())?;
+            let _ = window.unminimize();
+            window.show().map_err(text)?;
+            let _ = window.set_focus();
+            window.emit("navigate", action).map_err(text)
+        }
+        _ => Err("没有这个操作".to_string()),
+    }
+}
+
+/// 只打开「隐私与安全性 › 完全磁盘访问权限」面板，由用户自己决定是否授予。
+#[tauri::command]
+fn open_privacy_settings<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+            None::<&str>,
+        )
+        .map_err(text)
 }
 
 #[tauri::command]
@@ -351,6 +425,9 @@ mod tests {
             "cancel-scan",
             "prepare-cleanup",
             "run-cleanup",
+            "open-privacy-settings",
+            "send-notice",
+            "tray-action",
         ];
         let text = include_str!("../capabilities/default.json");
         let value: serde_json::Value = serde_json::from_str(text).unwrap();
@@ -408,6 +485,7 @@ mod tests {
                 "core:event:allow-listen",
                 "core:event:allow-unlisten",
                 "core:window:allow-start-dragging",
+                "core:window:allow-set-size",
             ]
         );
     }

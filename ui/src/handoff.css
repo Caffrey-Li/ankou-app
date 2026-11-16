@@ -136,8 +136,13 @@
 }
 
 .handoff-row strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 13px;
   font-weight: 600;
+  word-break: break-all;
 }
 
 .handoff-row small,
@@ -183,6 +188,10 @@
 }
 
 .handoff-head h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   margin: 0;
   font-size: 20px;
 }
@@ -224,11 +233,12 @@
   --ring: var(--color-ochre);
 }
 
+/* 18:782：132 圆环、环宽约 12 */
 .handoff-ring span {
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 96px;
+  width: 108px;
+  height: 108px;
   border-radius: 50%;
   background: white;
   font-size: 26px;
@@ -243,22 +253,46 @@
   text-align: center;
 }
 
+/* 18:812：行内边距 9、12 号字，标签为次要色（p 默认外边距会把行距撑大，必须清零） */
 .handoff-meta {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  margin: 0;
   border-bottom: 1px solid var(--color-separator);
   padding: 9px 0;
   font-size: 12px;
+  line-height: 14px;
+}
+
+.handoff-meta span {
+  color: var(--color-text-secondary);
 }
 
 .handoff-meta b {
+  overflow: hidden;
+  color: var(--color-graphite);
   font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 18:841：「继续这段工作」标题与两张选择卡之间间距 14 */
+.handoff-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .handoff-actions h3 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 15px;
+  line-height: 18px;
+}
+
+.primary-button .icon {
+  margin-right: 6px;
+  vertical-align: -2px;
 }
 
 .handoff-choice,
@@ -478,7 +512,8 @@
 
 .sheet-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   margin-top: 14px;
 }
@@ -496,8 +531,26 @@
   margin-top: 14px;
 }
 
+.sheet-grid textarea,
+.sheet-wide textarea {
+  resize: none;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid transparent;
+  font-family: inherit;
+  outline: none;
+}
+
+.sheet-grid textarea:focus,
+.sheet-wide textarea:focus {
+  border-color: var(--color-mist);
+}
+
 .sheet-grid p,
-.sheet-wide p {
+.sheet-wide p,
+.sheet-grid textarea,
+.sheet-wide textarea {
   margin: 0;
   border-radius: 10px;
   background: var(--color-window);
@@ -518,4 +571,17 @@
 .handoff-sheet footer small {
   color: var(--color-text-tertiary);
   font-size: 11px;
+}
+
+.handoff-detail > .handoff-alert,
+.handoff-detail > .handoff-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.handoff-detail > p .text-link {
+  flex: none;
+  font-size: 13px;
 }

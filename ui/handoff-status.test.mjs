@@ -80,7 +80,7 @@ try {
       );
       for (const line of lines) {
         const klass = line.tone === "note" ? "handoff-note" : "handoff-alert";
-        assert.ok(html.includes(`<p class="${klass}">${line.text}</p>`), `${line.text} ${html}`);
+        assert.ok(html.includes(`<p class="${klass}"><span>${line.text}</span>`), `${line.text} ${html}`);
       }
       if (codex !== "no_records" && ds_bot !== "no_records") {
         assert.equal(html.includes("handoff-note"), false, `${codex}/${ds_bot}`);
@@ -119,7 +119,7 @@ try {
   }
 
   const failed = sourcesWhenListFails();
-  assert.deepEqual(failed, { codex: "read_failed", ds_bot: "read_failed" });
+  assert.deepEqual(failed, { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed" });
   assert.notEqual(failed.codex, "unauthorized");
   assert.notEqual(failed.ds_bot, "unauthorized");
   assert.equal(handoffSubtitle([], failed, 80), "0 条对话 · 0 条超过提醒阈值");

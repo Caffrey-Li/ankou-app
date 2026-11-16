@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState, type CSSProperties, type SelectHTMLAttributes } from "react";
 import type { Settings, Snapshot } from "./api";
 import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
 import { Check } from "./Check";
 import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
+import { capChecked, grantableKind } from "./grants";
 import { ToolIcon } from "./tool-status";
 import "./settings.css";
 
@@ -10,12 +11,22 @@ export function SettingsPage({
   snapshot,
   onChange,
   onReload,
+  focusTool,
 }: {
   snapshot: Snapshot;
   onChange: (update: (current: Snapshot) => Snapshot) => void;
   onReload: () => void;
+  /** 从侧栏或概览点进来的工具：展开它的授权并滚到眼前。 */
+  focusTool?: { id: ToolId; at: number };
 }) {
-  const [openTool, setOpenTool] = useState<ToolId | "">("");
+  const [openTool, setOpenTool] = useState<ToolId | "">(focusTool?.id ?? "");
+  useEffect(() => {
+    if (!focusTool) return;
+    setOpenTool(focusTool.id);
+    requestAnimationFrame(() => {
+      document.getElementById(`tool-${focusTool.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }, [focusTool]);
   const [keyOpen, setKeyOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -88,8 +99,7 @@ export function SettingsPage({
                 <span>只保存在这台电脑</span>
               </span>
               <span className="grow" />
-              <select
-                className="select-field"
+              <SelectPill
                 aria-label="用量历史保留"
                 value={snapshot.settings.retention_months}
                 onChange={(event) => update({ retention_months: Number(event.target.value) })}
@@ -99,7 +109,7 @@ export function SettingsPage({
                     {months} 个月
                   </option>
                 ))}
-              </select>
+              </SelectPill>
             </div>
             <div className="setting-row">
               <span className="setting-copy">
@@ -140,8 +150,7 @@ export function SettingsPage({
                 <span>选择 AI 时，每次发送前确认范围</span>
               </span>
               <span className="grow" />
-              <select
-                className="select-field"
+              <SelectPill
                 aria-label="默认摘要方式"
                 value={snapshot.settings.summary_mode}
                 onChange={(event) =>
@@ -151,7 +160,7 @@ export function SettingsPage({
                 <option value="ask">每次询问</option>
                 <option value="local">只在本地</option>
                 <option value="ai">使用 AI</option>
-              </select>
+              </SelectPill>
             </div>
             <div className="setting-row">
               <span className="setting-copy">
@@ -226,15 +235,14 @@ export function SettingsPage({
                 <strong>关闭窗口时</strong>
               </span>
               <span className="grow" />
-              <select
-                className="select-field"
+              <SelectPill
                 aria-label="关闭窗口时"
                 value={snapshot.settings.close_to_tray ? "tray" : "quit"}
                 onChange={(event) => update({ close_to_tray: event.target.value === "tray" })}
               >
                 <option value="tray">保留在菜单栏</option>
                 <option value="quit">退出</option>
-              </select>
+              </SelectPill>
             </div>
           </div>
         </section>
@@ -247,7 +255,7 @@ export function SettingsPage({
             const presence = live?.presence ?? "missing";
             const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
             return (
-              <div className="tool-block" key={spec.id}>
+              <div className="tool-block" key={spec.id} id={`tool-${spec.id}`}>
                 <div className="tool-head">
                   <ToolIcon id={spec.id} className="mark sm" />
                   <span className="tool-copy">
@@ -264,22 +272,22 @@ export function SettingsPage({
                   </button>
                 </div>
                 <div className="tag-row">
-                  {spec.tags.map((tag) => (
-                    <span key={tag.label} className={authTagClass(tag.badge)}>
-                      {tag.badge === "暂不提供" ? `${tag.label} · 暂不提供` : tag.label}
-                    </span>
-                  ))}
+                  {spec.tags.map((tag) => {
+                    const state = tagState(tag.badge, tag.capability, grants);
+                    return (
+                      <span key={tag.label} className={authTagClass(state)}>
+                        {tag.badge === "已实测" ? tag.label : `${tag.label} · ${tag.badge}`}
+                      </span>
+                    );
+                  })}
                 </div>
                 {openTool === spec.id ? (
                   <div className="cap-list">
                     {spec.caps.map((cap) => {
                       const grant = grants.find((item) => item.capability === cap.capability);
-                      const kind = measuredKind(spec.id, cap.capability, cap.title);
+                      const kind = grantableKind(spec.id, cap);
                       if (kind) {
-                        const checked =
-                          cap.capability === "account_link"
-                            ? grants.some((item) => item.capability === "account_link" && item.status === "active")
-                            : grant?.status === "active";
+                        const checked = capChecked(cap, grants);
                         return (
                           <div className="cap-row" key={cap.title}>
                             <Check
@@ -332,7 +340,7 @@ export function SettingsPage({
                         />
                         <span className="cap-copy">
                           <strong>ChatGPT app-server</strong>
-                          <span>已实测 2026-11-09</span>
+                          <span>读取额度窗口，只在启动和手动刷新时调用</span>
                         </span>
                       </div>
                     ) : null}
@@ -345,18 +353,31 @@ export function SettingsPage({
         <div className="legend">
           <span className={authTagClass("已授权")}>已授权</span>
           <span className={authTagClass("未授权")}>未授权</span>
-          <span className={authTagClass("未验证")}>未验证</span>
-          <span className={authTagClass("暂不提供")}>暂不提供</span>
+          {toolSpecs.some((spec) => spec.tags.some((tag) => tag.badge === "未验证")) ? (
+            <span className={authTagClass("未验证")}>未验证</span>
+          ) : null}
         </div>
       </aside>
     </div>
   );
 }
 
-export function authTagClass(state: "已授权" | "未授权" | "未验证" | "暂不提供" | "已实测") {
+export function tagState(
+  badge: "未验证" | "暂不提供" | "已实测" | "复制后粘贴",
+  capability: CapabilityId,
+  grants: { capability: CapabilityId; status: string }[],
+): "已授权" | "未授权" | "未验证" {
+  if (badge === "未验证") return "未验证";
+  if (badge === "暂不提供") return "未授权";
+  if (badge === "复制后粘贴") return "已授权";
+  return grants.some((grant) => grant.capability === capability && grant.status === "active") ? "已授权" : "未授权";
+}
+
+export function authTagClass(state: "已授权" | "未授权" | "未验证" | "暂不提供" | "已实测" | "复制后粘贴") {
   switch (state) {
     case "已授权":
     case "已实测":
+    case "复制后粘贴":
       return "tag granted";
     case "未授权":
       return "tag unauthorized";
@@ -367,16 +388,6 @@ export function authTagClass(state: "已授权" | "未授权" | "未验证" | "�
   }
 }
 
-function measuredKind(tool: ToolId, capability: CapabilityId, title: string) {
-  if (tool === "ds_bot" && capability === "usage" && title === "用量") return "ds_bot_usage";
-  if (tool === "codex" && capability === "usage" && title === "用量与额度窗口") return "codex_usage";
-  if (capability === "account_link" && title === "DeepSeek 账户 · 余额") return "deepseek_balance";
-  if (tool === "deepseek_harness" && capability === "space_scan" && title === "空间") return "harness_space";
-  if (tool === "deepseek_harness" && capability === "cleanup" && title === "清理") return "harness_cleanup";
-  if (tool === "cursor" && capability === "space_scan" && title === "空间扫描") return "cursor_space";
-  if (tool === "codex" && capability === "space_scan" && title === "空间扫描") return "codex_space";
-  return null;
-}
 
 function NumberRow({
   title,
@@ -401,6 +412,7 @@ function NumberRow({
       <span className="field-pair">
         <input
           className="number-field"
+          style={{ "--digits": Math.max(1, String(value).length) } as CSSProperties}
           aria-label={title}
           inputMode="numeric"
           value={value}
@@ -437,5 +449,34 @@ function SwitchRow({
         <i />
       </button>
     </div>
+  );
+}
+
+function SelectPill({ children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  // 原生 select 按最长选项估宽度不准：按当前选中项的字数给宽度，箭头不压字
+  const labels: string[] = [];
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) node.forEach(walk);
+    else if (node && typeof node === "object" && "props" in node) {
+      const item = node as { props: { value?: unknown; children?: unknown } };
+      if (String(item.props.value) === String(props.value)) {
+        const text = item.props.children;
+        labels.push(Array.isArray(text) ? text.join("") : String(text ?? ""));
+      }
+    }
+  };
+  walk(children);
+  // 中文按 12px、数字与空格按 7px 估
+  const width = Math.max(
+    24,
+    ...labels.map((label) => [...label].reduce((sum, char) => sum + (/[\u4e00-\u9fff]/.test(char) ? 12 : 7), 0)),
+  );
+  return (
+    <span className="select-pill">
+      <select {...props} style={{ width: `${width + 38}px` }}>
+        {children}
+      </select>
+      <i aria-hidden="true">⌄</i>
+    </span>
   );
 }

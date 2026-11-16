@@ -5,22 +5,6 @@ use wanxiang_core::{Capability, PathScope, Store, ToolId};
 const BOT_PATTERN: &str = "bot/usage.sqlite*";
 const CODEX_PATTERN: &str = "sessions/**/*.jsonl";
 
-pub fn conversation_scope(kind: &str) -> Option<(ToolId, &'static str)> {
-    match kind {
-        "codex_conversation" => Some((ToolId::Codex, CODEX_PATTERN)),
-        "ds_bot_conversation" => Some((ToolId::DsBot, BOT_PATTERN)),
-        _ => None,
-    }
-}
-
-pub fn conversation_root<'a>(kind: &str, dsh: &'a Path, codex: &'a Path) -> Option<&'a Path> {
-    match kind {
-        "codex_conversation" => Some(codex),
-        "ds_bot_conversation" => Some(dsh),
-        _ => None,
-    }
-}
-
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
@@ -149,13 +133,50 @@ pub fn set_at(
             settings.codex_app_server = on;
             store.set_settings(&settings).map_err(show)
         }
-        "codex_conversation" | "ds_bot_conversation" => {
-            let _ = (
-                conversation_scope(kind),
-                conversation_root(kind, dsh, codex),
-            );
-            Err("尚未验证，不能授权".to_string())
+        "codex_conversation" => set_path(
+            store,
+            ToolId::Codex,
+            Capability::Conversation,
+            codex,
+            CODEX_PATTERN,
+            on,
+        ),
+        "ds_bot_conversation" => {
+            // 列表来自 Bot 的调用记录，正文来自 Bot 工作区的会话文件
+            set_path(store, ToolId::DsBot, Capability::Conversation, dsh, BOT_PATTERN, on)?;
+            set_path(
+                store,
+                ToolId::DsBot,
+                Capability::Conversation,
+                dsh,
+                wanxiang_adapter_dsh::BOT_SESSION_PATTERN,
+                on,
+            )
         }
+        "harness_usage" => set_path(
+            store,
+            ToolId::DeepSeekHarness,
+            Capability::Usage,
+            dsh,
+            wanxiang_adapter_dsh::HARNESS_PATTERN,
+            on,
+        ),
+        "harness_conversation" => set_path(
+            store,
+            ToolId::DeepSeekHarness,
+            Capability::Conversation,
+            dsh,
+            wanxiang_adapter_dsh::HARNESS_PATTERN,
+            on,
+        ),
+        "cursor_conversation" => set_path(
+            store,
+            ToolId::Cursor,
+            Capability::Conversation,
+            cursor,
+            wanxiang_adapter_cursor::STATE_PATTERN,
+            on,
+        ),
         _ => Err("没有这项授权".to_string()),
     }
 }
@@ -202,7 +223,7 @@ mod tests {
     use wanxiang_core::{Clock, Guard, RefreshGate, Store, Supervisor, SystemClock, ToolScheduler};
 
     use super::{
-        apply_space_fixture, conversation_root, conversation_scope, cursor_support, set, set_at,
+        apply_space_fixture, cursor_support, set, set_at,
     };
 
     fn temp(name: &str) -> std::path::PathBuf {
@@ -319,40 +340,47 @@ mod tests {
             Some("active")
         );
         assert!(!store.settings().unwrap().codex_app_server);
-        assert_eq!(
-            conversation_scope("codex_conversation"),
-            Some((wanxiang_core::ToolId::Codex, "sessions/**/*.jsonl"))
-        );
-        assert_eq!(
-            conversation_root("codex_conversation", &dsh, &codex),
-            Some(codex.as_path())
-        );
-        assert_eq!(
-            conversation_scope("ds_bot_conversation"),
-            Some((wanxiang_core::ToolId::DsBot, "bot/usage.sqlite*"))
-        );
-        assert_eq!(
-            conversation_root("ds_bot_conversation", &dsh, &codex),
-            Some(dsh.as_path())
-        );
-        assert!(set_at(
-            &store,
+        std::fs::create_dir_all(dir.join("cursor")).unwrap();
+        for kind in [
             "codex_conversation",
-            true,
-            &dsh,
-            &codex,
-            &dir.join("cursor")
-        )
-        .is_err());
-        assert!(set_at(
-            &store,
             "ds_bot_conversation",
-            true,
-            &dsh,
-            &codex,
-            &dir.join("cursor")
-        )
-        .is_err());
+            "harness_usage",
+            "harness_conversation",
+            "cursor_conversation",
+        ] {
+            set_at(&store, kind, true, &dsh, &codex, &dir.join("cursor")).unwrap();
+        }
+        let patterns: Vec<(wanxiang_core::ToolId, wanxiang_core::Capability, String)> = store
+            .grants()
+            .unwrap()
+            .into_iter()
+            .map(|grant| (grant.tool, grant.capability, grant.pattern))
+            .collect();
+        assert_eq!(patterns.len(), 6, "{patterns:?}");
+        assert!(patterns.contains(&(
+            wanxiang_core::ToolId::Cursor,
+            wanxiang_core::Capability::Conversation,
+            wanxiang_adapter_cursor::STATE_PATTERN.to_string()
+        )));
+        assert!(patterns.contains(&(
+            wanxiang_core::ToolId::DsBot,
+            wanxiang_core::Capability::Conversation,
+            wanxiang_adapter_dsh::BOT_SESSION_PATTERN.to_string()
+        )));
+        assert!(patterns.contains(&(
+            wanxiang_core::ToolId::DeepSeekHarness,
+            wanxiang_core::Capability::Usage,
+            wanxiang_adapter_dsh::HARNESS_PATTERN.to_string()
+        )));
+        for kind in [
+            "codex_conversation",
+            "ds_bot_conversation",
+            "harness_usage",
+            "harness_conversation",
+            "cursor_conversation",
+        ] {
+            set_at(&store, kind, false, &dsh, &codex, &dir.join("cursor")).unwrap();
+        }
         assert!(store.grants().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

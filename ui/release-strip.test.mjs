@@ -43,6 +43,14 @@ const executable = builtApp
   ?.executable;
 assert.ok(executable, "release executable");
 const binary = readFileSync(executable);
-for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set", "WANXIANG_SPACE_FIXTURE"]) {
+for (const needle of [
+  "WANXIANG_VERIFY",
+  "verify_enabled",
+  "verify_set",
+  "WANXIANG_SPACE_FIXTURE",
+  "WANXIANG_CURSOR_FIXTURE",
+  "WANXIANG_SKIP_REFRESH",
+  "WANXIANG_PREVIEW",
+]) {
   assert.equal(binary.includes(Buffer.from(needle)), false, needle);
 }

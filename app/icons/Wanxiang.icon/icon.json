@@ -1,0 +1,73 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "srgb:1.00000,1.00000,1.00000,1.00000",
+          "srgb:0.86667,0.89020,0.92549,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
+  "groups" : [
+    {
+      "name" : "圆环与中心点",
+      "layers" : [
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "L5-dot.svg",
+          "name" : "中心点",
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "L4-mist.svg",
+          "name" : "雾蓝段 · 额度",
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "L3-ochre.svg",
+          "name" : "赭色段 · 空间",
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "L2-graphite.svg",
+          "name" : "石墨段 · 对话",
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        }
+      ],
+      "lighting" : "combined",
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
+      "specular" : true,
+      "translucency" : { "enabled" : false, "value" : 0.5 }
+    },
+    {
+      "name" : "底盘",
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "L1-well.svg",
+          "name" : "圆形底盘",
+          "opacity" : 0.85,
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        }
+      ],
+      "shadow" : { "kind" : "none", "opacity" : 0.5 },
+      "translucency" : { "enabled" : false, "value" : 0.5 }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

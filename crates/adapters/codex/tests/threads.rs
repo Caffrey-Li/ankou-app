@@ -54,7 +54,7 @@ fn server_list_drops_cwd_and_keeps_documented_fields() {
     assert_eq!(head.preview, "摘");
     assert_eq!(head.status, "idle");
     assert!(head.cwd.is_none());
-    assert_eq!(title_of(&head), "ChatGPT thread-1");
+    assert_eq!(title_of(&head), "摘");
     assert!(head.used_tokens.is_none());
     assert!(context_percent(head.used_tokens, head.window_tokens).is_none());
 }
@@ -156,4 +156,49 @@ done
     assert!(lists.iter().all(|line| line.contains("\"useStateDbOnly\":true")));
     assert!(!seen.contains("includeTurns"));
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn jsonl_title_is_the_first_typed_message_not_injected_context() {
+    let text = concat!(
+        r#"{"timestamp":"2026-10-24T11:44:10Z","type":"session_meta","payload":{"id":"00000000-0000-0000-0000-00000000000b","timestamp":"2026-10-24T11:44:10Z"}}"#,
+        "\n",
+        r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n<cwd>/x</cwd>"}]}}"#,
+        "\n",
+        r#"{"type":"event_msg","payload":{"type":"user_message","message":"把发布清单整理成表格，按优先级排序，并标出负责人和截止日期"}}"#,
+        "\n"
+    );
+    let head = parse_jsonl_head(text).unwrap();
+    assert_eq!(title_of(&head), "把发布清单整理成表格，按优先级排序，并标出负责人和截止日期");
+    let long = format!(
+        r#"{{"type":"session_meta","payload":{{"id":"c"}}}}{}{{"type":"event_msg","payload":{{"type":"user_message","message":"{}"}}}}"#,
+        "\n",
+        "长".repeat(60)
+    );
+    let head = parse_jsonl_head(&long).unwrap();
+    assert_eq!(title_of(&head).chars().count(), 41);
+}
+
+#[test]
+fn typed_message_wins_over_compaction_transcript() {
+    let text = concat!(
+        r#"{"type":"session_meta","payload":{"id":"d"}}"#,
+        "\n",
+        r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"压缩后保留的一句话"}]}}"#,
+        "\n",
+        r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"[1] user: 旧的转录"}]}}"#,
+        "\n",
+        r#"{"type":"event_msg","payload":{"type":"user_message","message":"继续检查提交按钮"}}"#,
+        "\n"
+    );
+    let head = parse_jsonl_head(text).unwrap();
+    assert_eq!(title_of(&head), "继续检查提交按钮");
+    let only_transcript = concat!(
+        r#"{"type":"session_meta","payload":{"id":"e"}}"#,
+        "\n",
+        r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"[12] assistant: 旧的回答"}]}}"#,
+        "\n"
+    );
+    let head = parse_jsonl_head(only_transcript).unwrap();
+    assert!(head.preview.is_empty());
 }

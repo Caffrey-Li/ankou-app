@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { UsageDay, UsageView } from "./api";
-import { IconChart } from "./icons";
+import { DateRangeButton, presetSpan } from "./DateRange";
+import { IconAlert, IconChart } from "./icons";
 import "./usage.css";
 
 const ranges = [
@@ -19,45 +20,42 @@ export function RangeControl({
   range,
   start,
   end,
+  today,
   onRange,
   onCustom,
 }: {
   range: UsageRange;
   start: string;
   end: string;
+  today: string;
   onRange: (range: UsageRange) => void;
   onCustom: (start: string, end: string) => void;
 }) {
+  function choose(next: UsageRange) {
+    if (next === "custom" && range !== "custom") {
+      // 默认值取当前正在看的范围，避免两端都变成今天、和副标题对不上。
+      const span = presetSpan(range, today);
+      onCustom(span.start, span.end);
+    }
+    onRange(next);
+  }
   return (
     <div className="range-control">
+      {range === "custom" && start && end ? (
+        <DateRangeButton start={start} end={end} today={today} onApply={onCustom} />
+      ) : null}
       <div className="range-pills" role="group" aria-label="日期范围">
         {ranges.map((item) => (
           <button
             key={item.id}
             type="button"
             aria-pressed={range === item.id}
-            onClick={() => onRange(item.id)}
+            onClick={() => choose(item.id)}
           >
             {item.label}
           </button>
         ))}
       </div>
-      {range === "custom" ? (
-        <div className="range-custom">
-          <input
-            type="date"
-            aria-label="开始日期"
-            value={start}
-            onChange={(event) => onCustom(event.target.value, end)}
-          />
-          <input
-            type="date"
-            aria-label="结束日期"
-            value={end}
-            onChange={(event) => onCustom(start, event.target.value)}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -67,7 +65,7 @@ function placeholderDays(date = new Date()): UsageDay[] {
   const last = date.getDate();
   const days: UsageDay[] = [];
   for (let day = 1; day <= last; day += 1) {
-    days.push({ label: `${month + 1} 月 ${day} 日`, codex: null, bot: null });
+    days.push({ label: `${month + 1} 月 ${day} 日`, codex: null, bot: null, harness: null });
   }
   return days;
 }
@@ -99,22 +97,49 @@ const idlePending: RefreshPending = {
   windows: false,
 };
 
+export function totalLabel(range: UsageRange) {
+  if (range === "today") return "今天可核实用量";
+  if (range === "7") return "7 天可核实用量";
+  if (range === "30") return "30 天可核实用量";
+  if (range === "custom") return "所选范围可核实用量";
+  return "本月可核实用量";
+}
+
 export function UsagePage({
   usage,
   onSettings,
   pending = idlePending,
+  range = "month",
 }: {
   usage: UsageView;
   onSettings: () => void;
   pending?: RefreshPending;
+  range?: UsageRange;
 }) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("工具");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const bannerLines = orderBanner(usage.banner);
   const days = usage.days.length > 0 ? usage.days : placeholderDays();
-  const max = Math.max(0, ...days.map((day) => (day.codex ?? 0) + (day.bot ?? 0)));
+  const max = Math.max(0, ...days.map((day) => (day.codex ?? 0) + (day.bot ?? 0) + (day.harness ?? 0)));
   const scale = Math.max(max, 1);
   return (
     <div className="usage-page">
-      <p className="usage-banner">合计不完整：{usage.banner.join("；")}。</p>
+      <p className="usage-banner" role="note">
+        <IconAlert />
+        <span>
+          合计不完整：{(moreOpen ? bannerLines : bannerLines.slice(0, 2)).join("；")}。
+          {bannerLines.length > 2 ? (
+            <button type="button" className="banner-more" onClick={() => setMoreOpen(!moreOpen)}>
+              {moreOpen ? "收起" : `另有 ${bannerLines.length - 2} 条说明`}
+            </button>
+          ) : null}
+        </span>
+        {usage.banner.some((line) => line.includes("未授权") || line.includes("需要重新授权")) ? (
+          <button type="button" className="text-link" onClick={onSettings}>
+            去设置授权
+          </button>
+        ) : null}
+      </p>
       <div className="usage-head">
         <h2>额度与余额</h2>
         <p>{usage.caption}</p>
@@ -165,7 +190,7 @@ export function UsagePage({
       <section className="usage-panel chart-panel">
         <div className="chart-head">
           <div className="total-block">
-            <p>本月可核实用量</p>
+            <p>{totalLabel(range)}</p>
             <div className="token-figure">
               <strong>{pending.codex || pending.ds_bot ? "刷新中" : usage.total}</strong>
               {usage.total === "—" || pending.codex || pending.ds_bot ? null : <span>token</span>}
@@ -191,8 +216,9 @@ export function UsagePage({
           {days.map((day) => {
             const codex = day.codex ?? 0;
             const bot = day.bot ?? 0;
-            const missing = day.codex == null && day.bot == null;
-            const height = Math.max(8, Math.round(((codex + bot) / scale) * 150));
+            const harness = day.harness ?? 0;
+            const missing = day.codex == null && day.bot == null && day.harness == null;
+            const height = Math.max(8, Math.round(((codex + bot + harness) / scale) * 150));
             return (
               <div key={day.label} className="chart-col">
                 <div className="chart-slot">
@@ -202,6 +228,7 @@ export function UsagePage({
                     <span className="chart-stack" style={{ height }}>
                       {codex > 0 ? <span className="bar codex" style={{ flexGrow: codex }} /> : null}
                       {bot > 0 ? <span className="bar bot" style={{ flexGrow: bot }} /> : null}
+                      {harness > 0 ? <span className="bar harness" style={{ flexGrow: harness }} /> : null}
                     </span>
                   )}
                 </div>
@@ -259,7 +286,7 @@ export function UsagePage({
         ) : (
           <p className="chart-empty">暂不提供</p>
         )}
-        <p className="detail-foot">Harness 与 DS Bot 共用本机调用记录，已按调用编号去重。不同单位与币种分别合计。</p>
+        <p className="detail-foot">Harness 只计本机会话，Bot 工作区的会话归入 DS Bot，不重复计入。不同单位与币种分别合计。</p>
       </section>
     </div>
   );
@@ -369,4 +396,14 @@ function Ring({ percent }: { percent: number | null }) {
       <strong>{percent == null ? "—" : `${percent}%`}</strong>
     </div>
   );
+}
+
+/** 先说需要用户处理的（未授权、需要重新授权、过时），其余说明折叠。 */
+export function orderBanner(lines: string[]) {
+  const rank = (line: string) =>
+    line.includes("需要重新授权") ? 0 : line.includes("未授权") ? 1 : line.includes("过时") || line.includes("未运行") ? 2 : 3;
+  return lines
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => rank(a.line) - rank(b.line) || a.index - b.index)
+    .map((item) => item.line);
 }

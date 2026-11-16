@@ -214,3 +214,50 @@ export function IconSearch() {
     />
   );
 }
+
+export function IconCalendar() {
+  return (
+    <Icon
+      viewBox="0 0 14 14"
+      size={14}
+      strokeWidth={0.991667}
+      className="icon-calendar"
+      paths={[
+        "M3.5 2.625H10.5C11.1443 2.625 11.6667 3.14733 11.6667 3.79167V10.7917C11.6667 11.436 11.1443 11.9583 10.5 11.9583H3.5C2.85567 11.9583 2.33333 11.436 2.33333 10.7917V3.79167C2.33333 3.14733 2.85567 2.625 3.5 2.625Z",
+        "M2.33333 5.54167H11.6667",
+        "M4.95833 1.45833V3.20833",
+        "M9.04167 1.45833V3.20833",
+      ]}
+    />
+  );
+}
+
+export function IconAlert() {
+  return (
+    <Icon
+      viewBox="0 0 16 16"
+      size={16}
+      strokeWidth={1.2}
+      className="icon-alert"
+      paths={[
+        "M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C11.3137 2 14 4.68629 14 8Z",
+        "M8 5V8.5",
+        "M8 10.75V11",
+      ]}
+    />
+  );
+}
+
+export function IconSpark() {
+  return (
+    <Icon
+      viewBox="0 0 14 14"
+      size={14}
+      strokeWidth={1.1}
+      className="icon-spark"
+      paths={[
+        "M7 1.75L8.1 5.2C8.2 5.5 8.5 5.8 8.8 5.9L12.25 7L8.8 8.1C8.5 8.2 8.2 8.5 8.1 8.8L7 12.25L5.9 8.8C5.8 8.5 5.5 8.2 5.2 8.1L1.75 7L5.2 5.9C5.5 5.8 5.8 5.5 5.9 5.2L7 1.75Z",
+      ]}
+    />
+  );
+}

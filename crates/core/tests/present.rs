@@ -14,6 +14,7 @@ fn empty() -> UsageFacts {
         codex_app_server: false,
         codex_access: RecordAccess::Unauthorized,
         bot_access: RecordAccess::Unauthorized,
+        harness_access: RecordAccess::Unauthorized,
     }
 }
 
@@ -26,7 +27,7 @@ fn empty_usage_names_the_gaps_and_skips_example_figures() {
     let page = present_usage(&empty());
     let text = format!("{page:?}");
     assert!(text.contains("Cursor 用量暂不提供，未计入"));
-    assert!(text.contains("Harness 用量暂不提供，未计入"));
+    assert!(text.contains("Harness 未授权，未计入"));
     assert!(text.contains("ChatGPT 未授权，未计入"));
     assert!(text.contains("DS Bot 未授权，未计入"));
     assert!(text.contains("未保存密钥"));
@@ -51,7 +52,7 @@ fn four_usage_states_stay_distinct() {
     assert_eq!(page.cards[0].link.as_deref(), Some("去设置授权"));
     assert_eq!(page.cards[0].value, "—");
     assert_eq!(detail(&page, "Cursor").tokens, "暂不提供");
-    assert_eq!(detail(&page, "DeepSeek Harness").tokens, "暂不提供");
+    assert_eq!(detail(&page, "DeepSeek Harness").tokens, "未授权");
 
     let mut linked = empty();
     linked.key_saved = true;
@@ -83,10 +84,10 @@ fn four_usage_states_stay_distinct() {
     assert_eq!(detail(&page, "DS Bot").tokens, "300");
     assert_eq!(detail(&page, "Cursor").tokens, "暂不提供");
     assert_eq!(detail(&page, "DeepSeek Harness").fee, "不提供");
-    assert_eq!(detail(&page, "DeepSeek Harness").source, "—");
+    assert_eq!(detail(&page, "DeepSeek Harness").source, "未授权");
     assert_eq!(detail(&page, "DS Bot").fee, "不提供");
     assert!(page.banner.iter().any(|line| line.contains("Cursor 用量暂不提供")));
-    assert!(page.banner.iter().any(|line| line.contains("Harness 用量暂不提供")));
+    assert!(page.banner.iter().any(|line| line == "Harness 未授权，未计入"));
     assert!(!page.total_reason.contains("暂不提供"));
 
     let mut facts = empty();
@@ -140,7 +141,7 @@ fn excluded_calls_are_named_in_the_banner() {
         2,
     ));
     let page = present_usage(&facts);
-    assert!(page.banner.iter().any(|line| line == "有 2 条调用无法归属，未计入"));
+    assert!(page.banner.iter().any(|line| line == "有 2 条调用不属于 Bot 或群聊，未计入 DS Bot"));
 }
 
 #[test]
@@ -193,4 +194,62 @@ fn app_server_windows_say_actual_and_shorter_period_comes_first() {
     ));
     let page = present_usage(&facts);
     assert_eq!(page.cards[0].note, "本机记录");
+}
+
+#[test]
+fn single_seven_day_window_names_the_missing_five_hour_card() {
+    let mut facts = empty();
+    facts.codex_access = RecordAccess::Authorized;
+    facts.codex_app_server = true;
+    facts.reports.push((
+        "codex".to_string(),
+        "windows".to_string(),
+        "ok".to_string(),
+        facts.now.to_string(),
+    ));
+    facts.rows.push((
+        "2026-11-09".to_string(),
+        "codex".to_string(),
+        "window_10080_1_bps".to_string(),
+        2900,
+    ));
+    let page = present_usage(&facts);
+    assert_eq!(page.cards[0].name, "ChatGPT · 5 小时窗口");
+    assert_eq!(page.cards[0].note, "无本机记录");
+    assert_eq!(page.cards[1].name, "ChatGPT · 7 天窗口");
+    assert_eq!(page.cards[1].percent, Some(29));
+    assert!(page.cards.iter().all(|card| card.name != "ChatGPT · 窗口"));
+}
+
+#[test]
+fn unauthorized_window_cards_keep_their_titles() {
+    let page = present_usage(&empty());
+    assert_eq!(page.cards[0].name, "ChatGPT · 5 小时窗口");
+    assert_eq!(page.cards[1].name, "ChatGPT · 7 天窗口");
+    assert_eq!(page.cards[0].note, "未授权");
+}
+
+#[test]
+fn harness_usage_counts_once_and_joins_the_total() {
+    let mut facts = empty();
+    facts.harness_access = RecordAccess::Authorized;
+    facts.bot_access = RecordAccess::Authorized;
+    facts.rows.push(("2026-11-08".to_string(), "deepseek_harness".to_string(), "tokens".to_string(), 1_500));
+    facts.rows.push(("2026-11-08".to_string(), "deepseek_harness".to_string(), "calls".to_string(), 3));
+    facts.rows.push(("2026-11-09".to_string(), "ds_bot".to_string(), "tokens".to_string(), 500));
+    facts.rows.push(("2026-11-09".to_string(), "ds_bot".to_string(), "calls".to_string(), 1));
+    let page = present_usage(&facts);
+    assert_eq!(detail(&page, "DeepSeek Harness").tokens, "1,500");
+    assert_eq!(detail(&page, "DeepSeek Harness").calls, "3");
+    assert_eq!(detail(&page, "DeepSeek Harness").source, "本机记录");
+    assert_eq!(page.total, "2,000");
+    assert!(!page.banner.iter().any(|line| line.contains("Harness")));
+    let day = page.days.iter().find(|day| day.label == "11 月 8 日").unwrap();
+    assert_eq!(day.harness, Some(1_500));
+
+    let mut facts = empty();
+    facts.harness_access = RecordAccess::NeedsReauth;
+    let page = present_usage(&facts);
+    assert_eq!(detail(&page, "DeepSeek Harness").tokens, "需要重新授权");
+    assert!(page.banner.iter().any(|line| line == "Harness 需要重新授权，未计入"));
 }

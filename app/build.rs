@@ -37,6 +37,9 @@ fn main() {
         "cancel_scan",
         "prepare_cleanup",
         "run_cleanup",
+        "open_privacy_settings",
+        "send_notice",
+        "tray_action",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new()

@@ -348,19 +348,32 @@ impl Guard {
         })
     }
 
+    /// 启动时按库里记的根目录恢复授权。返回授权编号和当前的根目录标记。
+    ///
+    /// 只比较规范路径和 inode：macOS 上 APFS 卷的设备号（st_dev）在重启或卷重新挂载后可能变化，
+    /// 用它判断「目录被替换」会把所有授权误判为失效。目录真的被删掉重建、换成符号链接时，
+    /// inode 会变或规范路径会变，仍然要求重新授权。
     pub fn restore(
         &self,
         tool: ToolId,
         capability: Capability,
         scope: PathScope,
         expected: &RootStamp,
-    ) -> Result<GrantId, GuardError> {
+    ) -> Result<(GrantId, RootStamp), GuardError> {
         let root = canonical_directory(&scope.root)?;
         let file_id = file_id_of(&root).map_err(io_err)?;
-        if root != expected.path || file_id.dev != expected.dev || file_id.ino != expected.ino {
+        if !paths_equal(&root, &expected.path) || file_id.ino != expected.ino {
             return Err(GuardError::NeedsReauth);
         }
-        self.grant(tool, capability, scope)
+        let id = self.grant(tool, capability, scope)?;
+        Ok((
+            id,
+            RootStamp {
+                path: root,
+                dev: file_id.dev,
+                ino: file_id.ino,
+            },
+        ))
     }
 
     pub fn grants(&self) -> Vec<Grant> {

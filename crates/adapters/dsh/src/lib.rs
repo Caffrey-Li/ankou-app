@@ -1,10 +1,15 @@
-//! DeepSeek Harness 与 DS Bot。用量只读 `bot/usage.sqlite`，余额只走钥匙串里的 Key。
-//! Harness 没有单独的用量文件。
+//! DeepSeek Harness 与 DS Bot。DS Bot 用量读 `bot/usage.sqlite`，Harness 用量与对话读
+//! `sessions/**/session.v4.jsonl.zstd`（排除 Bot 工作区）；余额只走钥匙串里的 Key。
 
 mod balance;
 mod calls;
+mod sessions;
 
 pub use balance::{fetch_balance, fetch_summary, parse_balance_json};
+pub use sessions::{
+    decode_zstd, is_bot_workspace, parse_session, read_session_bytes, session_chunks, session_paths,
+    DshCall, DshSession, BOT_SESSION_PATTERN, HARNESS_PATTERN, SESSION_FILE,
+};
 pub use calls::{
     daily_counts, list_sessions, owner_kind, read_usage_copy, read_usage_set, session_transcript, summarize_calls,
     usage_db_candidates, CallRow, CallSummary, DayCount, OwnerKind, SessionHead,

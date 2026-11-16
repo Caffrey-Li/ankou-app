@@ -272,3 +272,17 @@ proptest::proptest! {
         proptest::prop_assert!(redeem_summary(&guard, &third, body.as_bytes()).is_err());
     }
 }
+
+#[test]
+fn local_organize_splits_a_raw_transcript_into_sections() {
+    let text = "用户：先列出待办\n第二行说明\n助手：好的，三项待办\n助手：已完成第一项\n用户：继续第二项";
+    let organized = organize_local(text);
+    assert_eq!(organized.goal, "先列出待办\n第二行说明");
+    assert_eq!(organized.progress, "· 好的，三项待办\n· 已完成第一项");
+    assert_eq!(organized.unfinished, "· 继续第二项");
+    assert_eq!(organized.next, "1. 接着处理：继续第二项");
+    assert!(organized.sources.contains("用户 2、助手 2"));
+    assert!(organized.note.is_empty());
+    let plain = organize_local("没有角色标记的文字");
+    assert_eq!(plain.progress, "没有角色标记的文字");
+}

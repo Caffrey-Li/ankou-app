@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use wanxiang_adapter_codex::{find_codex_cli, parse_rollout, query_rate_limits, rollout_paths};
-use wanxiang_adapter_dsh::{daily_counts, fetch_balance, read_usage_set, usage_db_candidates};
+use wanxiang_adapter_dsh::{
+    daily_counts, fetch_balance, parse_session, read_session_bytes, read_usage_set, session_paths,
+    usage_db_candidates,
+};
 use wanxiang_core::{
     local_calendar_day, run_collect, wait_interval, Capability, CodexFile, GrantStatus, Guard,
     RefreshGate, SecretError, SecretStore, Store, TaskStop, ToolId, UsageError, UsageSnapshot,
@@ -49,12 +52,22 @@ impl ServerProbe for LiveServer {
     }
 }
 
+#[cfg(debug_assertions)]
+fn refresh_skipped() -> bool {
+    std::env::var_os("WANXIANG_SKIP_REFRESH").is_some()
+}
+
+#[cfg(not(debug_assertions))]
+fn refresh_skipped() -> bool {
+    false
+}
+
 pub fn spawn_refresh(
     store: Arc<Store>,
     gate: Arc<RefreshGate>,
     emit: Arc<dyn Fn(&str) + Send + Sync>,
 ) {
-    if std::env::var_os("WANXIANG_SKIP_REFRESH").is_some() {
+    if refresh_skipped() {
         return;
     }
     gate.supervisor().spawn_task(move |stop| {
@@ -183,8 +196,26 @@ fn refresh_body(
             && grant.capability == Capability::Usage
             && grant.status == GrantStatus::Active
     });
+    let harness = grants.iter().find(|grant| {
+        grant.tool == ToolId::DeepSeekHarness
+            && grant.capability == Capability::Usage
+            && grant.status == GrantStatus::Active
+    });
     std::thread::scope(|scope| {
         scope.spawn(|| {
+            // Harness 与 DS Bot 同属 ~/.dsh，按顺序读，界面上一起显示「刷新中」
+            if let Some(root) = harness {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &HarnessSessions {
+                        root: root.root.clone(),
+                        offset: store.offset_secs(),
+                        guard: store.guard_handle(),
+                    },
+                );
+            }
             if let Some(root) = bot {
                 let _ = run_collect(
                     store,
@@ -206,6 +237,7 @@ fn refresh_body(
             emit("balance");
         });
         scope.spawn(|| {
+            // 先读本机记录（含额度窗口），再问 app-server；app-server 失败时保留本机记录里的窗口
             if let Some(root) = codex {
                 let _ = run_collect(
                     store,
@@ -216,13 +248,11 @@ fn refresh_body(
                         offset: store.offset_secs(),
                         guard: store.guard_handle(),
                         store,
-                        write_windows: !want_server && !settings.codex_app_server,
+                        write_windows: true,
                     },
                 );
             }
             emit("codex");
-        });
-        scope.spawn(|| {
             if want_server {
                 match server.start(gate) {
                     Ok(windows) => {
@@ -290,6 +320,61 @@ impl UsageSource for DsBotSource {
                     .push((day.day, i64::try_from(day.excluded).unwrap_or(i64::MAX)));
             }
         }
+        Ok(snapshot)
+    }
+}
+
+/// Harness 用量：本机会话文件里每次调用的 token，排除 Bot 工作区的会话（那部分归 DS Bot）。
+struct HarnessSessions {
+    root: PathBuf,
+    offset: i32,
+    guard: Arc<Guard>,
+}
+
+impl UsageSource for HarnessSessions {
+    fn tool(&self) -> ToolId {
+        ToolId::DeepSeekHarness
+    }
+    fn capability(&self) -> Capability {
+        Capability::Usage
+    }
+    fn metric(&self) -> &'static str {
+        "tokens"
+    }
+    fn collect(&self, stop: &TaskStop) -> Result<UsageSnapshot, UsageError> {
+        let mut tokens = BTreeMap::<String, i64>::new();
+        let mut calls = BTreeMap::<String, i64>::new();
+        let mut readable = 0_usize;
+        let paths = session_paths(&self.root);
+        for path in &paths {
+            if stop.is_stopped() {
+                return Err(UsageError::Stopped);
+            }
+            let Ok(bytes) =
+                read_session_bytes(&self.guard, ToolId::DeepSeekHarness, Capability::Usage, path)
+            else {
+                continue;
+            };
+            readable += 1;
+            let Some(session) = parse_session(&bytes) else {
+                continue;
+            };
+            if session.is_bot() {
+                continue;
+            }
+            for call in &session.calls {
+                let instant = UNIX_EPOCH + Duration::from_millis(call.time_ms.max(0) as u64);
+                let day = local_calendar_day(instant, self.offset);
+                *tokens.entry(day.clone()).or_default() += call.tokens;
+                *calls.entry(day).or_default() += 1;
+            }
+        }
+        if readable == 0 && !paths.is_empty() {
+            return Err(UsageError::Unreadable);
+        }
+        let mut snapshot = UsageSnapshot::empty();
+        snapshot.tokens = tokens.into_iter().collect();
+        snapshot.calls = calls.into_iter().collect();
         Ok(snapshot)
     }
 }

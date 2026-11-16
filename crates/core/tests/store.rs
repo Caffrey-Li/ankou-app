@@ -138,6 +138,50 @@ fn grant_survives_a_restart() {
     assert!(db.is_file());
 }
 
+/// macOS 上 APFS 卷的设备号重启后可能变化；目录本身没变时，授权必须照常恢复。
+#[test]
+fn changed_device_number_keeps_the_grant_and_updates_the_stamp() {
+    let tmp = Tmp::new();
+    let data = root(&tmp, "data");
+    fs::write(data.join("note.txt"), b"fixture").unwrap();
+    {
+        let store = open(&tmp, guard());
+        grant_usage(&store, &data);
+    }
+    let db = tmp.path.join("wanxiang.sqlite");
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute("UPDATE grants SET dev = '424242'", []).unwrap();
+    }
+    let store = open(&tmp, guard());
+    let grants = store.grants().unwrap();
+    assert_eq!(grants[0].status, GrantStatus::Active);
+    assert_eq!(store.guard().grants().len(), 1);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let dev: String = conn.query_row("SELECT dev FROM grants", [], |row| row.get(0)).unwrap();
+    assert_ne!(dev, "424242");
+}
+
+/// 之前被启动核对误判为「需要重新授权」的记录，目录没变时下次启动自动恢复。
+#[test]
+fn needs_reauth_row_heals_when_the_root_is_unchanged() {
+    let tmp = Tmp::new();
+    let data = root(&tmp, "data");
+    {
+        let store = open(&tmp, guard());
+        grant_usage(&store, &data);
+    }
+    let db = tmp.path.join("wanxiang.sqlite");
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute("UPDATE grants SET dev = '7', status = 'needs_reauth'", [])
+            .unwrap();
+    }
+    let store = open(&tmp, guard());
+    assert_eq!(store.grants().unwrap()[0].status, GrantStatus::Active);
+    assert_eq!(store.guard().grants().len(), 1);
+}
+
 #[test]
 fn replaced_root_needs_reauth_and_is_not_granted() {
     let tmp = Tmp::new();

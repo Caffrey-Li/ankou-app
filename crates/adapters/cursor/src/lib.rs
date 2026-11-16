@@ -1,11 +1,10 @@
-//! Cursor 接入占位。
-//! 开发时只用夹具，不读取本机 Cursor 数据目录。
+//! Cursor 接入：对话只读本机对话数据库里与对话有关的键（见 chats.rs）。
+
+mod chats;
+
+pub use chats::{chat_chunks, list_chats, state_db, valid_id, CursorChat, STATE_PATTERN};
 
 use wanxiang_core::{Capability, Guard, GuardError, ToolId};
-
-pub fn availability() -> &'static str {
-    "未验证"
-}
 
 pub fn installed(roaming: &std::path::Path, applications: &std::path::Path) -> bool {
     roaming.join("Cursor").is_dir() || applications.join("Cursor.app").is_dir()
@@ -23,11 +22,6 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
-
-    #[test]
-    fn stays_unverified() {
-        assert_eq!(super::availability(), "未验证");
-    }
 
     fn temp() -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);

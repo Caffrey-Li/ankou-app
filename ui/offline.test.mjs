@@ -38,6 +38,9 @@ function files(dir) {
   return found;
 }
 
+// 用户同意放宽：Cursor 对话只在这一个文件里按白名单读数据库，别处仍然不许出现数据库名。
+const stateAllow = new Set(["crates/adapters/cursor/src/chats.rs"]);
+
 const hits = [];
 for (const relative of roots) {
   for (const path of files(join(root, relative))) {
@@ -45,6 +48,7 @@ for (const relative of roots) {
     const rel = path.slice(root.length).replaceAll("\\", "/").replace(/^\//, "");
     const needles = denylistAllow.has(rel) ? forbidden : forbidden.concat(denylistNeedles);
     for (const needle of needles) {
+      if (needle === "state.vscdb" && stateAllow.has(rel)) continue;
       if (text.includes(needle)) hits.push(`${rel}: ${needle}`);
     }
   }

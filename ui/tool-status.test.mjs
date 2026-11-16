@@ -12,7 +12,7 @@ const server = await createServer({
 });
 
 try {
-  const { toolMarks, SidebarTools, OverviewToolRows } = await server.ssrLoadModule(
+  const { toolMarks, toolTone, SidebarTools, OverviewToolRows } = await server.ssrLoadModule(
     "/src/tool-status.tsx",
   );
   const tools = ["deepseek_harness", "ds_bot", "cursor", "codex"].map((tool) => ({
@@ -30,15 +30,20 @@ try {
   const side = renderToStaticMarkup(createElement(SidebarTools, { marks }));
   const rows = renderToStaticMarkup(createElement(OverviewToolRows, { marks, onOpen() {} }));
   const sideStatus = [...side.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
-  const sideDot = [...side.matchAll(/tool-dot dot ([a-z_]+)/g)].map((match) => match[1]);
-  const rowStatus = [...rows.matchAll(/<i class="dot ([a-z_]+)"><\/i>([^<]+)/g)].map((match) => match[2]);
-  const rowDot = [...rows.matchAll(/<i class="dot ([a-z_]+)"><\/i>/g)].map((match) => match[1]);
-  const allowed = ["未发现", "未授权", "已授权", "需要重新授权"];
+  const sideDot = [...side.matchAll(/tool-dot ([a-z_]+)/g)].map((match) => match[1]);
+  const rowStatus = [...rows.matchAll(/<i class="dot ([a-z_]+) [a-z]+"><\/i>([^<]+)/g)].map((match) => match[2]);
+  const rowDot = [...rows.matchAll(/<i class="dot ([a-z_]+) [a-z]+"><\/i>/g)].map((match) => match[1]);
+  const allowed = ["未发现", "未授权", "正常", "需要处理", "数据过时", "需要重新授权"];
 
   assert.deepEqual(sideStatus, rowStatus);
-  assert.deepEqual(sideDot, rowDot);
-  assert.deepEqual(sideStatus, ["已授权", "需要重新授权", "未授权", "已授权"]);
-  assert.deepEqual(sideDot, ["authorized", "needs_reauth", "unauthorized", "authorized"]);
+  assert.deepEqual(sideStatus, ["正常", "需要重新授权", "未授权", "正常"]);
+  assert.deepEqual(rowDot, ["authorized", "needs_reauth", "unauthorized", "authorized"]);
+  // 侧栏点按 22:57：正常 = 雾蓝，需要处理 = 赭色，未连接或过时 = 灰
+  assert.deepEqual(sideDot, ["ok", "attention", "quiet", "ok"]);
+  const toned = toolMarks(tools, details, true, new Set(["deepseek_harness"]), new Set(["codex"]));
+  assert.deepEqual(toned.map((mark) => mark.tone), ["attention", "attention", "quiet", "quiet"]);
+  assert.equal(toolTone("unauthorized", true, false), "quiet");
+  assert.equal(toolTone("authorized", true, true), "attention");
   assert.ok(sideStatus.every((status) => allowed.includes(status)));
   assert.equal(rowStatus.includes("暂不提供"), false);
   assert.match(rows, /DeepSeek Harness<\/strong><small>用量暂不提供<\/small>/);
@@ -51,9 +56,9 @@ try {
   const liveSide = renderToStaticMarkup(createElement(SidebarTools, { marks: live }));
   const liveRows = renderToStaticMarkup(createElement(OverviewToolRows, { marks: live, onOpen() {} }));
   const liveSideStatus = [...liveSide.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
-  const liveRowStatus = [...liveRows.matchAll(/<i class="dot ([a-z_]+)"><\/i>([^<]+)/g)].map((match) => match[2]);
+  const liveRowStatus = [...liveRows.matchAll(/<i class="dot ([a-z_]+) [a-z]+"><\/i>([^<]+)/g)].map((match) => match[2]);
   assert.deepEqual(liveSideStatus, liveRowStatus);
-  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "已授权"]);
+  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "正常"]);
   assert.match(liveRows, /DeepSeek Harness<\/strong><small>用量暂不提供<\/small>/);
   assert.equal(liveRowStatus.includes("暂不提供"), false);
 } finally {
@@ -62,8 +67,8 @@ try {
 
 const shell = readFileSync(new URL("./src/shell.css", import.meta.url), "utf8");
 const usage = readFileSync(new URL("./src/usage.css", import.meta.url), "utf8");
-assert.match(shell, /\.tool-dot\.authorized \{[^}]*background:\s*var\(--color-mist\)/);
-assert.match(shell, /\.tool-dot\.needs_reauth \{[^}]*background:\s*var\(--color-ochre\)/);
+assert.match(shell, /\.tool-dot\.ok \{[^}]*background:\s*var\(--color-mist\)/);
+assert.match(shell, /\.tool-dot\.attention \{[^}]*background:\s*var\(--color-ochre\)/);
 assert.match(shell, /\.tool-dot \{[^}]*background:\s*var\(--color-text-tertiary\)/);
 assert.match(usage, /\.tool-status \.dot\.authorized \{[^}]*background:\s*var\(--color-mist\)/);
 assert.match(usage, /\.tool-status \.dot\.needs_reauth \{[^}]*background:\s*var\(--color-ochre\)/);

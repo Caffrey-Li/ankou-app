@@ -3,7 +3,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(target_os = "windows")]
 use tauri::Listener;
-use tauri::{Manager, RunEvent, Theme, WindowEvent};
+use tauri::{Emitter, Manager, RunEvent, Theme, WindowEvent};
 use wanxiang_core::Supervisor;
 
 #[cfg(test)]
@@ -17,17 +17,35 @@ mod icons;
 mod measured;
 mod runtime;
 mod space;
+mod system;
 
 pub fn run() {
     commands::attach(
         tauri::Builder::default()
             .plugin(tauri_plugin_opener::init())
-            .plugin(tauri_plugin_dialog::init()),
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ))
+            .plugin(tauri_plugin_notification::init()),
     )
     .manage(Supervisor::new())
     .setup(|app| {
         app.manage(commands::Hub::open(app.handle())?);
+        setup_app_menu(app.handle())?;
         setup_tray(app.handle())?;
+        if let Err(error) = build_panel(app.handle()) {
+            eprintln!("快速面板没有建立，点菜单栏图标改为打开主窗口：{error}");
+        }
+        if let Some(settings) = app
+            .try_state::<commands::Hub>()
+            .and_then(|hub| hub.store.settings().ok())
+        {
+            if let Err(error) = system::apply(app.handle(), &settings) {
+                eprintln!("{error}");
+            }
+        }
         if let Some(window) = app.get_webview_window("main") {
             apply_window_material(&window);
             open_preview(&window);
@@ -158,9 +176,147 @@ fn reveal(app: &tauri::AppHandle) {
     }
 }
 
+static PANEL_HIDDEN_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Figma 21:369：点菜单栏图标弹出快速面板，点外部收起。
+fn build_panel(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let panel = tauri::WebviewWindowBuilder::new(
+        app,
+        "tray",
+        tauri::WebviewUrl::App("index.html#tray".into()),
+    )
+    .title("万象快速面板")
+    .inner_size(362.0, 440.0)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .resizable(false)
+    .skip_taskbar(true)
+    .always_on_top(true)
+    .visible_on_all_workspaces(true)
+    .focused(false)
+    .visible(false)
+    .build()?;
+    let handle = panel.clone();
+    panel.on_window_event(move |event| {
+        if let WindowEvent::Focused(false) = event {
+            if handle.is_visible().unwrap_or(false) {
+                PANEL_HIDDEN_AT.store(now_ms(), std::sync::atomic::Ordering::SeqCst);
+                let _ = handle.hide();
+            }
+        }
+    });
+    Ok(())
+}
+
+fn toggle_panel(app: &tauri::AppHandle, rect: tauri::Rect) {
+    let Some(panel) = app.get_webview_window("tray") else {
+        reveal(app);
+        return;
+    };
+    if panel.is_visible().unwrap_or(false) {
+        let _ = panel.hide();
+        return;
+    }
+    // 点图标会先让面板失焦收起；紧接着的这次点击只是收起，不再打开
+    if now_ms().saturating_sub(PANEL_HIDDEN_AT.load(std::sync::atomic::Ordering::SeqCst)) < 300 {
+        return;
+    }
+    let scale = panel.scale_factor().unwrap_or(2.0);
+    let icon = rect.position.to_physical::<f64>(scale);
+    let icon_size = rect.size.to_physical::<f64>(scale);
+    let width = panel
+        .outer_size()
+        .map(|size| f64::from(size.width))
+        .unwrap_or(362.0 * scale);
+    let mut x = icon.x + icon_size.width / 2.0 - width / 2.0;
+    let y = icon.y + icon_size.height;
+    if let Ok(Some(monitor)) = app.monitor_from_point(icon.x, icon.y) {
+        let left = f64::from(monitor.position().x);
+        let right = left + f64::from(monitor.size().width);
+        x = x.min(right - width).max(left);
+    }
+    let _ = panel.set_position(tauri::PhysicalPosition::new(x, y));
+    let _ = panel.emit("panel-open", ());
+    let _ = panel.show();
+    let _ = panel.set_focus();
+}
+
+/// 中文应用菜单，替换 Tauri 默认的英文菜单。
+fn setup_app_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{AboutMetadata, PredefinedMenuItem, Submenu};
+    let about = PredefinedMenuItem::about(
+        app,
+        Some("关于万象小助手"),
+        Some(AboutMetadata {
+            name: Some("万象小助手".to_string()),
+            version: Some(app.package_info().version.to_string()),
+            ..Default::default()
+        }),
+    )?;
+    let settings = MenuItem::with_id(app, "app-settings", "设置…", true, Some("CmdOrCtrl+,"))?;
+    let app_menu = Submenu::with_items(
+        app,
+        "万象小助手",
+        true,
+        &[
+            &about,
+            &PredefinedMenuItem::separator(app)?,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, Some("隐藏万象小助手"))?,
+            &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
+            &PredefinedMenuItem::show_all(app, Some("全部显示"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, Some("退出万象小助手"))?,
+        ],
+    )?;
+    let edit = Submenu::with_items(
+        app,
+        "编辑",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, Some("撤销"))?,
+            &PredefinedMenuItem::redo(app, Some("重做"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, Some("剪切"))?,
+            &PredefinedMenuItem::copy(app, Some("拷贝"))?,
+            &PredefinedMenuItem::paste(app, Some("粘贴"))?,
+            &PredefinedMenuItem::select_all(app, Some("全选"))?,
+        ],
+    )?;
+    let window = Submenu::with_items(
+        app,
+        "窗口",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, Some("最小化"))?,
+            &PredefinedMenuItem::close_window(app, Some("关闭窗口"))?,
+        ],
+    )?;
+    let menu = Menu::with_items(app, &[&app_menu, &edit, &window])?;
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        if event.id().as_ref() == "app-settings" {
+            reveal(app);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.emit("navigate", "settings");
+            }
+        }
+    });
+    Ok(())
+}
+
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "打开万象", true, None::<&str>)?;
-    let refresh = MenuItem::with_id(app, "refresh", "刷新（未验证）", true, None::<&str>)?;
+    let refresh = MenuItem::with_id(app, "refresh", "刷新", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &refresh, &quit])?;
     let theme = current_theme(app);
@@ -190,10 +346,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                rect,
                 ..
             } = event
             {
-                reveal(tray.app_handle());
+                toggle_panel(tray.app_handle(), rect);
             }
         });
     #[cfg(target_os = "macos")]

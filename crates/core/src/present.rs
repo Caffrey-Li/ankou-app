@@ -23,6 +23,7 @@ pub struct UsageFacts {
     pub codex_app_server: bool,
     pub codex_access: RecordAccess,
     pub bot_access: RecordAccess,
+    pub harness_access: RecordAccess,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -40,6 +41,7 @@ pub struct UsageDay {
     pub label: String,
     pub codex: Option<i64>,
     pub bot: Option<i64>,
+    pub harness: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -77,6 +79,13 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     let bot_calls = bot_open
         .then(|| sum_metric(facts, "ds_bot", "calls"))
         .flatten();
+    let harness_open = facts.harness_access == RecordAccess::Authorized;
+    let harness_tokens = harness_open
+        .then(|| sum_metric(facts, "deepseek_harness", "tokens"))
+        .flatten();
+    let harness_calls = harness_open
+        .then(|| sum_metric(facts, "deepseek_harness", "calls"))
+        .flatten();
     let excluded_calls = if bot_open {
         sum_metric(facts, "ds_bot", "excluded_calls").unwrap_or(0)
     } else {
@@ -102,10 +111,12 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     };
     let window_report = report(facts, "codex", "windows");
     let balance_report = report(facts, "deepseek_harness", "balance");
-    let mut banner = vec![
-        "Cursor 用量暂不提供，未计入".to_string(),
-        "Harness 用量暂不提供，未计入".to_string(),
-    ];
+    let mut banner = vec!["Cursor 用量暂不提供，未计入".to_string()];
+    match facts.harness_access {
+        RecordAccess::Unauthorized => banner.push("Harness 未授权，未计入".to_string()),
+        RecordAccess::NeedsReauth => banner.push("Harness 需要重新授权，未计入".to_string()),
+        RecordAccess::Authorized => {}
+    }
     match facts.codex_access {
         RecordAccess::Unauthorized => banner.push("ChatGPT 未授权，未计入".to_string()),
         RecordAccess::NeedsReauth => banner.push("ChatGPT 需要重新授权，未计入".to_string()),
@@ -131,7 +142,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         RecordAccess::Unauthorized => banner.push("DS Bot 未授权，未计入".to_string()),
         RecordAccess::NeedsReauth => banner.push("DS Bot 需要重新授权，未计入".to_string()),
         RecordAccess::Authorized if excluded_calls > 0 => {
-            banner.push(format!("有 {excluded_calls} 条调用无法归属，未计入"));
+            banner.push(format!("有 {excluded_calls} 条调用不属于 Bot 或群聊，未计入 DS Bot"));
         }
         RecordAccess::Authorized => {}
     }
@@ -139,7 +150,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         !facts.codex_app_server || window_report.map(|(state, _)| state) == Some("app_off");
     let (balance_value, balance_note, balance_link) =
         balance_card(facts, balance, balance_currency, balance_report);
-    let counted = [codex_tokens, bot_tokens]
+    let counted = [codex_tokens, bot_tokens, harness_tokens]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
@@ -181,11 +192,20 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
                 bot: bot_open
                     .then(|| day_amount(facts, &day, "ds_bot", "tokens"))
                     .flatten(),
+                harness: harness_open
+                    .then(|| day_amount(facts, &day, "deepseek_harness", "tokens"))
+                    .flatten(),
             })
             .collect(),
         details: vec![
             counted_detail("ChatGPT", facts.codex_access, codex_tokens, None, true),
-            withheld_detail("DeepSeek Harness"),
+            counted_detail(
+                "DeepSeek Harness",
+                facts.harness_access,
+                harness_tokens,
+                harness_calls,
+                false,
+            ),
             counted_detail("DS Bot", facts.bot_access, bot_tokens, bot_calls, false),
             withheld_detail("Cursor"),
         ],
@@ -199,9 +219,11 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
 
 fn total_reason(facts: &UsageFacts) -> &'static str {
     let open = facts.codex_access == RecordAccess::Authorized
-        || facts.bot_access == RecordAccess::Authorized;
+        || facts.bot_access == RecordAccess::Authorized
+        || facts.harness_access == RecordAccess::Authorized;
     let reauth = facts.codex_access == RecordAccess::NeedsReauth
-        || facts.bot_access == RecordAccess::NeedsReauth;
+        || facts.bot_access == RecordAccess::NeedsReauth
+        || facts.harness_access == RecordAccess::NeedsReauth;
     if open {
         "无本机记录"
     } else if reauth {
@@ -405,8 +427,8 @@ fn codex_cards(
     };
     if let Some(note) = gap {
         return vec![
-            status_card("ChatGPT", note, true),
-            status_card("ChatGPT · 窗口", note, true),
+            status_card(FIVE_HOUR_CARD, note, true),
+            status_card(SEVEN_DAY_CARD, note, true),
         ];
     }
     if hidden || windows.is_empty() {
@@ -420,8 +442,8 @@ fn codex_cards(
             }
         };
         return vec![
-            status_card("ChatGPT", note, false),
-            status_card("ChatGPT · 窗口", note, false),
+            status_card(FIVE_HOUR_CARD, note, false),
+            status_card(SEVEN_DAY_CARD, note, false),
         ];
     }
     let live = latest_amount(facts, "codex", "window_source") == Some(1);
@@ -448,10 +470,24 @@ fn codex_cards(
         })
         .collect();
     if cards.len() == 1 {
-        cards.push(status_card("ChatGPT · 窗口", "无本机记录", false));
+        // 只读到一个窗口时，另一张卡写明缺的是哪个窗口，顺序固定为 5 小时在前（Figma 18:320）。
+        if windows[0].minutes == Some(SEVEN_DAY_MINUTES) {
+            cards.insert(0, status_card(FIVE_HOUR_CARD, "无本机记录", false));
+        } else if windows[0].minutes == Some(FIVE_HOUR_MINUTES) {
+            cards.push(status_card(SEVEN_DAY_CARD, "无本机记录", false));
+        } else {
+            cards.push(status_card("ChatGPT · 其他窗口", "无本机记录", false));
+        }
+    } else if cards.len() == 2 && windows[0].minutes == Some(SEVEN_DAY_MINUTES) {
+        cards.swap(0, 1);
     }
     cards
 }
+
+const FIVE_HOUR_MINUTES: i64 = 300;
+const SEVEN_DAY_MINUTES: i64 = 10080;
+const FIVE_HOUR_CARD: &str = "ChatGPT · 5 小时窗口";
+const SEVEN_DAY_CARD: &str = "ChatGPT · 7 天窗口";
 
 fn status_card(name: &str, note: &str, link: bool) -> UsageCard {
     UsageCard {

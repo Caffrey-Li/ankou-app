@@ -2,19 +2,55 @@
 .overview-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   min-height: 0;
   overflow: auto;
 }
 
+/* 提示 · 部分覆盖 18:397：赭色 8% 底、11/14 内边距、16 图标、正文石墨 12 */
 .usage-banner {
+  box-sizing: border-box;
+  min-height: 50px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
   margin: 0;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: var(--radius-inset);
-  background: color-mix(in srgb, var(--color-ochre) 12%, white);
-  color: var(--color-ochre);
+  background: color-mix(in srgb, var(--color-ochre) 8%, transparent);
+  color: var(--color-graphite);
   font-size: var(--font-size-caption);
   line-height: 1.5;
+}
+
+.usage-banner > .icon {
+  flex: none;
+  color: var(--color-ochre);
+}
+
+.usage-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.usage-banner .banner-more {
+  margin: 0 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: default;
+}
+
+.usage-banner .text-link {
+  flex: none;
+  align-self: center;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 .usage-head,
@@ -31,11 +67,20 @@
 .detail-head h2,
 .quota-tile h3 {
   margin: 0;
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-section);
   font-weight: var(--font-weight-medium);
 }
 
-.usage-head p,
+.usage-head {
+  margin-bottom: -6px;
+}
+
+.usage-head p {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
 .chart-note,
 .chart-empty {
   margin: 0;
@@ -54,10 +99,9 @@
 .usage-panel,
 .overview-quota {
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: var(--radius-card);
   background: var(--color-card);
-  box-shadow: var(--shadow-sidebar);
+  box-shadow: var(--shadow-card);
 }
 
 .quota-tile {
@@ -258,9 +302,10 @@
   font-weight: var(--font-weight-medium);
 }
 
-.range-custom {
+.range-control {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .usage-panel {
@@ -445,7 +490,7 @@
 
 .overview-row {
   display: grid;
-  grid-template-columns: 1.15fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -454,10 +499,142 @@
   box-sizing: border-box;
   min-height: 120px;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 0;
   border-radius: var(--radius-card);
   background: var(--color-card);
-  box-shadow: var(--shadow-sidebar);
+  box-shadow: var(--shadow-card);
+}
+
+/* 概览三项指标卡 18:214 / 18:240：内边距 20、纵向间距 14 */
+.overview-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-metric .quota-title {
+  gap: 7px;
+  justify-content: flex-start;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+}
+
+.overview-figure {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-family: var(--font-latin);
+  font-weight: var(--font-weight-semibold);
+  line-height: 48px;
+}
+
+.overview-figure strong {
+  color: var(--color-graphite);
+  font-size: var(--font-size-figure);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.6px;
+}
+
+.overview-figure small {
+  color: var(--color-text-secondary);
+  font-size: 18px;
+}
+
+.overview-figure .warn {
+  color: var(--color-ochre);
+}
+
+.overview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.overview-meta b {
+  overflow: hidden;
+  color: var(--color-graphite);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 248px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(29, 29, 31, 0.07);
+}
+
+.overview-bar .fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-mist);
+}
+
+.overview-bar .fill.warn,
+.overview-bar .fill.clean {
+  background: var(--color-ochre);
+}
+
+.overview-bar .fill.protected {
+  background: var(--color-text-secondary);
+}
+
+.overview-bar .mark {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: rgba(29, 29, 31, 0.5);
+}
+
+.overview-foot {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-separator);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.overview-foot.legend {
+  justify-content: flex-start;
+}
+
+.overview-foot.legend span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.overview-foot.legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--color-text-secondary);
+}
+
+.overview-foot.legend i.clean {
+  background: var(--color-ochre);
 }
 
 .overview-card h2 {
@@ -518,7 +695,7 @@
 
 .detail-row {
   display: grid;
-  grid-template-columns: 230px 70px 120px 70px 130px minmax(0, 1fr);
+  grid-template-columns: minmax(150px, 230px) 60px 120px 92px 130px minmax(0, 1fr);
   column-gap: 16px;
   align-items: center;
   padding: 10px 0;
@@ -536,9 +713,22 @@
   font-weight: var(--font-weight-medium);
 }
 
+.detail-row > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detail-row .num,
 .detail-row .source {
   text-align: right;
+}
+
+/* 来源列 18:564：12 常规、次要文字色 */
+.detail-row:not(.detail-head-row) .source {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
 }
 
 .detail-foot {
@@ -549,7 +739,7 @@
   font-size: 11px;
 }
 
-.attention {
+.overview-card.attention {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -593,7 +783,7 @@
   background: var(--color-ochre);
 }
 
-.attention h2 {
+.overview-card.attention h2 {
   margin: 0;
   color: var(--color-graphite);
   font-size: 28px;
@@ -760,4 +950,20 @@
 .tool-chev {
   color: var(--color-text-tertiary);
   font-size: 14px;
+}
+
+.attention-kicker.calm {
+  color: var(--color-mist);
+}
+
+.attention-kicker.calm i {
+  background: var(--color-mist);
+}
+
+.overview-card.attention-calm h2 {
+  font-size: 22px;
+}
+
+.tool-status .dot.attention {
+  background: var(--color-ochre);
 }

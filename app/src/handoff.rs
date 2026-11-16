@@ -8,8 +8,12 @@ use wanxiang_adapter_codex::{
     context_percent, find_codex_cli, list_jsonl, list_threads, parse_jsonl_head, read_jsonl,
     read_thread, rollout_paths, title_of,
 };
+use wanxiang_adapter_cursor::{chat_chunks, list_chats};
+#[cfg(debug_assertions)]
 use wanxiang_adapter_cursor::read_fixture;
-use wanxiang_adapter_dsh::{fetch_summary, list_sessions, session_transcript};
+use wanxiang_adapter_dsh::{
+    fetch_summary, list_sessions, owner_kind, parse_session, read_session_bytes, session_chunks, session_paths,
+};
 use wanxiang_core::{
     authorize_summary, organize_local, redeem_summary, summary_body, summary_chars,
     write_export_if_chosen, Capability, ConfirmToken, DeeplinkError, GrantStatus, SummaryError,
@@ -129,6 +133,8 @@ pub struct ConversationPage {
     pub rows: Vec<ConversationRow>,
     pub codex: SourceStatus,
     pub ds_bot: SourceStatus,
+    pub harness: SourceStatus,
+    pub cursor: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -145,18 +151,33 @@ pub struct SummaryPreview {
     pub chars: usize,
 }
 
+/// 读会话文件可能要几秒（Harness 会话需要解压），放到后台线程，不卡界面。
 #[tauri::command]
-pub fn list_conversations(hub: State<'_, Hub>) -> Result<ConversationPage, String> {
-    Ok(conversations(&hub))
+pub async fn list_conversations<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> Result<ConversationPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let hub = app.state::<Hub>();
+        conversations(&hub)
+    })
+    .await
+    .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
-pub fn prepare_handoff(
-    hub: State<'_, Hub>,
+pub async fn prepare_handoff<R: tauri::Runtime>(
+    app: AppHandle<R>,
     tool: String,
     id: String,
 ) -> Result<HandoffDraft, String> {
-    draft(&hub, &tool, &id)
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let hub = app.state::<Hub>();
+        draft(&hub, &tool, &id)
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
@@ -165,7 +186,8 @@ pub fn begin_summary(hub: State<'_, Hub>, transcript: String) -> Result<SummaryP
         .store
         .guard()
         .account_link_active(ToolId::DeepSeekHarness);
-    let key_saved = hub.secrets.is_saved().unwrap_or(false);
+    // 用本地记号判断是否存过 Key，不在主线程上读钥匙串
+    let key_saved = hub.store.key_saved_flag().ok().flatten().unwrap_or(false);
     let body = summary_body(&transcript);
     let token = authorize_summary(hub.store.guard(), linked, key_saved, body.as_bytes())
         .map_err(summary_text)?;
@@ -176,18 +198,29 @@ pub fn begin_summary(hub: State<'_, Hub>, transcript: String) -> Result<SummaryP
     })
 }
 
+/// 读钥匙串和联网都放到后台线程，界面不会在等待时卡住。
 #[tauri::command]
-pub fn send_summary(hub: State<'_, Hub>, token: String, body: String) -> Result<String, String> {
-    let token = ConfirmToken::from_hex(&token).ok_or_else(|| "确认已失效".to_string())?;
-    redeem_summary(hub.store.guard(), &token, body.as_bytes()).map_err(summary_text)?;
-    let key = hub
-        .secrets
-        .load()
-        .map_err(|_| "先在设置里保存 DeepSeek 钥匙".to_string())?;
-    let text = fetch_summary("https://api.deepseek.com", &key, &body)
-        .map_err(|_| "摘要没有生成。编辑还在，可以改用本地整理或重试。".to_string());
-    drop(key);
-    text
+pub async fn send_summary<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    token: String,
+    body: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let hub = app.state::<Hub>();
+        let token = ConfirmToken::from_hex(&token).ok_or_else(|| "确认已失效".to_string())?;
+        redeem_summary(hub.store.guard(), &token, body.as_bytes()).map_err(summary_text)?;
+        let key = hub
+            .secrets
+            .load()
+            .map_err(|_| "先在设置里保存 DeepSeek 钥匙".to_string())?;
+        let text = fetch_summary("https://api.deepseek.com", &key, &body)
+            .map_err(|_| "摘要没有生成。编辑还在，可以改用本地整理或重试。".to_string());
+        drop(key);
+        text
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
@@ -314,26 +347,45 @@ fn conversations(hub: &Hub) -> ConversationPage {
         let db = grant.root.join("bot/usage.sqlite");
         match list_sessions(hub.store.guard(), &db) {
             Ok(heads) => {
+                // 调用记录里也有 Harness 与内部代理的会话，只列 Bot 与群聊
+                let heads: Vec<_> = heads
+                    .into_iter()
+                    .filter(|head| owner_kind(&head.owner).counted())
+                    .collect();
                 let read = if heads.is_empty() {
                     LocalRead::Empty
                 } else {
                     LocalRead::Rows
                 };
+                let files = bot_sessions(hub.store.guard(), &grant.root);
                 for head in heads {
-                    let title = if head.name.is_empty() {
-                        head.session.clone()
-                    } else {
+                    let file = files.iter().find(|session| session.id == head.session);
+                    let title = if !head.name.is_empty() {
                         head.name
+                    } else if let Some(file) = file.filter(|file| !file.title.is_empty()) {
+                        file.title.clone()
+                    } else {
+                        "未命名对话".to_string()
                     };
+                    let percent = file.and_then(|file| file.context_percent());
+                    let updated = file
+                        .map(|file| file.updated_ms.max(head.updated_ms))
+                        .unwrap_or(head.updated_ms);
                     rows.push(ConversationRow {
                         id: head.session,
                         tool: "ds_bot".to_string(),
                         title,
-                        updated: head.updated_ms.to_string(),
-                        percent: None,
+                        updated: updated.to_string(),
+                        percent,
                         cwd: None,
                         status: String::new(),
-                        context: "暂不提供".to_string(),
+                        context: if percent.is_some() {
+                            String::new()
+                        } else if file.is_some() {
+                            "未知".to_string()
+                        } else {
+                            "暂不提供".to_string()
+                        },
                         source: "usage_sqlite".to_string(),
                     });
                 }
@@ -344,47 +396,198 @@ fn conversations(hub: &Hub) -> ConversationPage {
     } else {
         LocalRead::Unread
     };
-    if std::env::var_os("WANXIANG_CURSOR_FIXTURE").is_some() {
-        if let Ok(text) = read_fixture(hub.store.guard()) {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
-                if let Some(items) = value.as_array() {
-                    for item in items {
-                        rows.push(ConversationRow {
-                            id: item
-                                .get("id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("fixture")
-                                .to_string(),
-                            tool: "cursor".to_string(),
-                            title: item
-                                .get("title")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("夹具对话")
-                                .to_string(),
-                            updated: item
-                                .get("updated")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            percent: item
-                                .get("percent")
-                                .and_then(|v| v.as_u64())
-                                .and_then(|v| u32::try_from(v).ok()),
-                            cwd: None,
-                            status: "夹具".to_string(),
-                            context: String::new(),
-                            source: "fixture".to_string(),
-                        });
-                    }
-                }
-            }
-        }
-    }
+    let (harness_auth, harness_grant) = conversation_auth(&grants, ToolId::DeepSeekHarness);
+    let harness_local = if let Some(grant) = harness_grant {
+        harness_rows(hub.store.guard(), &grant.root, &mut rows)
+    } else {
+        LocalRead::Unread
+    };
+    let (cursor_auth, cursor_grant) = conversation_auth(&grants, ToolId::Cursor);
+    let cursor_local = if let Some(grant) = cursor_grant {
+        cursor_rows(hub.store.guard(), &grant.root, &mut rows)
+    } else {
+        LocalRead::Unread
+    };
+    append_cursor_fixture(hub, &mut rows);
     ConversationPage {
         rows,
         codex: codex_status(codex_auth, codex_server, codex_local),
         ds_bot: bot_status(bot_auth, bot_local),
+        harness: bot_status(harness_auth, harness_local),
+        cursor: bot_status(cursor_auth, cursor_local),
     }
+}
+
+/// Cursor 对话：只读本机对话数据库里与对话有关的键，列标题、更新时间与上下文占用。
+fn cursor_rows(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    match list_chats(guard, root) {
+        Ok(chats) => {
+            let read = if chats.is_empty() {
+                LocalRead::Empty
+            } else {
+                LocalRead::Rows
+            };
+            for chat in chats {
+                rows.push(ConversationRow {
+                    id: chat.id,
+                    tool: "cursor".to_string(),
+                    title: if chat.title.is_empty() {
+                        "未命名对话".to_string()
+                    } else {
+                        chat.title
+                    },
+                    updated: chat.updated_ms.to_string(),
+                    percent: chat.percent,
+                    cwd: None,
+                    status: String::new(),
+                    context: if chat.percent.is_some() {
+                        String::new()
+                    } else {
+                        "未知".to_string()
+                    },
+                    source: "cursor_db".to_string(),
+                });
+            }
+            read
+        }
+        Err(_) => LocalRead::Denied,
+    }
+}
+
+fn cursor_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let Some(grant) = grants.iter().find(|grant| {
+        grant.tool == ToolId::Cursor
+            && grant.capability == Capability::Conversation
+            && grant.status == GrantStatus::Active
+    }) else {
+        return cursor_fixture_draft(hub, id);
+    };
+    let chunks = chat_chunks(hub.store.guard(), &grant.root, id)
+        .map_err(|_| "读取 Cursor 对话失败".to_string())?
+        .ok_or_else(|| "这条对话已经不在，无法交接".to_string())?;
+    let start = chunks.len().saturating_sub(wanxiang_core::RECENT_TURNS);
+    let (text, truncated) = wanxiang_core::take_recent(&chunks[start..]);
+    let truncated = truncated || start > 0;
+    Ok(HandoffDraft {
+        text,
+        truncated,
+        note: if truncated {
+            "长对话只取了最近部分".to_string()
+        } else {
+            String::new()
+        },
+    })
+}
+
+/// Harness 对话：本机会话文件里的标题、更新时间与上下文占用；Bot 工作区的会话不列在这里。
+fn harness_rows(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    let paths = session_paths(root);
+    if paths.is_empty() {
+        return LocalRead::Empty;
+    }
+    let mut readable = 0;
+    let mut listed = 0;
+    for path in paths {
+        let Ok(bytes) =
+            read_session_bytes(guard, ToolId::DeepSeekHarness, Capability::Conversation, &path)
+        else {
+            continue;
+        };
+        readable += 1;
+        let Some(session) = parse_session(&bytes) else {
+            continue;
+        };
+        if session.is_bot() {
+            continue;
+        }
+        let percent = session.context_percent();
+        listed += 1;
+        rows.push(ConversationRow {
+            id: session.id.clone(),
+            tool: "deepseek_harness".to_string(),
+            title: if session.title.is_empty() {
+                "未命名对话".to_string()
+            } else {
+                session.title.clone()
+            },
+            updated: session.updated_ms.to_string(),
+            percent,
+            cwd: (!session.cwd.is_empty()).then(|| session.cwd.clone()),
+            status: String::new(),
+            context: if percent.is_some() {
+                String::new()
+            } else {
+                "未知".to_string()
+            },
+            source: "session_file".to_string(),
+        });
+    }
+    if readable == 0 {
+        LocalRead::Denied
+    } else if listed == 0 {
+        LocalRead::Empty
+    } else {
+        LocalRead::Rows
+    }
+}
+
+/// Bot 工作区的会话文件，只取元数据（标题、上下文占用、更新时间）。
+fn bot_sessions(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+) -> Vec<wanxiang_adapter_dsh::DshSession> {
+    session_paths(root)
+        .into_iter()
+        .filter_map(|path| {
+            read_session_bytes(guard, ToolId::DsBot, Capability::Conversation, &path).ok()
+        })
+        .filter_map(|bytes| parse_session(&bytes))
+        .filter(|session| session.is_bot())
+        .collect()
+}
+
+/// 按会话编号找到会话文件，取最近的用户与助手文字。
+fn dsh_draft(
+    guard: &wanxiang_core::Guard,
+    tool: ToolId,
+    root: &std::path::Path,
+    id: &str,
+    want_bot: bool,
+) -> Result<HandoffDraft, String> {
+    for path in session_paths(root) {
+        let Ok(bytes) = read_session_bytes(guard, tool, Capability::Conversation, &path) else {
+            continue;
+        };
+        let Some(session) = parse_session(&bytes) else {
+            continue;
+        };
+        if session.id != id || session.is_bot() != want_bot {
+            continue;
+        }
+        let chunks = session_chunks(&bytes);
+        let start = chunks.len().saturating_sub(wanxiang_core::RECENT_TURNS);
+        let (text, truncated) = wanxiang_core::take_recent(&chunks[start..]);
+        let truncated = truncated || start > 0;
+        return Ok(HandoffDraft {
+            text,
+            truncated,
+            note: if truncated {
+                "长对话只取了最近部分".to_string()
+            } else {
+                String::new()
+            },
+        });
+    }
+    Err("这条对话已经不在，无法交接".to_string())
 }
 
 fn row_from_head(
@@ -426,37 +629,86 @@ fn draft(hub: &Hub, tool: &str, id: &str) -> Result<HandoffDraft, String> {
             }) else {
                 return Err("DS Bot 对话未授权".to_string());
             };
-            let db = grant.root.join("bot/usage.sqlite");
-            match session_transcript(hub.store.guard(), &db) {
-                Ok(None) => Ok(HandoffDraft {
-                    text: String::new(),
-                    truncated: false,
-                    note: "暂不提供".to_string(),
-                }),
-                Ok(Some(_)) => Err("暂不提供".to_string()),
-                Err(_) => Err("DS Bot 对话未授权".to_string()),
-            }
+            dsh_draft(hub.store.guard(), ToolId::DsBot, &grant.root, id, true)
         }
-        "cursor" => {
-            if std::env::var_os("WANXIANG_CURSOR_FIXTURE").is_none() {
-                return Err("Cursor 对话未验证".to_string());
-            }
-            let text =
-                read_fixture(hub.store.guard()).map_err(|_| "Cursor 对话未授权".to_string())?;
-            if !text.contains(&format!("\"id\": \"{id}\""))
-                && !text.contains(&format!("\"id\":\"{id}\""))
-            {
-                return Err("这条对话已经不在，无法交接".to_string());
-            }
-            Ok(HandoffDraft {
-                text: "夹具正文".to_string(),
-                truncated: false,
-                note: String::new(),
-            })
+        "cursor" => cursor_draft(hub, id),
+        "deepseek_harness" => {
+            let grants = hub.store.grants().map_err(|err| err.to_string())?;
+            let Some(grant) = grants.iter().find(|grant| {
+                grant.tool == ToolId::DeepSeekHarness
+                    && grant.capability == Capability::Conversation
+                    && grant.status == GrantStatus::Active
+            }) else {
+                return Err("DeepSeek Harness 对话未授权".to_string());
+            };
+            dsh_draft(hub.store.guard(), ToolId::DeepSeekHarness, &grant.root, id, false)
         }
-        "deepseek_harness" => Err("暂不提供".to_string()),
         _ => Err("这条对话已经不在，无法交接".to_string()),
     }
+}
+
+#[cfg(debug_assertions)]
+fn append_cursor_fixture(hub: &Hub, rows: &mut Vec<ConversationRow>) {
+    if std::env::var_os("WANXIANG_CURSOR_FIXTURE").is_some() {
+        if let Ok(text) = read_fixture(hub.store.guard()) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
+                if let Some(items) = value.as_array() {
+                    for item in items {
+                        rows.push(ConversationRow {
+                            id: item
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("fixture")
+                                .to_string(),
+                            tool: "cursor".to_string(),
+                            title: item
+                                .get("title")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("夹具对话")
+                                .to_string(),
+                            updated: item
+                                .get("updated")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            percent: item
+                                .get("percent")
+                                .and_then(|v| v.as_u64())
+                                .and_then(|v| u32::try_from(v).ok()),
+                            cwd: None,
+                            status: "夹具".to_string(),
+                            context: String::new(),
+                            source: "fixture".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn append_cursor_fixture(_hub: &Hub, _rows: &mut Vec<ConversationRow>) {}
+
+#[cfg(debug_assertions)]
+fn cursor_fixture_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    if std::env::var_os("WANXIANG_CURSOR_FIXTURE").is_none() {
+        return Err("Cursor 对话未授权".to_string());
+    }
+    let text = read_fixture(hub.store.guard()).map_err(|_| "Cursor 对话未授权".to_string())?;
+    if !text.contains(&format!("\"id\": \"{id}\"")) && !text.contains(&format!("\"id\":\"{id}\"")) {
+        return Err("这条对话已经不在，无法交接".to_string());
+    }
+    Ok(HandoffDraft {
+        text: "夹具正文".to_string(),
+        truncated: false,
+        note: String::new(),
+    })
+}
+
+#[cfg(not(debug_assertions))]
+fn cursor_fixture_draft(_hub: &Hub, _id: &str) -> Result<HandoffDraft, String> {
+    Err("Cursor 对话未授权".to_string())
 }
 
 fn codex_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
@@ -590,7 +842,9 @@ mod tests {
         ToolScheduler,
     };
 
-    use super::{bot_status, codex_status, conversations, Auth, LocalRead, ServerAttempt, SourceStatus};
+    use super::{
+        bot_status, codex_status, conversations, draft, Auth, LocalRead, ServerAttempt, SourceStatus,
+    };
     use crate::commands::{Hub, ScanSlots};
 
     fn expect_codex(auth: Auth, server: ServerAttempt, local: LocalRead, status: SourceStatus) {
@@ -856,6 +1110,68 @@ mod tests {
             permissions.set_mode(0o644);
             std::fs::set_permissions(&blocked, permissions).unwrap();
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn raw_frame(data: &[u8]) -> Vec<u8> {
+        let mut out = vec![0x28, 0xB5, 0x2F, 0xFD, 0x00, 0x38];
+        for (index, block) in data.chunks(100 * 1024).enumerate() {
+            let last = u32::from((index + 1) * 100 * 1024 >= data.len());
+            let header = last | ((block.len() as u32) << 3);
+            out.extend_from_slice(&header.to_le_bytes()[..3]);
+            out.extend_from_slice(block);
+        }
+        out
+    }
+
+    fn dsh_session(root: &Path, workspace: &str, id: &str, cwd: &str, title: &str) {
+        let dir = root.join("sessions").join(workspace).join(format!("session-{id}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let body = [
+            format!(r#"{{"type":"session","id":"{id}","createdAt":1000,"cwd":"{cwd}"}}"#),
+            format!(r#"{{"type":"session/title","time":1100,"data":{{"title":"{title}"}}}}"#),
+            r#"{"type":"request/context","time":1200,"data":{"contextWindow":1000}}"#.to_string(),
+            r#"{"type":"user/message","time":1300,"data":{"content":[{"type":"text","text":"问题"}]}}"#.to_string(),
+            r#"{"type":"assistant/message","time":1400,"data":{"message":{"content":[{"type":"text","text":"回答"}]},"usage":{"inputTokens":800,"cacheReadTokens":0,"cacheWriteTokens":0,"outputTokens":50,"totalTokens":850}}}"#.to_string(),
+        ]
+        .join("\n");
+        std::fs::write(dir.join("session.v4.jsonl.zstd"), raw_frame(body.as_bytes())).unwrap();
+    }
+
+    #[test]
+    fn harness_lists_its_own_sessions_and_bot_sessions_stay_with_ds_bot() {
+        let (dir, hub) = temp_hub("harness");
+        let dsh = dir.join("dsh");
+        dsh_session(&dsh, "--Users-me-project--", "h1", "/Users/me/project", "发布清单");
+        dsh_session(&dsh, "--Users-me-.dsh-bot-workspace--", "b1", "/Users/me/.dsh/bot/workspace", "群聊");
+        grant(&hub, ToolId::DeepSeekHarness, &dsh, wanxiang_adapter_dsh::HARNESS_PATTERN);
+        let page = conversations(&hub);
+        assert_eq!(page.harness, SourceStatus::Ok);
+        let harness: Vec<_> = page.rows.iter().filter(|row| row.tool == "deepseek_harness").collect();
+        assert_eq!(harness.len(), 1);
+        assert_eq!(harness[0].title, "发布清单");
+        assert_eq!(harness[0].percent, Some(85));
+        let text = draft(&hub, "deepseek_harness", "h1").unwrap().text;
+        assert!(text.contains("用户：问题"));
+        assert!(text.contains("助手：回答"));
+        assert!(draft(&hub, "deepseek_harness", "b1").is_err());
+
+        empty_bot_db(&dsh.join("bot/usage.sqlite"));
+        let status = std::process::Command::new("sqlite3")
+            .arg(dsh.join("bot/usage.sqlite"))
+            .arg("INSERT INTO calls VALUES ('k1', 'b1', 10, 'p', 'm', 'turn', 0, 1, 0, 0, 1); INSERT INTO calls VALUES ('k2', 'h1', 10, 'p', 'm', 'turn', 0, 1, 0, 0, 1); INSERT INTO owners VALUES ('b1', 'bot:demo', '示例 Bot');")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        grant(&hub, ToolId::DsBot, &dsh, "bot/usage.sqlite*");
+        grant(&hub, ToolId::DsBot, &dsh, wanxiang_adapter_dsh::BOT_SESSION_PATTERN);
+        let page = conversations(&hub);
+        let bot: Vec<_> = page.rows.iter().filter(|row| row.tool == "ds_bot").collect();
+        assert_eq!(bot.len(), 1, "Harness 的会话不应出现在 DS Bot 里");
+        assert_eq!(bot[0].title, "示例 Bot");
+        assert_eq!(bot[0].percent, Some(85));
+        let text = draft(&hub, "ds_bot", "b1").unwrap().text;
+        assert!(text.contains("助手：回答"));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

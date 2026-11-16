@@ -162,6 +162,7 @@ fn sample_page() -> UsagePage {
         codex_app_server: true,
         codex_access: RecordAccess::Authorized,
         bot_access: RecordAccess::Authorized,
+        harness_access: RecordAccess::Unauthorized,
     })
 }
 
@@ -198,7 +199,7 @@ fn m2_fixture_page_is_the_parsed_golden_sample() {
             .find(|row| row.name == "DeepSeek Harness")
             .unwrap()
             .tokens,
-        "暂不提供"
+        "未授权"
     );
     assert_ne!(page.total, "—");
     assert_eq!(page.range_label, "10 月 1 日 – 25 日");

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   beginSummary,
   exportHandoff,
@@ -12,7 +12,7 @@ import {
 } from "./api";
 import { Check } from "./Check";
 import rowsFromFile from "./fixture-m3.json";
-import { IconArrow, IconCheck, IconChevron, IconClose, IconCopy, IconSearch } from "./icons";
+import { IconArrow, IconCheck, IconChevron, IconClose, IconCopy, IconSearch, IconSpark } from "./icons";
 import { ToolIcon } from "./tool-status";
 import "./handoff.css";
 import "./usage.css";
@@ -44,19 +44,56 @@ export const handoffCopy = {
   withheld: "暂不提供",
 };
 
-const sections = [
-  ["目标", "完成夹具里列出的下一步。"],
-  ["进展", "· 列表和比例已能显示"],
-  ["未完成", "· 真实验证尚未进行"],
-  ["关键决策和约束", "· 正文只留在内存里"],
-  ["下一步", "1. 看预览再决定是否放入"],
-  ["不确定事项", "· 比例未知的对话仍可交接"],
-  ["资料位置", "夹具，不读取本机对话库"],
-] as const;
+const sectionNames = ["目标", "进展", "未完成", "关键决策和约束", "下一步", "不确定事项", "资料位置"] as const;
+
+/** 浏览器预览（设计稿对照）用的示例内容；应用里一律用真实对话生成。 */
+const sampleSections = [
+  "完成夹具里列出的下一步。",
+  "· 列表和比例已能显示",
+  "· 真实验证尚未进行",
+  "· 正文只留在内存里",
+  "1. 看预览再决定是否放入",
+  "· 比例未知的对话仍可交接",
+  "夹具，不读取本机对话库",
+];
+
+type Organized = {
+  goal: string;
+  progress: string;
+  unfinished: string;
+  decisions: string;
+  next: string;
+  unknown: string;
+  sources: string;
+  note: string;
+};
+
+export function sectionsFrom(organized: Organized, source: string) {
+  const sources = [source, organized.sources].filter((part) => part.trim()).join("\n");
+  return [
+    organized.goal,
+    organized.progress,
+    organized.unfinished,
+    organized.decisions,
+    organized.next,
+    organized.unknown,
+    sources,
+  ].map((text) => text.trim());
+}
+
+export function composeSections(texts: string[]) {
+  return sectionNames
+    .map((name, index) => [name, (texts[index] ?? "").trim()] as const)
+    .filter(([, text]) => text)
+    .map(([name, text]) => `${name}\n${text}`)
+    .join("\n\n");
+}
 
 export type ConversationSources = {
   codex: SourceStatus;
   ds_bot: SourceStatus;
+  harness?: SourceStatus;
+  cursor?: SourceStatus;
 };
 
 const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
@@ -69,21 +106,29 @@ const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
 
 export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources | null, threshold: number) {
   if (!sources) return "";
-  if (sources.codex === "unauthorized" && sources.ds_bot === "unauthorized") return "未授权";
+  if (
+    sources.codex === "unauthorized" &&
+    sources.ds_bot === "unauthorized" &&
+    (sources.harness ?? "unauthorized") === "unauthorized" &&
+    (sources.cursor ?? "unauthorized") === "unauthorized"
+  )
+    return "未授权";
   const over = rows.filter((row) => row.percent != null && row.percent >= threshold).length;
   return `${rows.length} 条对话 · ${over} 条超过提醒阈值`;
 }
 
 export function sourcesWhenListFails(): ConversationSources {
-  return { codex: "read_failed", ds_bot: "read_failed" };
+  return { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed" };
 }
 
 export function handoffEmptyLines(sources: ConversationSources | null) {
   if (!sources) return [];
-  const tools = [
+  const tools: [string, string, SourceStatus][] = [
+    ...(sources.harness ? [["deepseek_harness", "DeepSeek Harness", sources.harness] as [string, string, SourceStatus]] : []),
     ["codex", "ChatGPT", sources.codex],
     ["ds_bot", "DS Bot", sources.ds_bot],
-  ] as const;
+    ...(sources.cursor ? [["cursor", "Cursor", sources.cursor] as [string, string, SourceStatus]] : []),
+  ];
   return tools.flatMap(([tool, label, status]) => {
     if (status === "ok") return [];
     const tone = status === "no_records" ? "note" : "alert";
@@ -123,6 +168,9 @@ export function HandoffPage({
   sheet,
   previewRequest,
   onQuery,
+  defaultMode = "ai",
+  searchRequest = 0,
+  onSettings = () => undefined,
 }: {
   rows: HandoffRow[];
   sources: ConversationSources | null;
@@ -132,31 +180,54 @@ export function HandoffPage({
   sheet: "" | "preview" | "confirm";
   previewRequest: number;
   onQuery: (query: string) => void;
+  defaultMode?: "local" | "ai";
+  searchRequest?: number;
+  onSettings?: () => void;
 }) {
   const [selectedId, setSelectedId] = useState(rows[0]?.id ?? "");
-  const [mode, setMode] = useState<"local" | "ai">("ai");
+  const [mode, setMode] = useState<"local" | "ai">(defaultMode);
   const [open, setOpen] = useState<"" | "preview" | "confirm">(sheet);
   const [notice, setNotice] = useState("");
-  const [draft, setDraft] = useState("");
+  const [sheetTexts, setSheetTexts] = useState<string[]>(() =>
+    inTauri() ? sectionNames.map(() => "") : sampleSections,
+  );
+  const [transcript, setTranscript] = useState("");
   const [deeplinkToken, setDeeplinkToken] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (searchRequest > 0) searchRef.current?.focus();
+  }, [searchRequest]);
   const visible = useMemo(() => {
-    const matched = rows.filter((row) => row.title.includes(query) || row.tool.includes(query));
+    const needle = query.trim().toLowerCase();
+    const matched = rows.filter(
+      (row) =>
+        !needle ||
+        row.title.toLowerCase().includes(needle) ||
+        toolLabel(row.tool).toLowerCase().includes(needle),
+    );
     if (filter === "attention") {
       return matched.filter((row) => row.percent != null && row.percent >= threshold);
     }
     if (filter === "recent") {
-      return [...matched].reverse();
+      // 最近 7 天有更新的对话，新的在前
+      const week = Date.now() - 7 * 86_400_000;
+      return matched
+        .map((row) => ({ row, at: parseUpdated(row.updated)?.getTime() ?? null }))
+        .filter((item) => item.at == null || item.at >= week)
+        .sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+        .map((item) => item.row);
     }
     return matched;
   }, [filter, query, rows, threshold]);
   const selected = rows.find((row) => row.id === selectedId) ?? visible[0];
-  const previewText = useMemo(() => sections.map(([name, text]) => `${name}\n${text}`).join("\n"), []);
+  const previewText = useMemo(() => composeSections(sheetTexts), [sheetTexts]);
+  const sourceLine = selected ? `${toolLabel(selected.tool)} · ${selected.title}` : "";
   useEffect(() => {
-    if (previewRequest > 0) setOpen("preview");
+    if (previewRequest > 0) void generate();
   }, [previewRequest]);
   useEffect(() => {
     if (open !== "preview" || !inTauri() || toolKind(selected?.tool ?? "") !== "cursor") return;
-    const text = draft || previewText;
+    const text = previewText;
     let cancelled = false;
     prepareDeeplink(text).then(
       (token) => {
@@ -172,12 +243,12 @@ export function HandoffPage({
     return () => {
       cancelled = true;
     };
-  }, [draft, open, previewText, selected?.tool]);
+  }, [open, previewText, selected?.tool]);
 
   async function generate() {
     if (!selected) return;
     if (!inTauri()) {
-      setDraft(previewText);
+      setSheetTexts(sampleSections);
       setOpen("preview");
       return;
     }
@@ -187,14 +258,22 @@ export function HandoffPage({
         setNotice(handoffCopy.withheld);
         return;
       }
-      const organized = mode === "local" ? await organizeHandoff(next.text) : null;
-      setDraft(organized ? organized.progress : next.text);
+      setTranscript(next.text);
       setNotice(next.truncated ? handoffCopy.truncated : next.note);
-      if (mode === "ai") setOpen("confirm");
-      else setOpen("preview");
+      if (mode === "ai") {
+        setOpen("confirm");
+        return;
+      }
+      await fillLocal(next.text);
+      setOpen("preview");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : handoffCopy.deleted);
     }
+  }
+
+  async function fillLocal(text: string) {
+    const organized = await organizeHandoff(text);
+    setSheetTexts(sectionsFrom(organized, sourceLine));
   }
 
   async function confirmSend() {
@@ -203,9 +282,10 @@ export function HandoffPage({
       return;
     }
     try {
-      const preview = await beginSummary(draft || previewText);
+      const preview = await beginSummary(transcript);
       const text = await sendSummary(preview.token, preview.body);
-      setDraft(text);
+      const organized = await organizeHandoff(text);
+      setSheetTexts(sectionsFrom(organized, sourceLine));
       setOpen("preview");
     } catch {
       setNotice(handoffCopy.summaryFailed);
@@ -214,15 +294,15 @@ export function HandoffPage({
   }
 
   async function copyText() {
-    await navigator.clipboard?.writeText(draft || previewText);
+    await navigator.clipboard?.writeText(previewText);
     setNotice("已复制，请手动粘贴");
   }
 
   async function place() {
-    const text = draft || previewText;
+    const text = previewText;
     if (!inTauri() || !deeplinkToken) {
       await navigator.clipboard?.writeText(text);
-      setNotice(toolKind(selected?.tool ?? "") === "cursor" ? "深链默认关闭，已改为复制" : "已复制，请手动粘贴");
+      setNotice("已复制，到 Cursor 新对话里粘贴");
       return;
     }
     try {
@@ -234,12 +314,17 @@ export function HandoffPage({
     }
   }
 
+  function editSection(index: number, text: string) {
+    setSheetTexts((current) => current.map((value, at) => (at === index ? text : value)));
+  }
+
   return (
     <div className="handoff">
       <section className="handoff-list" aria-label="对话列表">
         <label className="handoff-search">
           <IconSearch />
           <input
+            ref={searchRef}
             placeholder="搜索对话"
             value={query}
             onChange={(event) => onQuery(event.target.value)}
@@ -258,7 +343,7 @@ export function HandoffPage({
               <span>
                 <strong>{row.title}</strong>
                 <small>
-                  {toolLabel(row.tool)} · {row.updated}
+                  {toolLabel(row.tool)} · {updatedLabel(row.updated)}
                 </small>
               </span>
               <span className="handoff-meter">
@@ -306,7 +391,7 @@ export function HandoffPage({
             <div>
               <p className="handoff-meta">
                 <span>已用</span>
-                <b>{selected.percent == null ? selected.context || "未知" : `${selected.percent}%`}</b>
+                <b>{selected.context || (selected.percent == null ? "未知" : `${selected.percent}%`)}</b>
               </p>
               <p className="handoff-meta">
                 <span>提醒阈值</span>
@@ -328,14 +413,14 @@ export function HandoffPage({
           </div>
           <div className="handoff-actions">
             <h3>继续这段工作</h3>
-            <button type="button" className="handoff-choice recommended" onClick={() => setOpen("preview")}>
+            <button type="button" className="handoff-choice recommended" onClick={() => void generate()}>
               <span>
                 <strong>在 Cursor 新对话中继续</strong>
-                <small>预填到新对话输入框，由你检查后发送</small>
+                <small>生成交接内容，复制后在 Cursor 新对话里粘贴</small>
               </span>
               <em>推荐</em>
             </button>
-            <button type="button" className="handoff-choice" onClick={() => void copyText()}>
+            <button type="button" className="handoff-choice" onClick={() => void generate()}>
               <span>
                 <strong>换到其他工具</strong>
                 <small>ChatGPT、DS Bot、Harness · 复制后手动粘贴</small>
@@ -345,7 +430,7 @@ export function HandoffPage({
           </div>
           <div className="handoff-note">
             <strong>交接不会改动原对话</strong>
-            <p>生成的内容先给你预览和编辑；放入后由你检查并发送。完成或取消后，万象不保留原文与摘要。</p>
+            <p>生成的内容先给你预览和编辑；粘贴后由你检查并发送。完成或取消后，万象不保留原文与摘要。</p>
           </div>
           {notice ? <p className="handoff-alert">{notice}</p> : null}
           <div className="handoff-bar">
@@ -359,6 +444,7 @@ export function HandoffPage({
             </div>
             <p>AI 摘要发送前会告诉你发送范围</p>
             <button type="button" className="primary-button" onClick={() => void generate()}>
+              <IconSpark />
               生成交接内容
             </button>
           </div>
@@ -366,7 +452,14 @@ export function HandoffPage({
       ) : (
         <section className="handoff-detail">
           {handoffEmptyLines(sources).map((line) => (
-            <p key={line.tool} className={line.tone === "note" ? "handoff-note" : "handoff-alert"}>{line.text}</p>
+            <p key={line.tool} className={line.tone === "note" ? "handoff-note" : "handoff-alert"}>
+              <span>{line.text}</span>
+              {line.text.includes("未授权") || line.text.includes("重新") ? (
+                <button type="button" className="text-link" onClick={onSettings}>
+                  去设置
+                </button>
+              ) : null}
+            </p>
           ))}
         </section>
       )}
@@ -402,15 +495,24 @@ export function HandoffPage({
               {toolKind(selected?.tool ?? "") === "cursor" ? "Cursor 新对话" : "复制后手动粘贴"}
             </p>
             {notice === handoffCopy.truncated ? <p className="handoff-alert">{handoffCopy.truncated}</p> : null}
-            <div className="sheet-wide">
-              <span>目标</span>
-              <p>{sections[0][1]}</p>
-            </div>
+            <label className="sheet-wide">
+              <span>{sectionNames[0]}</span>
+              <textarea
+                value={sheetTexts[0]}
+                rows={rowsFor(sheetTexts[0], 52)}
+                onChange={(event) => editSection(0, event.target.value)}
+              />
+            </label>
             <div className="sheet-grid">
-              {sections.slice(1).map(([name, text]) => (
+              {sectionNames.slice(1).map((name, offset) => (
                 <label key={name}>
                   {name}
-                  <p>{text}</p>
+                  <textarea
+                    value={sheetTexts[offset + 1]}
+                    placeholder="无"
+                    rows={rowsFor(sheetTexts[offset + 1])}
+                    onChange={(event) => editSection(offset + 1, event.target.value)}
+                  />
                 </label>
               ))}
             </div>
@@ -439,7 +541,7 @@ export function HandoffPage({
               </button>
               <button type="button" className="primary-button" onClick={() => void place()}>
                 <IconArrow />
-                放入 Cursor 新对话
+                {deeplinkToken ? "放入 Cursor 新对话" : "复制，去 Cursor 粘贴"}
               </button>
             </footer>
           </section>
@@ -463,7 +565,7 @@ export function HandoffPage({
               className="quiet-button"
               onClick={() => {
                 setMode("local");
-                setOpen("preview");
+                void fillLocal(transcript).then(() => setOpen("preview"));
               }}
             >
               改用本地整理
@@ -488,6 +590,42 @@ function snapshotClock(row: HandoffRow | undefined) {
   const parsed = Date.parse(row.updated);
   if (!Number.isNaN(parsed) && /[T-]/.test(row.updated)) return formatClock(new Date(parsed));
   return row.updated;
+}
+
+export function parseUpdated(updated: string): Date | null {
+  if (/^\d{11,}$/.test(updated)) return new Date(Number(updated));
+  if (/^\d{9,10}$/.test(updated)) return new Date(Number(updated) * 1000);
+  if (/^\d{4}-\d{2}-\d{2}/.test(updated)) {
+    const parsed = Date.parse(updated);
+    return Number.isNaN(parsed) ? null : new Date(parsed);
+  }
+  return null;
+}
+
+/** 列表里的时间：今天显示时刻，昨天显示「昨天」，更早显示月日。 */
+export function updatedLabel(updated: string, now = new Date()) {
+  const date = parseUpdated(updated);
+  if (!date) return updated;
+  const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const diff = Math.round((day(now) - day(date)) / 86_400_000);
+  if (diff <= 0) return formatClock(date);
+  if (diff === 1) return `昨天 ${formatClock(date)}`;
+  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+/** 按字数估算换行后的行数（中文约 13px，半栏一行约 24 字，整栏约 52 字）。 */
+export function rowsFor(text: string, perLine = 24) {
+  const lines = text
+    .split("\n")
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(visualWidth(line) / perLine)), 0);
+  return Math.min(8, Math.max(1, lines));
+}
+
+function visualWidth(line: string) {
+  let width = 0;
+  for (const char of line) width += char.charCodeAt(0) > 0x2e80 ? 1 : 0.55;
+  return width;
 }
 
 function formatClock(date: Date) {

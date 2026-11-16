@@ -28,6 +28,7 @@ assert.deepEqual(
     "get-usage",
     "list-conversations",
     "list-grants",
+    "open-privacy-settings",
     "organize-handoff",
     "place-deeplink",
     "prepare-cleanup",
@@ -38,10 +39,12 @@ assert.deepEqual(
     "run-cleanup",
     "save-deepseek-key",
     "scan-space",
+    "send-notice",
     "send-summary",
     "set-capability",
     "set-settings",
     "tool-icons",
+    "tray-action",
   ],
 );
 const csp = JSON.parse(readFileSync(new URL("../app/tauri.conf.json", import.meta.url), "utf8")).app.security
@@ -60,7 +63,6 @@ for (const name of invoked) {
   assert.equal(allowed.filter((item) => item === `allow-${name}`).length, 1, name);
 }
 assert.equal(ui.includes("已连接"), false);
-assert.equal(ui.includes("已选"), false);
 assert.match(ui, /未发现/);
 assert.match(ui, /未授权/);
 assert.match(ui, /未验证/);

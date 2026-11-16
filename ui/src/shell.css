@@ -150,11 +150,27 @@ nav button[aria-current="page"] .nav-icon {
 }
 
 .tools li {
+  min-width: 0;
+}
+
+.tool-link {
   display: flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   min-width: 0;
   padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-link:hover {
+  background: rgba(29, 29, 31, 0.05);
 }
 
 .letter {
@@ -203,11 +219,11 @@ img.tool-app-icon {
   background: var(--color-text-tertiary);
 }
 
-.tool-dot.authorized {
+.tool-dot.ok {
   background: var(--color-mist);
 }
 
-.tool-dot.needs_reauth {
+.tool-dot.attention {
   background: var(--color-ochre);
 }
 
