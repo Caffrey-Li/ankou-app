@@ -116,6 +116,18 @@ else
 fi
 [ -n "$DMG" ] && { echo "dmg：$(basename "$DMG")"; shasum -a 256 "$DMG" | cut -c1-16; du -sh "$DMG" | cut -f1; }
 
+step "安装到应用程序"
+# 全部通过才装：替换「应用程序」里的旧版，再删掉编译目录里那份，免得启动台出现两个
+if [ $fail -eq 0 ] && [ -d "$APP" ]; then
+  osascript -e 'quit app id "local.wanxiang.assistant"' >/dev/null 2>&1; sleep 2
+  rm -rf "/Applications/万象小助手.app" && ditto "$APP" "/Applications/万象小助手.app" \
+    && rm -rf "$APP" target/aarch64-apple-darwin/release/bundle/macos/rw.*.dmg \
+    && echo "已安装到 /Applications，编译目录里的副本已删除" \
+    || { echo "安装失败"; fail=1; failed+=("安装到应用程序"); }
+else
+  echo "有失败项，未安装"
+fi
+
 step "工作区"
 git status --porcelain | head -80
 finish

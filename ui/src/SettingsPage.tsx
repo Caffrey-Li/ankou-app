@@ -24,7 +24,8 @@ export function SettingsPage({
     if (!focusTool) return;
     setOpenTool(focusTool.id);
     requestAnimationFrame(() => {
-      document.getElementById(`tool-${focusTool.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+      // 只在内容区里滚到能看见为止，已经看得见就不动
+      document.getElementById(`tool-${focusTool.id}`)?.scrollIntoView({ block: "nearest" });
     });
   }, [focusTool]);
   const [keyOpen, setKeyOpen] = useState(false);

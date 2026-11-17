@@ -156,6 +156,11 @@ export function App() {
   const forced = new URLSearchParams(window.location.search).get("page");
   const [page, setPage] = useState<PageId>(initialPage);
   const [focusTool, setFocusTool] = useState<{ id: ToolId; at: number } | undefined>(undefined);
+  useEffect(() => {
+    // 换页时内容区回到顶部（工具直达的定位在设置页里另行处理）
+    document.querySelector("main")?.scrollTo(0, 0);
+  }, [page]);
+
   function openTool(id: ToolId) {
     setFocusTool({ id, at: Date.now() });
     setPage("settings");
