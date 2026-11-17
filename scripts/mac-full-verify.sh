@@ -74,10 +74,16 @@ if [ "$MODE" = quick ]; then
 fi
 
 step "签名证书"
-if ! security find-certificate -c "Wanxiang Local Signing" >/dev/null 2>&1; then
-  echo "没有本机签名证书，请先运行「生成签名证书.command」"; fail=1; failed+=("缺少本机签名证书")
+# 优先用 Apple ID 的开发证书：签名带固定团队编号，钥匙串的「始终允许」跨版本有效。
+# 用证书指纹指定，日志里不写证书上的姓名和邮箱。
+DEV_ID=$(security find-identity -v -p codesigning 2>/dev/null | grep '"Apple Development' | head -1 | awk '{print $2}')
+if [ -n "$DEV_ID" ]; then
+  export APPLE_SIGNING_IDENTITY="$DEV_ID"
+  echo "签名：Apple Development 开发证书（${DEV_ID:0:8}…）"
+elif security find-certificate -c "Wanxiang Local Signing" >/dev/null 2>&1; then
+  echo "签名：本机自签证书（没有团队编号，每个新版本钥匙串会再问一次）"
 else
-  echo "本机签名证书：有"
+  echo "没有可用的签名证书，请先运行「生成签名证书.command」"; fail=1; failed+=("缺少签名证书")
 fi
 
 step "图标"
@@ -109,7 +115,8 @@ if [ -d "$APP" ]; then
   /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$APP/Contents/Info.plist" 2>&1 | sed 's/^/  CFBundleIconName = /'
   /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>&1 | sed 's/^/  版本 = /'
   [ -f "$APP/Contents/Resources/Assets.car" ] && echo "Assets.car：有" || echo "Assets.car：无"
-  codesign -dvv "$APP" 2>&1 | grep -E "^(Identifier|Authority|Signature)=" | sed 's/^/  /' 
+  codesign -dvv "$APP" 2>&1 | grep -E "^(Identifier|Signature|TeamIdentifier)=" | sed 's/^/  /'
+  codesign -dvv "$APP" 2>&1 | grep -m1 "^Authority=" | sed -E 's/^Authority=([^:]*).*/  Authority=\1/' 
   lipo -archs "$APP/Contents/MacOS/"* 2>&1
 else
   echo "没有找到 .app"; fail=1; failed+=("找不到 .app")
