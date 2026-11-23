@@ -90,6 +90,7 @@ export type RefreshPending = {
   windows: boolean;
   claude?: boolean;
   antigravity?: boolean;
+  grok?: boolean;
 };
 
 const idlePending: RefreshPending = {
@@ -99,6 +100,7 @@ const idlePending: RefreshPending = {
   windows: false,
   claude: false,
   antigravity: false,
+  grok: false,
 };
 
 export function totalLabel(range: UsageRange) {
@@ -152,7 +154,8 @@ export function UsagePage({
         {usage.cards.map((card, index) => (
           <article key={`${card.name}-${index}`} className="quota-tile">
             <h3>{cardTitle(card.name)}</h3>
-            {(pending.windows && card.name.startsWith("ChatGPT")) || (pending.claude && card.name.startsWith("Claude")) ? (
+            {(pending.windows && card.name.startsWith("ChatGPT")) || (pending.claude && card.name.startsWith("Claude")) ||
+            (pending.grok && card.name.startsWith("Grok Bot")) ? (
               <p className="quota-plain">刷新中</p>
             ) : pending.balance && card.name === "DeepSeek 账户" ? (
               <p className="quota-plain">刷新中</p>

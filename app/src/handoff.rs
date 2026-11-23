@@ -138,6 +138,7 @@ pub struct ConversationPage {
     pub claude: SourceStatus,
     pub antigravity: SourceStatus,
     pub workbuddy: SourceStatus,
+    pub grok_bot: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -428,6 +429,11 @@ fn conversations(hub: &Hub) -> ConversationPage {
         Some(root) => workbuddy_rows(hub.store.guard(), &root, &mut rows),
         None => LocalRead::Unread,
     };
+    let (grok_auth, grok_grant) = conversation_auth(&grants, ToolId::GrokBot);
+    let grok_local = match grok_grant {
+        Some(grant) => grok_rows(hub.store.guard(), &grant.root, &mut rows),
+        None => LocalRead::Unread,
+    };
     append_cursor_fixture(hub, &mut rows);
     ConversationPage {
         rows,
@@ -438,7 +444,59 @@ fn conversations(hub: &Hub) -> ConversationPage {
         claude: bot_status(claude_auth, claude_local),
         antigravity: bot_status(antigravity_auth, antigravity_local),
         workbuddy: bot_status(workbuddy_auth, workbuddy_local),
+        grok_bot: bot_status(grok_auth, grok_local),
     }
+}
+
+/// Grok Bot 会话：应用缓存里的会话列表；上下文占用本机没有，显示「未知」。
+fn grok_rows(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    let Ok(list) = wanxiang_adapter_grokbot::agents(guard, root) else {
+        return LocalRead::Denied;
+    };
+    if list.is_empty() {
+        return LocalRead::Empty;
+    }
+    for agent in list {
+        rows.push(ConversationRow {
+            id: agent.id,
+            tool: "grok_bot".to_string(),
+            title: if agent.name.is_empty() {
+                "未命名会话".to_string()
+            } else {
+                agent.name
+            },
+            updated: agent.updated_ms.to_string(),
+            percent: None,
+            cwd: None,
+            status: String::new(),
+            context: "未知".to_string(),
+            source: "app_cache".to_string(),
+        });
+    }
+    LocalRead::Rows
+}
+
+fn grok_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let Some(grant) = grants.iter().find(|grant| {
+        grant.tool == ToolId::GrokBot
+            && grant.capability == Capability::Conversation
+            && grant.status == GrantStatus::Active
+    }) else {
+        return Err("Grok Bot 对话未授权".to_string());
+    };
+    let chunks = wanxiang_adapter_grokbot::transcript(hub.store.guard(), &grant.root, id)
+        .map_err(|_| "读取 Grok Bot 对话失败".to_string())?
+        .ok_or_else(|| "这条会话在本机没有缓存消息，请先在 Grok Bot 里打开一次".to_string())?;
+    let mut draft = recent_draft(&chunks);
+    if draft.note.is_empty() {
+        draft.note = "只含 Grok Bot 本机缓存的最近消息".to_string();
+    }
+    Ok(draft)
 }
 
 /// 取最近几轮做交接草稿；超长时只留最近部分。
@@ -976,6 +1034,7 @@ fn draft(hub: &Hub, tool: &str, id: &str) -> Result<HandoffDraft, String> {
         "claude" => claude_draft(hub, id),
         "antigravity" => antigravity_draft(hub, id),
         "workbuddy" => workbuddy_draft(hub, id),
+        "grok_bot" => grok_draft(hub, id),
         "deepseek_harness" => {
             let grants = hub.store.grants().map_err(|err| err.to_string())?;
             let Some(grant) = grants.iter().find(|grant| {

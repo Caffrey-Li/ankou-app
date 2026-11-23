@@ -26,6 +26,7 @@ wanxiang-adapter-claude = { path = "../crates/adapters/claude" }
 wanxiang-adapter-codex = { path = "../crates/adapters/codex" }
 wanxiang-adapter-cursor = { path = "../crates/adapters/cursor" }
 wanxiang-adapter-dsh = { path = "../crates/adapters/dsh" }
+wanxiang-adapter-grokbot = { path = "../crates/adapters/grokbot" }
 wanxiang-adapter-workbuddy = { path = "../crates/adapters/workbuddy" }
 wanxiang-core = { path = "../crates/core" }
 window-vibrancy = "0.8"

@@ -22,6 +22,13 @@ pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
             &wanxiang_adapter_antigravity::space_root(&home),
         );
     }
+    if kind == "muse_space" {
+        let root = crate::discover::muse_support(&home);
+        return set_path(store, ToolId::Muse, Capability::SpaceScan, &root, "**", on);
+    }
+    if kind.starts_with("grok_") {
+        return set_grok(store, kind, on, &wanxiang_adapter_grokbot::support_root(&home));
+    }
     if kind.starts_with("workbuddy_") {
         return set_workbuddy(store, kind, on, &wanxiang_adapter_workbuddy::config_root(&home));
     }
@@ -324,6 +331,19 @@ pub fn set_antigravity(
     Ok(())
 }
 
+/// Grok Bot：会话与额度都来自应用缓存目录里的 `*.blob`（代码里只打开三类键）；空间统计应用目录。
+pub fn set_grok(store: &Store, kind: &str, on: bool, root: &Path) -> Result<(), String> {
+    use wanxiang_adapter_grokbot::PERSIST_PATTERN;
+    match kind {
+        "grok_usage" => set_path(store, ToolId::GrokBot, Capability::Usage, root, PERSIST_PATTERN, on),
+        "grok_conversation" => {
+            set_path(store, ToolId::GrokBot, Capability::Conversation, root, PERSIST_PATTERN, on)
+        }
+        "grok_space" => set_path(store, ToolId::GrokBot, Capability::SpaceScan, root, "**", on),
+        _ => Err("没有这项授权".to_string()),
+    }
+}
+
 /// WorkBuddy：会话记录与会话表都在 `~/.workbuddy`；空间统计同一目录。
 pub fn set_workbuddy(store: &Store, kind: &str, on: bool, config: &Path) -> Result<(), String> {
     use wanxiang_adapter_workbuddy::{DB_PATTERN, PROJECTS_PATTERN};
@@ -412,6 +432,30 @@ mod tests {
         }
         assert!(store.grants().unwrap().is_empty());
         assert!(super::set_workbuddy(&store, "workbuddy_usage", true, &wb).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn grok_grants_cover_only_the_cache_files() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-grok-grant-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("grok");
+        std::fs::create_dir_all(&root).unwrap();
+        let store = open_store(&dir);
+        for kind in ["grok_usage", "grok_conversation", "grok_space"] {
+            super::set_grok(&store, kind, true, &root).unwrap();
+        }
+        let grants = store.grants().unwrap();
+        assert_eq!(grants.len(), 3);
+        assert_eq!(
+            grants.iter().filter(|g| g.pattern == wanxiang_adapter_grokbot::PERSIST_PATTERN).count(),
+            2
+        );
+        for kind in ["grok_usage", "grok_conversation", "grok_space"] {
+            super::set_grok(&store, kind, false, &root).unwrap();
+        }
+        assert!(store.grants().unwrap().is_empty());
+        assert!(super::set_grok(&store, "grok_cleanup", true, &root).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

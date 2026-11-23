@@ -1,0 +1,10 @@
+[package]
+name = "wanxiang-adapter-grokbot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"
+wanxiang-core = { path = "../../core" }

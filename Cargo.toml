@@ -8,6 +8,7 @@ members = [
   "crates/adapters/claude",
   "crates/adapters/antigravity",
   "crates/adapters/workbuddy",
+  "crates/adapters/grokbot",
   "app",
 ]
 

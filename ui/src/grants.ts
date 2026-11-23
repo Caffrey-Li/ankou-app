@@ -24,6 +24,10 @@ export function measuredKind(tool: ToolId, capability: CapabilityId, title: stri
   if (tool === "gemini" && capability === "space_scan") return "gemini_space";
   if (tool === "workbuddy" && capability === "conversation") return "workbuddy_conversation";
   if (tool === "workbuddy" && capability === "space_scan") return "workbuddy_space";
+  if (tool === "grok_bot" && capability === "usage") return "grok_usage";
+  if (tool === "grok_bot" && capability === "conversation") return "grok_conversation";
+  if (tool === "grok_bot" && capability === "space_scan") return "grok_space";
+  if (tool === "muse" && capability === "space_scan") return "muse_space";
   return null;
 }
 

@@ -165,6 +165,7 @@ fn sample_page() -> UsagePage {
         harness_access: RecordAccess::Unauthorized,
         claude_access: RecordAccess::Unauthorized,
         antigravity_access: RecordAccess::Unauthorized,
+        grok_access: RecordAccess::Unauthorized,
     })
 }
 
@@ -186,7 +187,7 @@ fn m2_fixture_page_is_the_parsed_golden_sample() {
         "{:?}",
         page.cards
     );
-    assert_eq!(page.cards.len(), 6);
+    assert_eq!(page.cards.len(), 7);
     assert_eq!(
         page.details
             .iter()

@@ -127,6 +127,7 @@ try {
     claude: "read_failed",
     antigravity: "read_failed",
     workbuddy: "read_failed",
+    grok_bot: "read_failed",
   });
   assert.notEqual(failed.codex, "unauthorized");
   assert.notEqual(failed.ds_bot, "unauthorized");

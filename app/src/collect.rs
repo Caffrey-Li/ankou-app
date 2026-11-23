@@ -226,7 +226,29 @@ fn refresh_body(
         })
         .map(|grant| grant.root.clone())
         .collect();
+    let grok_root = grants
+        .iter()
+        .find(|grant| {
+            grant.tool == ToolId::GrokBot
+                && grant.capability == Capability::Usage
+                && grant.status == GrantStatus::Active
+        })
+        .map(|grant| grant.root.clone());
     std::thread::scope(|scope| {
+        scope.spawn(|| {
+            if let Some(root) = grok_root.clone() {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &GrokUsage {
+                        root,
+                        guard: store.guard_handle(),
+                    },
+                );
+            }
+            emit("grok");
+        });
         scope.spawn(|| {
             if !antigravity_roots.is_empty() {
                 let _ = run_collect(
@@ -562,6 +584,39 @@ impl UsageSource for AntigravityUsage {
         let mut snapshot = UsageSnapshot::empty();
         snapshot.tokens = tokens.into_iter().collect();
         snapshot.calls = calls.into_iter().collect();
+        Ok(snapshot)
+    }
+}
+
+/// Grok Bot：应用缓存的每周额度百分比与重置时间（本机记录，不是实时）。
+struct GrokUsage {
+    root: PathBuf,
+    guard: Arc<Guard>,
+}
+
+impl UsageSource for GrokUsage {
+    fn tool(&self) -> ToolId {
+        ToolId::GrokBot
+    }
+    fn capability(&self) -> Capability {
+        Capability::Usage
+    }
+    fn metric(&self) -> &'static str {
+        "windows"
+    }
+    fn collect(&self, _stop: &TaskStop) -> Result<UsageSnapshot, UsageError> {
+        let reading = wanxiang_adapter_grokbot::weekly_usage(&self.guard, &self.root)
+            .map_err(|_| UsageError::Unreadable)?;
+        let mut snapshot = UsageSnapshot::empty();
+        if let Some(reading) = reading {
+            snapshot.windows = vec![WindowSample {
+                minutes: Some(10080),
+                used_percent: reading.percent,
+                resets_at: reading.resets_ms.map(|ms| ms / 1000),
+            }];
+            snapshot.window_live = false;
+            snapshot.window_at = reading.read_ms.map(|ms| ms / 1000);
+        }
         Ok(snapshot)
     }
 }

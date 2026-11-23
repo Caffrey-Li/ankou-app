@@ -34,8 +34,8 @@ try {
   assert.match(html, /证据不足/);
   assert.equal(html.includes("session.log"), false);
   assert.match(html, /日志/);
-  // 八个工具都是可以选中的按钮，默认选中 Harness
-  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 8);
+  // 十个工具都是可以选中的按钮，默认选中 Harness
+  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 10);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1);
   assert.match(html, /清理所选项/);
 
@@ -46,6 +46,8 @@ try {
     ["antigravity", "Antigravity"],
     ["gemini", "Gemini"],
     ["workbuddy", "WorkBuddy"],
+    ["grok_bot", "Grok Bot"],
+    ["muse", "Muse"],
   ]) {
     const detail = renderToStaticMarkup(
       createElement(SpacePage, {

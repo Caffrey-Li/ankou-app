@@ -17,6 +17,7 @@ fn empty() -> UsageFacts {
         harness_access: RecordAccess::Unauthorized,
         claude_access: RecordAccess::Unauthorized,
         antigravity_access: RecordAccess::Unauthorized,
+        grok_access: RecordAccess::Unauthorized,
     }
 }
 
@@ -39,10 +40,14 @@ fn empty_usage_names_the_gaps_and_skips_example_figures() {
     assert!(!text.contains("128.40"));
     assert!(!text.contains("去授权"));
     assert!(text.contains("去设置授权"));
-    assert_eq!(page.cards.len(), 6);
+    assert_eq!(page.cards.len(), 7);
     assert!(text.contains("Claude 未授权，未计入"));
     assert!(text.contains("Antigravity 未授权，未计入"));
-    assert!(text.contains("Gemini、WorkBuddy 用量暂不提供，未计入"));
+    assert!(text.contains("Gemini、WorkBuddy、Grok Bot、Muse 的 token 用量暂不提供，未计入"));
+    assert_eq!(detail(&page, "Grok Bot").tokens, "暂不提供");
+    assert_eq!(detail(&page, "Muse").tokens, "暂不提供");
+    let grok = page.cards.iter().find(|card| card.name == "Grok Bot · 每周额度").unwrap();
+    assert_eq!(grok.note, "未授权");
     assert_eq!(detail(&page, "Gemini").tokens, "暂不提供");
     assert_eq!(detail(&page, "WorkBuddy").calls, "暂不提供");
     assert_eq!(detail(&page, "Antigravity").source, "未授权");
@@ -330,4 +335,38 @@ fn antigravity_counts_tokens_and_calls_when_granted() {
     assert!(!page.banner.iter().any(|line| line.contains("Antigravity")));
     assert_eq!(page.total, "2,500");
     assert_eq!(page.days.last().unwrap().antigravity, Some(2_500));
+}
+
+#[test]
+fn grok_bot_week_card_from_cached_reading() {
+    let mut facts = empty();
+    facts.grok_access = RecordAccess::Authorized;
+    let page = present_usage(&facts);
+    let card = page.cards.iter().find(|card| card.name == "Grok Bot · 每周额度").unwrap();
+    assert_eq!(card.note, "无本机记录");
+    for (metric, amount) in [
+        ("window_10080_0_bps", 800),
+        ("window_10080_0_bps_reset", facts.now + 2 * 86_400),
+        ("window_at", facts.now - 600),
+    ] {
+        facts
+            .rows
+            .push((facts.today.clone(), "grok_bot".to_string(), metric.to_string(), amount));
+    }
+    let page = present_usage(&facts);
+    let card = page.cards.iter().find(|card| card.name == "Grok Bot · 每周额度").unwrap();
+    assert_eq!(card.percent, Some(8));
+    assert!(card.note.starts_with("本机记录 · "));
+    assert!(card.reset.as_deref().unwrap().ends_with("重置"));
+    assert!(card.reset.as_deref().unwrap().contains("月"));
+    // 重置时间已过：显示记录已过时
+    let mut stale = facts.clone();
+    for row in stale.rows.iter_mut() {
+        if row.2 == "window_10080_0_bps_reset" {
+            row.3 = facts.now - 10;
+        }
+    }
+    let page = present_usage(&stale);
+    let card = page.cards.iter().find(|card| card.name == "Grok Bot · 每周额度").unwrap();
+    assert_eq!(card.note, "记录已过时");
 }

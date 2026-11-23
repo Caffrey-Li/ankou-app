@@ -238,6 +238,8 @@ fn tool_id(name: &str) -> Result<ToolId, String> {
         "gemini" => Ok(ToolId::Gemini),
         "antigravity" => Ok(ToolId::Antigravity),
         "workbuddy" => Ok(ToolId::WorkBuddy),
+        "grok_bot" => Ok(ToolId::GrokBot),
+        "muse" => Ok(ToolId::Muse),
         _ => Err("没有这项工具".to_string()),
     }
 }

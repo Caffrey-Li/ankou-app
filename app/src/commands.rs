@@ -250,6 +250,7 @@ fn usage_page(
             &hub.store.grants().map_err(StoreErrorText)?,
             ToolId::Antigravity,
         ),
+        grok_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::GrokBot),
     }))
 }
 

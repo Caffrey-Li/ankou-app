@@ -23,6 +23,8 @@ pub enum ToolId {
     Antigravity,
     #[serde(rename = "workbuddy")]
     WorkBuddy,
+    GrokBot,
+    Muse,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -1248,6 +1250,8 @@ fn tool_tag(tool: ToolId) -> u8 {
         ToolId::Gemini => 6,
         ToolId::Antigravity => 7,
         ToolId::WorkBuddy => 8,
+        ToolId::GrokBot => 9,
+        ToolId::Muse => 10,
     }
 }
 

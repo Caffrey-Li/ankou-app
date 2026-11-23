@@ -26,6 +26,7 @@ pub struct UsageFacts {
     pub harness_access: RecordAccess,
     pub claude_access: RecordAccess,
     pub antigravity_access: RecordAccess,
+    pub grok_access: RecordAccess,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -131,7 +132,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     let balance_report = report(facts, "deepseek_harness", "balance");
     let mut banner = vec![
         "Cursor 用量暂不提供，未计入".to_string(),
-        "Gemini、WorkBuddy 用量暂不提供，未计入".to_string(),
+        "Gemini、WorkBuddy、Grok Bot、Muse 的 token 用量暂不提供，未计入".to_string(),
     ];
     match facts.harness_access {
         RecordAccess::Unauthorized => banner.push("Harness 未授权，未计入".to_string()),
@@ -202,6 +203,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         cards: {
             let mut cards = codex_cards(facts, &windows, window_hidden, window_report);
             cards.extend(claude_cards(facts));
+            cards.push(grok_card(facts));
             cards.push(UsageCard {
                 name: "DeepSeek 账户".to_string(),
                 value: balance_value,
@@ -262,6 +264,8 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             withheld_detail("Cursor"),
             withheld_detail("Gemini"),
             withheld_detail("WorkBuddy"),
+            withheld_detail("Grok Bot"),
+            withheld_detail("Muse"),
         ],
         caption: "按各工具自身周期，不受上方日期影响".to_string(),
         empty_note: "更早没有本机记录，不补算".to_string(),
@@ -582,6 +586,45 @@ fn claude_cards(facts: &UsageFacts) -> Vec<UsageCard> {
         pick(SEVEN_DAY_MINUTES, CLAUDE_WEEK_CARD),
     ]
 }
+
+/// Grok Bot 的每周额度卡：数据来自应用缓存（本机记录，标出读取时间）。
+fn grok_card(facts: &UsageFacts) -> UsageCard {
+    match facts.grok_access {
+        RecordAccess::Unauthorized => return status_card(GROK_WEEK_CARD, "未授权", true),
+        RecordAccess::NeedsReauth => return status_card(GROK_WEEK_CARD, "需要重新授权", true),
+        RecordAccess::Authorized => {}
+    }
+    let recorded = latest_amount(facts, "grok_bot", "window_at");
+    let windows = windows_of(facts, "grok_bot");
+    match windows.iter().find(|w| w.minutes == Some(SEVEN_DAY_MINUTES)) {
+        Some(window) => UsageCard {
+            name: GROK_WEEK_CARD.to_string(),
+            value: format!("{}%", window.percent),
+            note: match recorded {
+                Some(at) => format!("本机记录 · {}", stamp_label(at, facts)),
+                None => "本机记录".to_string(),
+            },
+            percent: Some(window.percent),
+            reset: window.resets_at.map(|at| reset_label(at, facts)),
+            link: None,
+        },
+        // 有记录但重置时间已过：旧百分比不能当成现在的
+        None if recorded.is_some() => status_card(GROK_WEEK_CARD, "记录已过时", false),
+        None => status_card(GROK_WEEK_CARD, "无本机记录", false),
+    }
+}
+
+/// 重置时间：今天只写时刻，别的日子写日期和时刻。
+fn reset_label(at: i64, facts: &UsageFacts) -> String {
+    let day = stamp_label(at, facts);
+    if day.contains('月') {
+        format!("{day} {} 重置", hhmm(at, facts.offset_secs))
+    } else {
+        format!("{day} 重置")
+    }
+}
+
+const GROK_WEEK_CARD: &str = "Grok Bot · 每周额度";
 
 /// 今天的数据只写时刻，更早的写日期，免得把过时的额度当成现在的。
 fn stamp_label(at: i64, facts: &UsageFacts) -> String {

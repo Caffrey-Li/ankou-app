@@ -97,6 +97,7 @@ export type ConversationSources = {
   claude?: SourceStatus;
   antigravity?: SourceStatus;
   workbuddy?: SourceStatus;
+  grok_bot?: SourceStatus;
 };
 
 const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
@@ -116,6 +117,7 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
     (sources.claude ?? "unauthorized") === "unauthorized" &&
     (sources.antigravity ?? "unauthorized") === "unauthorized" &&
     (sources.workbuddy ?? "unauthorized") === "unauthorized" &&
+    (sources.grok_bot ?? "unauthorized") === "unauthorized" &&
     (sources.cursor ?? "unauthorized") === "unauthorized"
   )
     return "未授权";
@@ -132,6 +134,7 @@ export function sourcesWhenListFails(): ConversationSources {
     claude: "read_failed",
     antigravity: "read_failed",
     workbuddy: "read_failed",
+    grok_bot: "read_failed",
   };
 }
 
@@ -147,6 +150,7 @@ export function handoffEmptyLines(sources: ConversationSources | null) {
       ? [["antigravity", "Antigravity", sources.antigravity] as [string, string, SourceStatus]]
       : []),
     ...(sources.workbuddy ? [["workbuddy", "WorkBuddy", sources.workbuddy] as [string, string, SourceStatus]] : []),
+    ...(sources.grok_bot ? [["grok_bot", "Grok Bot", sources.grok_bot] as [string, string, SourceStatus]] : []),
   ];
   return tools.flatMap(([tool, label, status]) => {
     if (status === "ok") return [];
@@ -659,6 +663,7 @@ function toolKind(tool: string) {
   if (name === "claude") return "claude";
   if (name === "antigravity") return "antigravity";
   if (name === "workbuddy") return "workbuddy";
+  if (name === "grok_bot") return "grok_bot";
   return "cursor";
 }
 
@@ -670,6 +675,7 @@ function toolLabel(tool: string) {
   if (kind === "claude") return "Claude";
   if (kind === "antigravity") return "Antigravity";
   if (kind === "workbuddy") return "WorkBuddy";
+  if (kind === "grok_bot") return "Grok Bot";
   return "Cursor";
 }
 

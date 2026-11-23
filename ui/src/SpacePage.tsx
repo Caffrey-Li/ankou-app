@@ -77,12 +77,14 @@ export type SpaceToolId =
   | "claude"
   | "antigravity"
   | "gemini"
-  | "workbuddy";
+  | "workbuddy"
+  | "grok_bot"
+  | "muse";
 
 /** 只统计、不清理的工具。 */
-type StatTool = "cursor" | "codex" | "claude" | "antigravity" | "gemini" | "workbuddy";
-/** 后来接入的三个工具：扫描结果放在一起。 */
-const extraTools = ["antigravity", "gemini", "workbuddy"] as const;
+type StatTool = "cursor" | "codex" | "claude" | "antigravity" | "gemini" | "workbuddy" | "grok_bot" | "muse";
+/** 后来接入的工具：扫描结果放在一起。 */
+const extraTools = ["antigravity", "gemini", "workbuddy", "grok_bot", "muse"] as const;
 type ExtraTool = (typeof extraTools)[number];
 
 const toolNames: Record<SpaceToolId, string> = {
@@ -94,6 +96,8 @@ const toolNames: Record<SpaceToolId, string> = {
   antigravity: "Antigravity",
   gemini: "Gemini",
   workbuddy: "WorkBuddy",
+  grok_bot: "Grok Bot",
+  muse: "Muse",
 };
 
 /** 只统计、不清理的工具的说明（决策：Cursor 与 ChatGPT 全部受保护）。 */
@@ -104,6 +108,8 @@ export const statOnlyNote: Record<StatTool, string> = {
   antigravity: "Antigravity 的对话与工作数据全部受保护，万象只统计占用，不清理",
   gemini: "Gemini 桌面应用的数据全部受保护，万象只统计占用，不清理",
   workbuddy: "WorkBuddy 的数据全部受保护，万象只统计占用，不清理",
+  grok_bot: "Grok Bot 的数据全部受保护，万象只统计占用，不清理",
+  muse: "Muse 桌面应用的数据全部受保护，万象只统计占用，不清理",
 };
 
 export function groupEntries(entries: SpaceEntry[]) {
@@ -153,6 +159,8 @@ export function SpacePage({
     antigravity: null,
     gemini: null,
     workbuddy: null,
+    grok_bot: null,
+    muse: null,
   });
   const [tool, setTool] = useState<SpaceToolId>(initialTool);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -178,7 +186,9 @@ export function SpacePage({
   const codexKnown = codex ? codex.protected_bytes + codex.cleanable_bytes : 0;
   const claude = fixture ? null : claudeScan;
   const claudeKnown = claude ? claude.protected_bytes + claude.cleanable_bytes : 0;
-  const extras = fixture ? { antigravity: null, gemini: null, workbuddy: null } : extraScans;
+  const extras: Record<ExtraTool, SpaceScan | null> = fixture
+    ? { antigravity: null, gemini: null, workbuddy: null, grok_bot: null, muse: null }
+    : extraScans;
   const extraKnown = (id: ExtraTool) => {
     const found = extras[id];
     return found ? found.protected_bytes + found.cleanable_bytes : 0;
@@ -214,7 +224,7 @@ export function SpacePage({
     setScanning(true);
     setNotice("");
     try {
-      const [harness, cursor, codex, claudeResult, antigravity, gemini, workbuddy] = await Promise.all([
+      const [harness, cursor, codex, claudeResult, antigravity, gemini, workbuddy, grokBot, muse] = await Promise.all([
         scanSpace("deepseek_harness").catch(() => null),
         scanSpace("cursor").catch(() => null),
         scanSpace("codex").catch(() => null),
@@ -222,11 +232,13 @@ export function SpacePage({
         scanSpace("antigravity").catch(() => null),
         scanSpace("gemini").catch(() => null),
         scanSpace("workbuddy").catch(() => null),
+        scanSpace("grok_bot").catch(() => null),
+        scanSpace("muse").catch(() => null),
       ]);
       setCursorScan(cursor);
       setCodexScan(codex);
       setClaudeScan(claudeResult);
-      setExtraScans({ antigravity, gemini, workbuddy });
+      setExtraScans({ antigravity, gemini, workbuddy, grok_bot: grokBot, muse });
       if (!harness) {
         setNotice("扫描没有完成");
         return;

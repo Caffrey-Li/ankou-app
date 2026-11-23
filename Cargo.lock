@@ -4937,6 +4937,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wanxiang-adapter-grokbot"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wanxiang-core",
+]
+
+[[package]]
 name = "wanxiang-adapter-workbuddy"
 version = "0.0.0"
 dependencies = [
@@ -4968,6 +4976,7 @@ dependencies = [
  "wanxiang-adapter-codex",
  "wanxiang-adapter-cursor",
  "wanxiang-adapter-dsh",
+ "wanxiang-adapter-grokbot",
  "wanxiang-adapter-workbuddy",
  "wanxiang-core",
  "window-vibrancy",

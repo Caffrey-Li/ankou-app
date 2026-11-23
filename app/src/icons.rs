@@ -14,6 +14,8 @@ const CLAUDE_BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
 const GEMINI_BUNDLE_ID: &str = "com.google.GeminiMacOS";
 const ANTIGRAVITY_BUNDLE_ID: &str = "com.google.antigravity";
 const WORKBUDDY_BUNDLE_ID: &str = "com.tencent.workbuddy.mac";
+const GROK_BOT_BUNDLE_ID: &str = "com.anysphere.sand";
+const MUSE_BUNDLE_ID: &str = "com.meta.endo";
 
 #[derive(Debug, Serialize)]
 pub struct ToolIcon {
@@ -29,6 +31,8 @@ struct Located {
     gemini: Option<PathBuf>,
     antigravity: Option<PathBuf>,
     workbuddy: Option<PathBuf>,
+    grok_bot: Option<PathBuf>,
+    muse: Option<PathBuf>,
 }
 
 #[cfg(target_os = "macos")]
@@ -61,6 +65,8 @@ fn null_icons() -> Vec<ToolIcon> {
         ToolId::Gemini,
         ToolId::Antigravity,
         ToolId::WorkBuddy,
+        ToolId::GrokBot,
+        ToolId::Muse,
     ]
     .into_iter()
     .map(|tool| ToolIcon {
@@ -79,6 +85,8 @@ fn locate(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Located {
         gemini: app_with_bundle_id(root, GEMINI_BUNDLE_ID, &bundle_id),
         antigravity: app_with_bundle_id(root, ANTIGRAVITY_BUNDLE_ID, &bundle_id),
         workbuddy: app_with_bundle_id(root, WORKBUDDY_BUNDLE_ID, &bundle_id),
+        grok_bot: app_with_bundle_id(root, GROK_BOT_BUNDLE_ID, &bundle_id),
+        muse: app_with_bundle_id(root, MUSE_BUNDLE_ID, &bundle_id),
     }
 }
 
@@ -143,6 +151,14 @@ fn assemble(
         ToolIcon {
             tool: ToolId::WorkBuddy,
             png_base64: icon(found.workbuddy),
+        },
+        ToolIcon {
+            tool: ToolId::GrokBot,
+            png_base64: icon(found.grok_bot),
+        },
+        ToolIcon {
+            tool: ToolId::Muse,
+            png_base64: icon(found.muse),
         },
     ]
 }
@@ -379,6 +395,8 @@ mod tests {
                 gemini: None,
                 antigravity: None,
                 workbuddy: None,
+                grok_bot: None,
+                muse: None,
             },
             &mut read,
         );
@@ -400,6 +418,8 @@ mod tests {
                 gemini: None,
                 antigravity: None,
                 workbuddy: None,
+                grok_bot: None,
+                muse: None,
             },
             &mut read,
         );
@@ -433,6 +453,8 @@ mod tests {
             gemini: None,
             antigravity: None,
             workbuddy: None,
+            grok_bot: None,
+            muse: None,
         };
         let first = assemble(&cache, found, &mut read);
         assert!(first
@@ -450,6 +472,8 @@ mod tests {
             gemini: None,
             antigravity: None,
             workbuddy: None,
+            grok_bot: None,
+            muse: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 1);
@@ -465,6 +489,8 @@ mod tests {
             gemini: None,
             antigravity: None,
             workbuddy: None,
+            grok_bot: None,
+            muse: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 2);

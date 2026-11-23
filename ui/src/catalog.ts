@@ -6,7 +6,9 @@ export type ToolId =
   | "claude"
   | "gemini"
   | "antigravity"
-  | "workbuddy";
+  | "workbuddy"
+  | "grok_bot"
+  | "muse";
 export type CapabilityId =
   | "usage"
   | "conversation"
@@ -295,6 +297,68 @@ export const toolSpecs: ToolSpec[] = [
       { label: "空间", capability: "space_scan", badge: "已实测" },
       { label: "用量", capability: "usage", badge: "暂不提供" },
       { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "grok_bot",
+    letter: "Gk",
+    name: "Grok Bot",
+    caps: [
+      {
+        capability: "usage",
+        title: "每周额度",
+        detail: "读取应用缓存里的每周额度百分比与重置时间",
+        badge: "已实测",
+      },
+      {
+        capability: "conversation",
+        title: "会话",
+        detail: "列出应用缓存里的会话，交接时读取所选会话缓存的最近消息 · 只读",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计应用数据目录大小，不读取内容",
+        badge: "已实测",
+      },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "每周额度", capability: "usage", badge: "已实测" },
+      { label: "会话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "muse",
+    letter: "M",
+    name: "Muse",
+    caps: [
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计桌面应用目录大小，不读取内容",
+        badge: "已实测",
+      },
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "对话保存在云端，本机没有可读的记录",
+        badge: "暂不提供",
+      },
+      {
+        capability: "usage",
+        title: "用量",
+        detail: "本机没有用量记录",
+        badge: "暂不提供",
+      },
+    ],
+    tags: [
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "暂不提供" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
     ],
   },
 ];

@@ -6,6 +6,7 @@ use wanxiang_adapter_claude::installed as claude_installed;
 use wanxiang_adapter_codex::installed as codex_installed;
 use wanxiang_adapter_cursor::installed as cursor_installed;
 use wanxiang_adapter_dsh::{installed as dsh_installed, Product};
+use wanxiang_adapter_grokbot::installed as grok_installed;
 use wanxiang_adapter_workbuddy::installed as workbuddy_installed;
 use wanxiang_core::{GrantStatus, StoredGrant, ToolId, ToolPresence};
 
@@ -52,6 +53,14 @@ pub fn snapshot(roots: &HostRoots, grants: &[StoredGrant]) -> Vec<ToolSnapshot> 
         (
             ToolId::WorkBuddy,
             workbuddy_installed(&roots.home, &roots.applications),
+        ),
+        (
+            ToolId::GrokBot,
+            grok_installed(&roots.home, &roots.applications),
+        ),
+        (
+            ToolId::Muse,
+            muse_installed(&roots.home, &roots.applications),
         ),
     ];
     found
@@ -170,4 +179,16 @@ pub fn gemini_support(home: &Path) -> PathBuf {
     home.join("Library")
         .join(folder("Application", "Support"))
         .join("com.google.GeminiMacOS")
+}
+
+/// Muse 桌面应用：只看应用包或它的数据目录是否存在。
+pub fn muse_installed(home: &Path, applications: &Path) -> bool {
+    applications.join("Muse.app").is_dir() || muse_support(home).is_dir()
+}
+
+/// Muse 桌面应用的数据目录（只做空间统计）。
+pub fn muse_support(home: &Path) -> PathBuf {
+    home.join("Library")
+        .join(folder("Application", "Support"))
+        .join("com.meta.endo")
 }

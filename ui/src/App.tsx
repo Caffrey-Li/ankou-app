@@ -266,11 +266,11 @@ export function App() {
   function onRefresh() {
     if (!inTauri() || refreshing) return;
     setRefreshing(true);
-    setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true });
+    setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true, grok: true });
     void refreshUsage().then((started) => {
       if (!started) {
         setRefreshing(false);
-        setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false });
+        setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false, grok: false });
       }
     });
   }
@@ -304,18 +304,18 @@ export function App() {
         const part = event.payload;
         if (part === "started") {
           setRefreshing(true);
-          setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true });
+          setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true, grok: true });
           return;
         }
         if (part === "done") {
           setRefreshing(false);
-          setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false });
+          setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false, grok: false });
           // 刷新后重读一次授权与 Key 状态（启动时钥匙串可能还没确认完）
           void loadSnapshot().then(setSnapshot).catch(() => undefined);
           return;
         }
         const custom = customRef.current;
-        if (!["ds_bot", "balance", "codex", "windows", "claude", "antigravity"].includes(part)) return;
+        if (!["ds_bot", "balance", "codex", "windows", "claude", "antigravity", "grok"].includes(part)) return;
         void loadUsage(rangeRef.current, custom.start, custom.end).then((next) => {
           setUsage((current) => mergeUsage(current, part, next));
           setPending((current) => ({ ...current, [part]: false }));
@@ -368,6 +368,7 @@ export function App() {
           claude: page.claude,
           antigravity: page.antigravity,
           workbuddy: page.workbuddy,
+          grok_bot: page.grok_bot,
         });
       })
       .catch(() => {
@@ -644,6 +645,14 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
       ...current,
       cards: current.cards.map((card) =>
         card.name === "DeepSeek 账户" ? next.cards.find((item) => item.name === card.name) ?? card : card,
+      ),
+    };
+  }
+  if (part === "grok") {
+    return {
+      ...current,
+      cards: current.cards.map((card) =>
+        card.name.startsWith("Grok Bot") ? next.cards.find((item) => item.name === card.name) ?? card : card,
       ),
     };
   }
