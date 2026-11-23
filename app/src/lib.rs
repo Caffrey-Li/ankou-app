@@ -96,6 +96,7 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
     #[cfg(target_os = "macos")]
     {
         let _ = window.set_theme(Some(Theme::Light));
+        paint_window_backdrop(window);
         match window_vibrancy::apply_vibrancy(
             window,
             window_vibrancy::NSVisualEffectMaterial::Sidebar,
@@ -160,6 +161,42 @@ fn place_sidebar_effect(window: &impl raw_window_handle::HasWindowHandle) -> boo
         let () = msg_send![&*effect, setCornerRadius: 16.0_f64];
     }
     effect.frame().size.height > 0.0
+}
+
+/// 窗口本身是透明的（侧栏要透出系统材质），拖动改变大小时网页内容比窗口慢一拍，
+/// 新露出的边缘没有内容，会透出后面的窗口，看起来是一片黑。
+/// 给窗口垫一层与页面底色相同的浅灰：侧栏的系统材质在它上面，不受影响。
+#[cfg(target_os = "macos")]
+fn paint_window_backdrop(window: &impl raw_window_handle::HasWindowHandle) {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_app_kit::NSView;
+    use raw_window_handle::RawWindowHandle;
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
+        return;
+    };
+    let root: &NSView = unsafe { appkit.ns_view.cast().as_ref() };
+    unsafe {
+        let ns_window: *mut AnyObject = msg_send![root, window];
+        if ns_window.is_null() {
+            return;
+        }
+        // 与 --color-window-bottom（#f4f4f6）一致
+        let color: *mut AnyObject = msg_send![
+            class!(NSColor),
+            colorWithSRGBRed: 244.0_f64 / 255.0,
+            green: 244.0_f64 / 255.0,
+            blue: 246.0_f64 / 255.0,
+            alpha: 1.0_f64
+        ];
+        if !color.is_null() {
+            let () = msg_send![ns_window, setBackgroundColor: color];
+        }
+    }
 }
 
 fn shutdown(app: &tauri::AppHandle) {
