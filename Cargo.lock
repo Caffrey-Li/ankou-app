@@ -4888,6 +4888,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wanxiang-adapter-claude"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "serde_json",
+ "wanxiang-core",
+]
+
+[[package]]
 name = "wanxiang-adapter-codex"
 version = "0.0.0"
 dependencies = [
@@ -4935,6 +4944,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "wanxiang-adapter-claude",
  "wanxiang-adapter-codex",
  "wanxiang-adapter-cursor",
  "wanxiang-adapter-dsh",

@@ -34,12 +34,12 @@ try {
   assert.match(html, /证据不足/);
   assert.equal(html.includes("session.log"), false);
   assert.match(html, /日志/);
-  // 四个工具都是可以选中的按钮，默认选中 Harness
-  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 4);
+  // 五个工具都是可以选中的按钮，默认选中 Harness
+  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 5);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1);
   assert.match(html, /清理所选项/);
 
-  for (const [tool, name] of [["cursor", "Cursor"], ["codex", "ChatGPT"]]) {
+  for (const [tool, name] of [["cursor", "Cursor"], ["codex", "ChatGPT"], ["claude", "Claude"]]) {
     const detail = renderToStaticMarkup(
       createElement(SpacePage, {
         fixture: true,

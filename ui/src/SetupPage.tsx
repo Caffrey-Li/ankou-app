@@ -1,7 +1,7 @@
 import { useState } from "react";
 import mark from "../../brand/icon-macos.svg";
 import type { Snapshot } from "./api";
-import { finishSetup, openPrivacySettings, setCapability } from "./api";
+import { finishSetup, openPrivacySettings, refreshUsage, setCapability } from "./api";
 import { Check } from "./Check";
 import { presenceLabel, toolSpecs, type CapRow, type ToolId } from "./catalog";
 import { capChecked, grantableKind, grantedCount } from "./grants";
@@ -31,6 +31,9 @@ export function SetupPage({
   function toggle(kind: string, on: boolean) {
     setError("");
     void setCapability(kind, on)
+      .then(() => {
+        if (on && kind.endsWith("_usage")) void refreshUsage().catch(() => undefined);
+      })
       .catch((reason) => setError(String(reason)))
       .finally(onReload);
   }

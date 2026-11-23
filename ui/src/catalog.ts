@@ -1,4 +1,4 @@
-export type ToolId = "deepseek_harness" | "ds_bot" | "cursor" | "codex";
+export type ToolId = "deepseek_harness" | "ds_bot" | "cursor" | "codex" | "claude";
 export type CapabilityId =
   | "usage"
   | "conversation"
@@ -163,6 +163,33 @@ export const toolSpecs: ToolSpec[] = [
     ],
     tags: [
       { label: "用量与额度窗口", capability: "usage", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "claude",
+    letter: "Cl",
+    name: "Claude",
+    caps: [
+      {
+        capability: "usage",
+        title: "用量与额度",
+        detail: "读取本机会话记录里的用量，以及桌面应用记下的额度百分比",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计桌面应用目录大小，不读取内容",
+        badge: "已实测",
+      },
+      { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "用量与额度", capability: "usage", badge: "已实测" },
       { label: "空间", capability: "space_scan", badge: "已实测" },
       { label: "对话", capability: "conversation", badge: "已实测" },
       { label: "放入", capability: "insert_content", badge: "复制后粘贴" },

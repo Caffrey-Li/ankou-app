@@ -8,6 +8,15 @@ const CODEX_PATTERN: &str = "sessions/**/*.jsonl";
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
+    if kind.starts_with("claude_") {
+        return set_claude(
+            store,
+            kind,
+            on,
+            &wanxiang_adapter_claude::config_root(&home),
+            &wanxiang_adapter_claude::support_root(&home),
+        );
+    }
     set_at(
         store,
         kind,
@@ -211,12 +220,88 @@ fn set_path(
         .map_err(show)
 }
 
+/// Claude 的授权：会话记录在 `~/.claude`，额度历史与会话标题在桌面应用目录。
+/// 桌面应用没装时只授权 `~/.claude` 那一部分。
+pub fn set_claude(
+    store: &Store,
+    kind: &str,
+    on: bool,
+    config: &Path,
+    support: &Path,
+) -> Result<(), String> {
+    use wanxiang_adapter_claude::{DESKTOP_SESSIONS_PATTERN, PLAN_PATTERN, PROJECTS_PATTERN};
+    let desktop = !on || support.is_dir();
+    match kind {
+        "claude_usage" => {
+            set_path(store, ToolId::Claude, Capability::Usage, config, PROJECTS_PATTERN, on)?;
+            if desktop {
+                set_path(store, ToolId::Claude, Capability::Usage, support, PLAN_PATTERN, on)?;
+            }
+            Ok(())
+        }
+        "claude_conversation" => {
+            set_path(
+                store,
+                ToolId::Claude,
+                Capability::Conversation,
+                config,
+                PROJECTS_PATTERN,
+                on,
+            )?;
+            if desktop {
+                set_path(
+                    store,
+                    ToolId::Claude,
+                    Capability::Conversation,
+                    support,
+                    DESKTOP_SESSIONS_PATTERN,
+                    on,
+                )?;
+            }
+            Ok(())
+        }
+        "claude_space" => {
+            // 空间只看一个目录：桌面应用目录占大头；没装桌面应用时看 ~/.claude
+            let root = if support.is_dir() { support } else { config };
+            set_path(store, ToolId::Claude, Capability::SpaceScan, root, "**", on)
+        }
+        _ => Err("没有这项授权".to_string()),
+    }
+}
+
 fn show(err: impl std::fmt::Display) -> String {
     err.to_string()
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn claude_grants_cover_records_plan_and_titles_only() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-claude-grant-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let config = dir.join("dot-claude");
+        let support = dir.join("support");
+        std::fs::create_dir_all(&config).unwrap();
+        let store = open_store(&dir);
+        super::set_claude(&store, "claude_usage", true, &config, &support).unwrap();
+        let patterns: Vec<_> = store.grants().unwrap().into_iter().map(|g| g.pattern).collect();
+        assert_eq!(patterns, vec![wanxiang_adapter_claude::PROJECTS_PATTERN.to_string()]);
+        std::fs::create_dir_all(&support).unwrap();
+        super::set_claude(&store, "claude_usage", true, &config, &support).unwrap();
+        super::set_claude(&store, "claude_conversation", true, &config, &support).unwrap();
+        super::set_claude(&store, "claude_space", true, &config, &support).unwrap();
+        let grants = store.grants().unwrap();
+        assert_eq!(grants.len(), 5, "{grants:?}");
+        assert!(grants.iter().all(|g| g.tool == wanxiang_core::ToolId::Claude));
+        assert!(grants.iter().any(|g| g.pattern == wanxiang_adapter_claude::PLAN_PATTERN));
+        for kind in ["claude_usage", "claude_conversation", "claude_space"] {
+            super::set_claude(&store, kind, false, &config, &support).unwrap();
+        }
+        assert!(store.grants().unwrap().is_empty());
+        assert!(super::set_claude(&store, "claude_other", true, &config, &support).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use std::path::Path;
     use std::sync::Arc;
 

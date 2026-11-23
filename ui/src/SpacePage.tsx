@@ -69,19 +69,21 @@ const groups = [
   { id: "proj", name: "会话项目缓存", prefix: "storages/session_projcache/", path: "storages/session_projcache", note: "可能影响恢复速度" },
 ];
 
-export type SpaceToolId = "deepseek_harness" | "cursor" | "codex" | "ds_bot";
+export type SpaceToolId = "deepseek_harness" | "cursor" | "codex" | "ds_bot" | "claude";
 
 const toolNames: Record<SpaceToolId, string> = {
   deepseek_harness: "DeepSeek Harness",
   cursor: "Cursor",
   codex: "ChatGPT",
   ds_bot: "DS Bot",
+  claude: "Claude",
 };
 
 /** 只统计、不清理的工具的说明（决策：Cursor 与 ChatGPT 全部受保护）。 */
-export const statOnlyNote: Record<"cursor" | "codex", string> = {
+export const statOnlyNote: Record<"cursor" | "codex" | "claude", string> = {
   cursor: "Cursor 的数据全部受保护，万象只统计占用，不清理",
   codex: "ChatGPT 无可安全重建的证据，只统计不清理",
+  claude: "Claude 桌面应用的数据全部受保护，万象只统计占用，不清理",
 };
 
 export function groupEntries(entries: SpaceEntry[]) {
@@ -126,6 +128,7 @@ export function SpacePage({
   const [live, setLive] = useState<SpaceScan | null>(null);
   const [cursorScan, setCursorScan] = useState<SpaceScan | null>(null);
   const [codexScan, setCodexScan] = useState<SpaceScan | null>(null);
+  const [claudeScan, setClaudeScan] = useState<SpaceScan | null>(null);
   const [tool, setTool] = useState<SpaceToolId>(initialTool);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -148,11 +151,13 @@ export function SpacePage({
   const over = known > thresholdGb * GB;
   const cursorKnown = cursor ? cursor.protected_bytes + cursor.cleanable_bytes : 0;
   const codexKnown = codex ? codex.protected_bytes + codex.cleanable_bytes : 0;
+  const claude = fixture ? null : claudeScan;
+  const claudeKnown = claude ? claude.protected_bytes + claude.cleanable_bytes : 0;
   const anyScan = Boolean(scan || cursor || codex);
-  const allKnown = known + cursorKnown + codexKnown;
-  const overCount = [known, cursorKnown, codexKnown].filter((bytes) => bytes > thresholdGb * GB).length;
+  const allKnown = known + cursorKnown + codexKnown + claudeKnown;
+  const overCount = [known, cursorKnown, codexKnown, claudeKnown].filter((bytes) => bytes > thresholdGb * GB).length;
   const unscannedCount = (scan?.unscanned ?? 0) + (cursor?.unscanned ?? 0) + (codex?.unscanned ?? 0);
-  const barMax = Math.max(known, cursorKnown, codexKnown, 1);
+  const barMax = Math.max(known, cursorKnown, codexKnown, claudeKnown, 1);
   const quit = scan?.quit ?? null;
   const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
@@ -176,13 +181,15 @@ export function SpacePage({
     setScanning(true);
     setNotice("");
     try {
-      const [harness, cursor, codex] = await Promise.all([
+      const [harness, cursor, codex, claudeResult] = await Promise.all([
         scanSpace("deepseek_harness").catch(() => null),
         scanSpace("cursor").catch(() => null),
         scanSpace("codex").catch(() => null),
+        scanSpace("claude").catch(() => null),
       ]);
       setCursorScan(cursor);
       setCodexScan(codex);
+      setClaudeScan(claudeResult);
       if (!harness) {
         setNotice("扫描没有完成");
         return;
@@ -288,6 +295,14 @@ export function SpacePage({
             size={codex ? formatBytes(codexKnown, 1) : "未扫描"}
             over={codexKnown > thresholdGb * GB}
             bar={codex ? { width: codexKnown / barMax, protectedBytes: codex.protected_bytes, cleanable: 0 } : null}
+          />
+          <ToolRow
+            id="claude"
+            selected={tool === "claude"}
+            onSelect={setTool}
+            size={claude ? formatBytes(claudeKnown, 1) : "未扫描"}
+            over={claudeKnown > thresholdGb * GB}
+            bar={claude ? { width: claudeKnown / barMax, protectedBytes: claude.protected_bytes, cleanable: 0 } : null}
           />
           <ToolRow id="ds_bot" selected={tool === "ds_bot"} onSelect={setTool} size="—" over={false} bar={null} note="已计入 Harness（共用 ~/.dsh）" />
           <p>{statOnlyNote.codex}</p>
@@ -408,7 +423,7 @@ export function SpacePage({
         ) : (
           <StatOnlyDetail
             id={tool}
-            scan={tool === "cursor" ? cursor : codex}
+            scan={tool === "cursor" ? cursor : tool === "claude" ? claude : codex}
             thresholdGb={thresholdGb}
           />
         )}
@@ -557,7 +572,7 @@ function StackBar({ protectedBytes, cleanable, known }: { protectedBytes: number
   );
 }
 
-function StatOnlyDetail({ id, scan, thresholdGb }: { id: "cursor" | "codex"; scan: SpaceScan | null; thresholdGb: number }) {
+function StatOnlyDetail({ id, scan, thresholdGb }: { id: "cursor" | "codex" | "claude"; scan: SpaceScan | null; thresholdGb: number }) {
   const total = scan ? scan.protected_bytes + scan.cleanable_bytes : 0;
   return (
     <section className="space-detail" aria-label={toolNames[id]}>

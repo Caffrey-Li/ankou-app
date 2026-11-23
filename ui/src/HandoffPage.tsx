@@ -94,6 +94,7 @@ export type ConversationSources = {
   ds_bot: SourceStatus;
   harness?: SourceStatus;
   cursor?: SourceStatus;
+  claude?: SourceStatus;
 };
 
 const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
@@ -110,6 +111,7 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
     sources.codex === "unauthorized" &&
     sources.ds_bot === "unauthorized" &&
     (sources.harness ?? "unauthorized") === "unauthorized" &&
+    (sources.claude ?? "unauthorized") === "unauthorized" &&
     (sources.cursor ?? "unauthorized") === "unauthorized"
   )
     return "未授权";
@@ -118,7 +120,7 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
 }
 
 export function sourcesWhenListFails(): ConversationSources {
-  return { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed" };
+  return { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed", claude: "read_failed" };
 }
 
 export function handoffEmptyLines(sources: ConversationSources | null) {
@@ -128,6 +130,7 @@ export function handoffEmptyLines(sources: ConversationSources | null) {
     ["codex", "ChatGPT", sources.codex],
     ["ds_bot", "DS Bot", sources.ds_bot],
     ...(sources.cursor ? [["cursor", "Cursor", sources.cursor] as [string, string, SourceStatus]] : []),
+    ...(sources.claude ? [["claude", "Claude", sources.claude] as [string, string, SourceStatus]] : []),
   ];
   return tools.flatMap(([tool, label, status]) => {
     if (status === "ok") return [];
@@ -637,6 +640,7 @@ function toolKind(tool: string) {
   if (name === "codex") return "codex";
   if (name === "ds bot" || name === "ds_bot") return "ds_bot";
   if (name.includes("harness")) return "deepseek_harness";
+  if (name === "claude") return "claude";
   return "cursor";
 }
 
@@ -645,6 +649,7 @@ function toolLabel(tool: string) {
   if (kind === "codex") return "ChatGPT";
   if (kind === "ds_bot") return "DS Bot";
   if (kind === "deepseek_harness") return "DeepSeek Harness";
+  if (kind === "claude") return "Claude";
   return "Cursor";
 }
 

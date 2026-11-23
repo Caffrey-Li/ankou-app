@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use wanxiang_adapter_claude::installed as claude_installed;
 use wanxiang_adapter_codex::installed as codex_installed;
 use wanxiang_adapter_cursor::installed as cursor_installed;
 use wanxiang_adapter_dsh::{installed as dsh_installed, Product};
@@ -33,6 +34,10 @@ pub fn snapshot(roots: &HostRoots, grants: &[StoredGrant]) -> Vec<ToolSnapshot> 
         (
             ToolId::Codex,
             codex_installed(&roots.home, &roots.applications, codex_bundle_id),
+        ),
+        (
+            ToolId::Claude,
+            claude_installed(&roots.home, &roots.applications),
         ),
     ];
     found

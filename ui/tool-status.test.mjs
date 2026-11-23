@@ -15,7 +15,7 @@ try {
   const { toolMarks, toolTone, SidebarTools, OverviewToolRows } = await server.ssrLoadModule(
     "/src/tool-status.tsx",
   );
-  const tools = ["deepseek_harness", "ds_bot", "cursor", "codex"].map((tool) => ({
+  const tools = ["deepseek_harness", "ds_bot", "cursor", "codex", "claude"].map((tool) => ({
     tool,
     installed: true,
     presence: "missing",
@@ -25,6 +25,7 @@ try {
     { name: "DS Bot", tokens: "需要重新授权", calls: "需要重新授权", fee: "不提供", source: "需要重新授权" },
     { name: "Cursor", tokens: "未授权", calls: "未授权", fee: "不提供", source: "未授权" },
     { name: "ChatGPT", tokens: "12", calls: "1", fee: "不提供", source: "本机记录" },
+    { name: "Claude", tokens: "未授权", calls: "未授权", fee: "不提供", source: "未授权" },
   ];
   const marks = toolMarks(tools, details, true);
   const side = renderToStaticMarkup(createElement(SidebarTools, { marks }));
@@ -36,12 +37,12 @@ try {
   const allowed = ["未发现", "未授权", "正常", "需要处理", "数据过时", "需要重新授权"];
 
   assert.deepEqual(sideStatus, rowStatus);
-  assert.deepEqual(sideStatus, ["正常", "需要重新授权", "未授权", "正常"]);
-  assert.deepEqual(rowDot, ["authorized", "needs_reauth", "unauthorized", "authorized"]);
+  assert.deepEqual(sideStatus, ["正常", "需要重新授权", "未授权", "正常", "未授权"]);
+  assert.deepEqual(rowDot, ["authorized", "needs_reauth", "unauthorized", "authorized", "unauthorized"]);
   // 侧栏点按 22:57：正常 = 雾蓝，需要处理 = 赭色，未连接或过时 = 灰
-  assert.deepEqual(sideDot, ["ok", "attention", "quiet", "ok"]);
+  assert.deepEqual(sideDot, ["ok", "attention", "quiet", "ok", "quiet"]);
   const toned = toolMarks(tools, details, true, new Set(["deepseek_harness"]), new Set(["codex"]));
-  assert.deepEqual(toned.map((mark) => mark.tone), ["attention", "attention", "quiet", "quiet"]);
+  assert.deepEqual(toned.map((mark) => mark.tone), ["attention", "attention", "quiet", "quiet", "quiet"]);
   assert.equal(toolTone("unauthorized", true, false), "quiet");
   assert.equal(toolTone("authorized", true, true), "attention");
   assert.ok(sideStatus.every((status) => allowed.includes(status)));
@@ -58,7 +59,7 @@ try {
   const liveSideStatus = [...liveSide.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
   const liveRowStatus = [...liveRows.matchAll(/<i class="dot ([a-z_]+) [a-z]+"><\/i>([^<]+)/g)].map((match) => match[2]);
   assert.deepEqual(liveSideStatus, liveRowStatus);
-  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "正常"]);
+  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "正常", "未授权"]);
   assert.match(liveRows, /DeepSeek Harness<\/strong><small>用量暂不提供<\/small>/);
   assert.equal(liveRowStatus.includes("暂不提供"), false);
 } finally {

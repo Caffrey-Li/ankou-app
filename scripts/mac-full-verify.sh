@@ -59,6 +59,7 @@ if [ "$MODE" = probe ]; then
   run cargo run -q --offline -p wanxiang-adapter-dsh --example verify_dsh
   run cargo run -q --offline -p wanxiang-adapter-codex --example verify_codex
   run cargo run -q --offline -p wanxiang-adapter-cursor --example verify_cursor
+  run cargo run -q --offline -p wanxiang-adapter-claude --example verify_claude
   finish
 fi
 
@@ -70,6 +71,7 @@ if [ "$MODE" = quick ]; then
   run cargo run -q --offline -p wanxiang-adapter-dsh --example verify_dsh
   run cargo run -q --offline -p wanxiang-adapter-codex --example verify_codex
   run cargo run -q --offline -p wanxiang-adapter-cursor --example verify_cursor
+  run cargo run -q --offline -p wanxiang-adapter-claude --example verify_claude
   finish
 fi
 
@@ -103,6 +105,7 @@ step "真实数据只读核对（只打印数量）"
 run cargo run -q --offline -p wanxiang-adapter-dsh --example verify_dsh
 run cargo run -q --offline -p wanxiang-adapter-codex --example verify_codex
 run cargo run -q --offline -p wanxiang-adapter-cursor --example verify_cursor
+run cargo run -q --offline -p wanxiang-adapter-claude --example verify_claude
 
 step "打包（ad-hoc，本机）"
 CI=true run npm run tauri -- build --target aarch64-apple-darwin --bundles app,dmg

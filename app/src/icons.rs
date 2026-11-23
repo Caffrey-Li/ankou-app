@@ -10,6 +10,7 @@ use wanxiang_core::ToolId;
 const HARNESS_BUNDLE_ID: &str = "com.deepseek.dsh";
 /// 已从本机应用包的 Info.plist 确认：`com.openai.codex` 的 CFBundleName 是 ChatGPT。不按文件夹名查找。
 const CODEX_BUNDLE_ID: &str = "com.openai.codex";
+const CLAUDE_BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
 
 #[derive(Debug, Serialize)]
 pub struct ToolIcon {
@@ -21,6 +22,7 @@ struct Located {
     harness: Option<PathBuf>,
     cursor: Option<PathBuf>,
     codex: Option<PathBuf>,
+    claude: Option<PathBuf>,
 }
 
 #[cfg(target_os = "macos")]
@@ -49,6 +51,7 @@ fn null_icons() -> Vec<ToolIcon> {
         ToolId::DsBot,
         ToolId::Cursor,
         ToolId::Codex,
+        ToolId::Claude,
     ]
     .into_iter()
     .map(|tool| ToolIcon {
@@ -63,6 +66,7 @@ fn locate(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Located {
         harness: app_with_bundle_id(root, HARNESS_BUNDLE_ID, &bundle_id),
         cursor: exact_named_app(root, "Cursor.app"),
         codex: app_with_bundle_id(root, CODEX_BUNDLE_ID, &bundle_id),
+        claude: app_with_bundle_id(root, CLAUDE_BUNDLE_ID, &bundle_id),
     }
 }
 
@@ -111,6 +115,10 @@ fn assemble(
         ToolIcon {
             tool: ToolId::Codex,
             png_base64: icon(found.codex),
+        },
+        ToolIcon {
+            tool: ToolId::Claude,
+            png_base64: icon(found.claude),
         },
     ]
 }
@@ -343,6 +351,7 @@ mod tests {
                 harness: Some(app),
                 cursor: None,
                 codex: None,
+                claude: None,
             },
             &mut read,
         );
@@ -360,6 +369,7 @@ mod tests {
                 harness: None,
                 cursor: None,
                 codex: None,
+                claude: None,
             },
             &mut read,
         );
@@ -389,6 +399,7 @@ mod tests {
             harness: None,
             cursor: Some(app.clone()),
             codex: None,
+            claude: None,
         };
         let first = assemble(&cache, found, &mut read);
         assert!(first
@@ -402,6 +413,7 @@ mod tests {
             harness: None,
             cursor: Some(app.clone()),
             codex: None,
+            claude: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 1);
@@ -413,6 +425,7 @@ mod tests {
             harness: None,
             cursor: Some(app),
             codex: None,
+            claude: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 2);

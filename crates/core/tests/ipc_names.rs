@@ -32,10 +32,15 @@ fn all_tools() -> Vec<ToolId> {
         ToolId::DsBot,
         ToolId::Cursor,
         ToolId::Codex,
+        ToolId::Claude,
     ];
     for tool in &tools {
         match tool {
-            ToolId::DeepSeekHarness | ToolId::DsBot | ToolId::Cursor | ToolId::Codex => {}
+            ToolId::DeepSeekHarness
+            | ToolId::DsBot
+            | ToolId::Cursor
+            | ToolId::Codex
+            | ToolId::Claude => {}
         }
     }
     tools

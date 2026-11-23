@@ -234,6 +234,7 @@ fn tool_id(name: &str) -> Result<ToolId, String> {
         "ds_bot" => Ok(ToolId::DsBot),
         "cursor" => Ok(ToolId::Cursor),
         "codex" => Ok(ToolId::Codex),
+        "claude" => Ok(ToolId::Claude),
         _ => Err("没有这项工具".to_string()),
     }
 }

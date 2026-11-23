@@ -15,6 +15,9 @@ export function measuredKind(tool: ToolId, capability: CapabilityId, title: stri
   if (tool === "cursor" && capability === "conversation" && title === "对话") return "cursor_conversation";
   if (tool === "cursor" && capability === "space_scan" && title === "空间扫描") return "cursor_space";
   if (tool === "codex" && capability === "space_scan" && title === "空间扫描") return "codex_space";
+  if (tool === "claude" && capability === "usage") return "claude_usage";
+  if (tool === "claude" && capability === "conversation") return "claude_conversation";
+  if (tool === "claude" && capability === "space_scan") return "claude_space";
   return null;
 }
 

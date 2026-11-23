@@ -135,6 +135,7 @@ pub struct ConversationPage {
     pub ds_bot: SourceStatus,
     pub harness: SourceStatus,
     pub cursor: SourceStatus,
+    pub claude: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -408,6 +409,11 @@ fn conversations(hub: &Hub) -> ConversationPage {
     } else {
         LocalRead::Unread
     };
+    let (claude_auth, _) = conversation_auth(&grants, ToolId::Claude);
+    let claude_local = match claude_grants(&grants) {
+        Some((records, desktop)) => claude_rows(hub.store.guard(), &records, desktop.as_deref(), &mut rows),
+        None => LocalRead::Unread,
+    };
     append_cursor_fixture(hub, &mut rows);
     ConversationPage {
         rows,
@@ -415,7 +421,129 @@ fn conversations(hub: &Hub) -> ConversationPage {
         ds_bot: bot_status(bot_auth, bot_local),
         harness: bot_status(harness_auth, harness_local),
         cursor: bot_status(cursor_auth, cursor_local),
+        claude: bot_status(claude_auth, claude_local),
     }
+}
+
+/// Claude 对话的两个授权根：会话记录（必需）与桌面应用的会话标题（可选）。
+fn claude_grants(
+    grants: &[wanxiang_core::StoredGrant],
+) -> Option<(std::path::PathBuf, Option<std::path::PathBuf>)> {
+    let find = |pattern: &str| {
+        grants
+            .iter()
+            .find(|grant| {
+                grant.tool == ToolId::Claude
+                    && grant.capability == Capability::Conversation
+                    && grant.status == GrantStatus::Active
+                    && grant.pattern == pattern
+            })
+            .map(|grant| grant.root.clone())
+    };
+    let records = find(wanxiang_adapter_claude::PROJECTS_PATTERN)?;
+    Some((records, find(wanxiang_adapter_claude::DESKTOP_SESSIONS_PATTERN)))
+}
+
+/// Claude 对话：会话记录给出时间与用量，桌面应用给出标题；归档的会话不列。
+fn claude_rows(
+    guard: &wanxiang_core::Guard,
+    records: &std::path::Path,
+    desktop: Option<&std::path::Path>,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    use wanxiang_adapter_claude as claude;
+    let mut titles = std::collections::HashMap::new();
+    let mut archived = std::collections::HashSet::new();
+    if let Some(desktop) = desktop {
+        for path in claude::desktop_session_paths(desktop) {
+            let Ok(bytes) = claude::read_file(guard, Capability::Conversation, &path) else {
+                continue;
+            };
+            if let Some(session) = claude::desktop_session(&bytes) {
+                if session.archived {
+                    archived.insert(session.cli_session_id.clone());
+                }
+                if !session.title.is_empty() {
+                    titles.insert(session.cli_session_id, session.title);
+                }
+            }
+        }
+    }
+    let paths = claude::session_paths(records);
+    if paths.is_empty() {
+        return LocalRead::Empty;
+    }
+    let mut readable = 0;
+    let mut listed = 0;
+    for path in paths {
+        let Ok(bytes) = claude::read_file(guard, Capability::Conversation, &path) else {
+            continue;
+        };
+        readable += 1;
+        let id = path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !claude::valid_id(&id) || archived.contains(&id) {
+            continue;
+        }
+        let session = claude::parse_session(&id, &bytes);
+        drop(bytes);
+        if session.calls.is_empty() && session.first_user.is_none() {
+            continue;
+        }
+        let title = titles.get(&id).cloned().unwrap_or_else(|| session.title());
+        listed += 1;
+        rows.push(ConversationRow {
+            id,
+            tool: "claude".to_string(),
+            title: if title.is_empty() {
+                "未命名对话".to_string()
+            } else {
+                title
+            },
+            updated: session.updated_ms.to_string(),
+            // 本机记录里没有上下文窗口大小，比例未知；不按猜的窗口折算
+            percent: None,
+            cwd: None,
+            status: String::new(),
+            context: "未知".to_string(),
+            source: "session_file".to_string(),
+        });
+    }
+    if readable == 0 {
+        LocalRead::Denied
+    } else if listed == 0 {
+        LocalRead::Empty
+    } else {
+        LocalRead::Rows
+    }
+}
+
+fn claude_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let Some((records, _)) = claude_grants(&grants) else {
+        return Err("Claude 对话未授权".to_string());
+    };
+    let path = wanxiang_adapter_claude::find_session(&records, id)
+        .ok_or_else(|| "这条对话已经不在，无法交接".to_string())?;
+    let bytes =
+        wanxiang_adapter_claude::read_file(hub.store.guard(), Capability::Conversation, &path)
+            .map_err(|_| "读取 Claude 对话失败".to_string())?;
+    let chunks = wanxiang_adapter_claude::transcript(&bytes);
+    drop(bytes);
+    let start = chunks.len().saturating_sub(wanxiang_core::RECENT_TURNS);
+    let (text, truncated) = wanxiang_core::take_recent(&chunks[start..]);
+    let truncated = truncated || start > 0;
+    Ok(HandoffDraft {
+        text,
+        truncated,
+        note: if truncated {
+            "长对话只取了最近部分".to_string()
+        } else {
+            String::new()
+        },
+    })
 }
 
 /// Cursor 对话：只读本机对话数据库里与对话有关的键，列标题、更新时间与上下文占用。
@@ -632,6 +760,7 @@ fn draft(hub: &Hub, tool: &str, id: &str) -> Result<HandoffDraft, String> {
             dsh_draft(hub.store.guard(), ToolId::DsBot, &grant.root, id, true)
         }
         "cursor" => cursor_draft(hub, id),
+        "claude" => claude_draft(hub, id),
         "deepseek_harness" => {
             let grants = hub.store.grants().map_err(|err| err.to_string())?;
             let Some(grant) = grants.iter().find(|grant| {

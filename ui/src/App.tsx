@@ -266,11 +266,11 @@ export function App() {
   function onRefresh() {
     if (!inTauri() || refreshing) return;
     setRefreshing(true);
-    setPending({ ds_bot: true, balance: true, codex: true, windows: true });
+    setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true });
     void refreshUsage().then((started) => {
       if (!started) {
         setRefreshing(false);
-        setPending({ ds_bot: false, balance: false, codex: false, windows: false });
+        setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false });
       }
     });
   }
@@ -304,18 +304,18 @@ export function App() {
         const part = event.payload;
         if (part === "started") {
           setRefreshing(true);
-          setPending({ ds_bot: true, balance: true, codex: true, windows: true });
+          setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true });
           return;
         }
         if (part === "done") {
           setRefreshing(false);
-          setPending({ ds_bot: false, balance: false, codex: false, windows: false });
+          setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false });
           // 刷新后重读一次授权与 Key 状态（启动时钥匙串可能还没确认完）
           void loadSnapshot().then(setSnapshot).catch(() => undefined);
           return;
         }
         const custom = customRef.current;
-        if (part !== "ds_bot" && part !== "balance" && part !== "codex" && part !== "windows") return;
+        if (!["ds_bot", "balance", "codex", "windows", "claude"].includes(part)) return;
         void loadUsage(rangeRef.current, custom.start, custom.end).then((next) => {
           setUsage((current) => mergeUsage(current, part, next));
           setPending((current) => ({ ...current, [part]: false }));
@@ -360,7 +360,7 @@ export function App() {
       .then((page) => {
         if (!alive) return;
         setConversations(page.rows);
-        setSources({ codex: page.codex, ds_bot: page.ds_bot, harness: page.harness, cursor: page.cursor });
+        setSources({ codex: page.codex, ds_bot: page.ds_bot, harness: page.harness, cursor: page.cursor, claude: page.claude });
       })
       .catch(() => {
         if (!alive) return;
@@ -644,18 +644,32 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
     const rest = current.cards.filter((card) => !card.name.startsWith("ChatGPT"));
     return { ...current, cards: [...fresh, ...rest] };
   }
-  if (part === "ds_bot" || part === "codex") {
-    const names = part === "ds_bot" ? ["DS Bot", "DeepSeek Harness"] : ["ChatGPT"];
+  if (part === "ds_bot" || part === "codex" || part === "claude") {
+    const names =
+      part === "ds_bot" ? ["DS Bot", "DeepSeek Harness"] : part === "codex" ? ["ChatGPT"] : ["Claude"];
+    const cards =
+      part === "claude"
+        ? current.cards.map((card) =>
+            card.name.startsWith("Claude") ? next.cards.find((item) => item.name === card.name) ?? card : card,
+          )
+        : current.cards;
     return {
       ...current,
+      cards,
       total: next.total,
       total_reason: next.total_reason,
       banner: next.banner,
       days: next.days.map((day) => {
         const previous = current.days.find((item) => item.label === day.label);
-        return part === "ds_bot"
-          ? { ...day, codex: previous?.codex ?? day.codex }
-          : { ...day, bot: previous?.bot ?? day.bot, harness: previous?.harness ?? day.harness };
+        const keep = {
+          codex: previous?.codex ?? day.codex,
+          bot: previous?.bot ?? day.bot,
+          harness: previous?.harness ?? day.harness,
+          claude: previous?.claude ?? day.claude,
+        };
+        if (part === "ds_bot") return { ...day, codex: keep.codex, claude: keep.claude };
+        if (part === "codex") return { ...day, bot: keep.bot, harness: keep.harness, claude: keep.claude };
+        return { ...day, codex: keep.codex, bot: keep.bot, harness: keep.harness };
       }),
       details: current.details.map((row) =>
         names.includes(row.name) ? next.details.find((item) => item.name === row.name) ?? row : row,

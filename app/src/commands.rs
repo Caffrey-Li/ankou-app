@@ -245,6 +245,7 @@ fn usage_page(
             &hub.store.grants().map_err(StoreErrorText)?,
             ToolId::DeepSeekHarness,
         ),
+        claude_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::Claude),
     }))
 }
 

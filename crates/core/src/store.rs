@@ -515,6 +515,9 @@ impl Store {
                 &stamp,
                 &cutoff,
             )?;
+            if let Some(at) = snapshot.window_at {
+                upsert_daily(&conn, &today, tool, "window_at", at, &stamp, &cutoff)?;
+            }
         }
         set_report(&conn, tool, metric, UsageState::Ok, &stamp)?;
         Ok(())

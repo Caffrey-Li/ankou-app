@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type SelectHTMLAttributes } from "react";
 import type { Settings, Snapshot } from "./api";
-import { clearHistory, deleteKey, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
+import { clearHistory, deleteKey, refreshUsage, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
 import { Check } from "./Check";
 import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
 import { capChecked, grantableKind } from "./grants";
@@ -33,7 +33,11 @@ export function SettingsPage({
   const [confirmClear, setConfirmClear] = useState(false);
 
   function toggleMeasured(kind: string, on: boolean) {
-    void setCapability(kind, on).then(() => onReload());
+    void setCapability(kind, on).then(() => {
+      onReload();
+      // 刚授权的用量要马上读一次，不然用量页还停在「未授权」
+      if (on && kind.endsWith("_usage")) void refreshUsage().catch(() => undefined);
+    });
   }
 
   function update(patch: Partial<Settings>) {

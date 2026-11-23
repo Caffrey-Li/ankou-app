@@ -88,6 +88,10 @@
   font-size: 11px;
 }
 
+.quota-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .quota-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -388,6 +392,11 @@
 
 .swatch.codex {
   background: #a1a1a6;
+}
+
+.swatch.claude,
+.bar.claude {
+  background: #c46a3f;
 }
 
 .usage-chart {

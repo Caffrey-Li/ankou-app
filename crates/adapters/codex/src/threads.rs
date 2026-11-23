@@ -161,8 +161,8 @@ fn transcript_line(text: &str) -> bool {
         return false;
     };
     let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    digits > 0
-        && (rest[digits..].starts_with("] user:") || rest[digits..].starts_with("] assistant:"))
+    // 「[数字] 」开头的都是转录或工具输出（如「[25] Retained …」「[116] tool js result: …」）
+    digits > 0 && rest[digits..].starts_with("] ")
 }
 
 pub fn parse_jsonl_head(text: &str) -> Option<ThreadHead> {

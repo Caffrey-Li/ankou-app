@@ -24,6 +24,7 @@ pub struct UsageFacts {
     pub codex_access: RecordAccess,
     pub bot_access: RecordAccess,
     pub harness_access: RecordAccess,
+    pub claude_access: RecordAccess,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -42,6 +43,7 @@ pub struct UsageDay {
     pub codex: Option<i64>,
     pub bot: Option<i64>,
     pub harness: Option<i64>,
+    pub claude: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -85,6 +87,13 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         .flatten();
     let harness_calls = harness_open
         .then(|| sum_metric(facts, "deepseek_harness", "calls"))
+        .flatten();
+    let claude_open = facts.claude_access == RecordAccess::Authorized;
+    let claude_tokens = claude_open
+        .then(|| sum_metric(facts, "claude", "tokens"))
+        .flatten();
+    let claude_calls = claude_open
+        .then(|| sum_metric(facts, "claude", "calls"))
         .flatten();
     let excluded_calls = if bot_open {
         sum_metric(facts, "ds_bot", "excluded_calls").unwrap_or(0)
@@ -138,6 +147,11 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             }
         }
     }
+    match facts.claude_access {
+        RecordAccess::Unauthorized => banner.push("Claude 未授权，未计入".to_string()),
+        RecordAccess::NeedsReauth => banner.push("Claude 需要重新授权，未计入".to_string()),
+        RecordAccess::Authorized => {}
+    }
     match facts.bot_access {
         RecordAccess::Unauthorized => banner.push("DS Bot 未授权，未计入".to_string()),
         RecordAccess::NeedsReauth => banner.push("DS Bot 需要重新授权，未计入".to_string()),
@@ -150,7 +164,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         !facts.codex_app_server || window_report.map(|(state, _)| state) == Some("app_off");
     let (balance_value, balance_note, balance_link) =
         balance_card(facts, balance, balance_currency, balance_report);
-    let counted = [codex_tokens, bot_tokens, harness_tokens]
+    let counted = [codex_tokens, bot_tokens, harness_tokens, claude_tokens]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
@@ -164,6 +178,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         banner,
         cards: {
             let mut cards = codex_cards(facts, &windows, window_hidden, window_report);
+            cards.extend(claude_cards(facts));
             cards.push(UsageCard {
                 name: "DeepSeek 账户".to_string(),
                 value: balance_value,
@@ -195,6 +210,9 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
                 harness: harness_open
                     .then(|| day_amount(facts, &day, "deepseek_harness", "tokens"))
                     .flatten(),
+                claude: claude_open
+                    .then(|| day_amount(facts, &day, "claude", "tokens"))
+                    .flatten(),
             })
             .collect(),
         details: vec![
@@ -207,6 +225,7 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
                 false,
             ),
             counted_detail("DS Bot", facts.bot_access, bot_tokens, bot_calls, false),
+            counted_detail("Claude", facts.claude_access, claude_tokens, claude_calls, false),
             withheld_detail("Cursor"),
         ],
         caption: "按各工具自身周期，不受上方日期影响".to_string(),
@@ -218,12 +237,14 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
 }
 
 fn total_reason(facts: &UsageFacts) -> &'static str {
-    let open = facts.codex_access == RecordAccess::Authorized
-        || facts.bot_access == RecordAccess::Authorized
-        || facts.harness_access == RecordAccess::Authorized;
-    let reauth = facts.codex_access == RecordAccess::NeedsReauth
-        || facts.bot_access == RecordAccess::NeedsReauth
-        || facts.harness_access == RecordAccess::NeedsReauth;
+    let all = [
+        facts.codex_access,
+        facts.bot_access,
+        facts.harness_access,
+        facts.claude_access,
+    ];
+    let open = all.contains(&RecordAccess::Authorized);
+    let reauth = all.contains(&RecordAccess::NeedsReauth);
     if open {
         "无本机记录"
     } else if reauth {
@@ -484,6 +505,67 @@ fn codex_cards(
     cards
 }
 
+/// Claude 的两张额度卡：数据来自桌面应用记下的额度历史（本机记录，标出数据时间）。
+fn claude_cards(facts: &UsageFacts) -> Vec<UsageCard> {
+    let gap = match facts.claude_access {
+        RecordAccess::Unauthorized => Some("未授权"),
+        RecordAccess::NeedsReauth => Some("需要重新授权"),
+        RecordAccess::Authorized => None,
+    };
+    if let Some(note) = gap {
+        return vec![
+            status_card(CLAUDE_FIVE_HOUR_CARD, note, true),
+            status_card(CLAUDE_WEEK_CARD, note, true),
+        ];
+    }
+    let windows = windows_of(facts, "claude");
+    let recorded = latest_amount(facts, "claude", "window_at");
+    let origin = match recorded {
+        Some(at) => format!("本机记录 · {}", stamp_label(at, facts)),
+        None => "本机记录".to_string(),
+    };
+    let pick = |minutes: i64, name: &str| match windows.iter().find(|w| w.minutes == Some(minutes)) {
+        // 记录早于整个窗口：窗口早已重置，旧百分比不能当成现在的
+        Some(_) if recorded.is_some_and(|at| facts.now - at > minutes * 60) => {
+            status_card(name, "记录已过时", false)
+        }
+        Some(window) => UsageCard {
+            name: name.to_string(),
+            value: format!("{}%", window.percent),
+            note: origin.clone(),
+            percent: Some(window.percent),
+            reset: window
+                .resets_at
+                .map(|at| format!("{} 重置", hhmm(at, facts.offset_secs))),
+            link: None,
+        },
+        None => status_card(name, "无本机记录", false),
+    };
+    vec![
+        pick(FIVE_HOUR_MINUTES, CLAUDE_FIVE_HOUR_CARD),
+        pick(SEVEN_DAY_MINUTES, CLAUDE_WEEK_CARD),
+    ]
+}
+
+/// 今天的数据只写时刻，更早的写日期，免得把过时的额度当成现在的。
+fn stamp_label(at: i64, facts: &UsageFacts) -> String {
+    let local = |secs: i64| {
+        Utc.timestamp_opt(secs + i64::from(facts.offset_secs), 0)
+            .single()
+            .map(|time| time.date_naive())
+    };
+    if local(at) == local(facts.now) {
+        hhmm(at, facts.offset_secs)
+    } else {
+        local(at)
+            .map(|day| format!("{} 月 {} 日", day.month(), day.day()))
+            .unwrap_or_else(|| hhmm(at, facts.offset_secs))
+    }
+}
+
+const CLAUDE_FIVE_HOUR_CARD: &str = "Claude · 5 小时窗口";
+const CLAUDE_WEEK_CARD: &str = "Claude · 每周额度";
+
 const FIVE_HOUR_MINUTES: i64 = 300;
 const SEVEN_DAY_MINUTES: i64 = 10080;
 const FIVE_HOUR_CARD: &str = "ChatGPT · 5 小时窗口";
@@ -501,14 +583,19 @@ fn status_card(name: &str, note: &str, link: bool) -> UsageCard {
 }
 
 fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
+    windows_of(facts, "codex")
+}
+
+fn is_window_metric(metric: &str) -> bool {
+    metric.starts_with("window_") && metric.ends_with("_bps")
+}
+
+fn windows_of(facts: &UsageFacts, tool: &str) -> Vec<WindowView> {
     let day = facts
         .rows
         .iter()
         .filter(|row| {
-            row.1 == "codex"
-                && row.2.starts_with("window_")
-                && !row.2.ends_with("_reset")
-                && row.0.as_str() <= facts.today.as_str()
+            row.1 == tool && is_window_metric(&row.2) && row.0.as_str() <= facts.today.as_str()
         })
         .map(|row| row.0.as_str())
         .max()
@@ -519,18 +606,15 @@ fn latest_windows(facts: &UsageFacts) -> Vec<WindowView> {
     let mut windows: Vec<_> = facts
         .rows
         .iter()
-        .filter(|row| {
-            row.0 == day
-                && row.1 == "codex"
-                && row.2.starts_with("window_")
-                && !row.2.ends_with("_reset")
-        })
+        .filter(|row| row.0 == day && row.1 == tool && is_window_metric(&row.2))
         .filter_map(|row| {
             let percent = i32::try_from(row.3 / 100).ok()?;
             let resets_at = facts
                 .rows
                 .iter()
-                .find(|reset| reset.0 == row.0 && reset.2 == format!("{}_reset", row.2))
+                .find(|reset| {
+                    reset.0 == row.0 && reset.1 == tool && reset.2 == format!("{}_reset", row.2)
+                })
                 .map(|reset| reset.3);
             if resets_at.is_some_and(|at| at <= facts.now) {
                 return None;

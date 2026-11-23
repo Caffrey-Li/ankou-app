@@ -152,6 +152,7 @@ export type UsageDay = {
   codex: number | null;
   bot: number | null;
   harness?: number | null;
+  claude?: number | null;
 };
 
 export type UsageDetail = {
@@ -248,6 +249,7 @@ export type ConversationPage = {
   ds_bot: SourceStatus;
   harness?: SourceStatus;
   cursor?: SourceStatus;
+  claude?: SourceStatus;
 };
 
 export function listConversations() {
@@ -258,6 +260,7 @@ export function listConversations() {
       ds_bot: "unauthorized",
       harness: "unauthorized",
       cursor: "unauthorized",
+      claude: "unauthorized",
     } satisfies ConversationPage);
   }
   return call<ConversationPage>("list_conversations");

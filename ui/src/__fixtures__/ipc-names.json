@@ -1,5 +1,5 @@
 {
-  "tool_id": ["codex", "cursor", "deepseek_harness", "ds_bot"],
+  "tool_id": ["claude", "codex", "cursor", "deepseek_harness", "ds_bot"],
   "capability": [
     "account_link",
     "cleanup",

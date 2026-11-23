@@ -5,6 +5,7 @@ members = [
   "crates/adapters/dsh",
   "crates/adapters/cursor",
   "crates/adapters/codex",
+  "crates/adapters/claude",
   "app",
 ]
 

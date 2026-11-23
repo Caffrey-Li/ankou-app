@@ -18,6 +18,7 @@ pub enum ToolId {
     DsBot,
     Cursor,
     Codex,
+    Claude,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -1239,6 +1240,7 @@ fn tool_tag(tool: ToolId) -> u8 {
         ToolId::DsBot => 2,
         ToolId::Cursor => 3,
         ToolId::Codex => 4,
+        ToolId::Claude => 5,
     }
 }
 

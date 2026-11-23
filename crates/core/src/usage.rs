@@ -172,6 +172,8 @@ pub struct UsageSnapshot {
     pub partial_sessions: u64,
     pub partial: bool,
     pub window_live: bool,
+    /// 额度窗口数据本身的时间（秒）；本机记录可能比刷新时间早
+    pub window_at: Option<i64>,
     pub manage_session_counts: bool,
 }
 
@@ -188,6 +190,7 @@ impl UsageSnapshot {
             partial_sessions: 0,
             partial: false,
             window_live: false,
+            window_at: None,
             manage_session_counts: false,
         }
     }

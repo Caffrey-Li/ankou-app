@@ -21,6 +21,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+wanxiang-adapter-claude = { path = "../crates/adapters/claude" }
 wanxiang-adapter-codex = { path = "../crates/adapters/codex" }
 wanxiang-adapter-cursor = { path = "../crates/adapters/cursor" }
 wanxiang-adapter-dsh = { path = "../crates/adapters/dsh" }

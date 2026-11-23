@@ -15,6 +15,7 @@ fn empty() -> UsageFacts {
         codex_access: RecordAccess::Unauthorized,
         bot_access: RecordAccess::Unauthorized,
         harness_access: RecordAccess::Unauthorized,
+        claude_access: RecordAccess::Unauthorized,
     }
 }
 
@@ -37,7 +38,8 @@ fn empty_usage_names_the_gaps_and_skips_example_figures() {
     assert!(!text.contains("128.40"));
     assert!(!text.contains("去授权"));
     assert!(text.contains("去设置授权"));
-    assert_eq!(page.cards.len(), 4);
+    assert_eq!(page.cards.len(), 6);
+    assert!(text.contains("Claude 未授权，未计入"));
     assert_eq!(page.total, "—");
     assert_eq!(page.total_reason, "未授权");
     assert_eq!(detail(&page, "ChatGPT").fee, "不提供");
@@ -252,4 +254,59 @@ fn harness_usage_counts_once_and_joins_the_total() {
     let page = present_usage(&facts);
     assert_eq!(detail(&page, "DeepSeek Harness").tokens, "需要重新授权");
     assert!(page.banner.iter().any(|line| line == "Harness 需要重新授权，未计入"));
+}
+
+#[test]
+fn claude_counts_tokens_and_shows_local_plan_windows() {
+    let mut facts = empty();
+    facts.claude_access = RecordAccess::Authorized;
+    for (metric, amount) in [
+        ("tokens", 1_200),
+        ("calls", 3),
+        ("window_300_0_bps", 4_900),
+        ("window_10080_1_bps", 6_400),
+        ("window_source", 2),
+        ("window_at", facts.now - 600),
+    ] {
+        facts
+            .rows
+            .push(("2026-11-09".to_string(), "claude".to_string(), metric.to_string(), amount));
+    }
+    let page = present_usage(&facts);
+    let five = page.cards.iter().find(|card| card.name == "Claude · 5 小时窗口").unwrap();
+    let week = page.cards.iter().find(|card| card.name == "Claude · 每周额度").unwrap();
+    assert_eq!(five.percent, Some(49));
+    assert_eq!(week.percent, Some(64));
+    assert!(five.note.starts_with("本机记录 · "));
+    assert_eq!(detail(&page, "Claude").tokens, "1,200");
+    assert_eq!(page.total, "1,200");
+    assert!(!page.banner.iter().any(|line| line.contains("Claude")));
+    assert_eq!(page.days.last().unwrap().claude, Some(1_200));
+
+    let mut older = facts.clone();
+    for row in older.rows.iter_mut() {
+        if row.2 == "window_at" {
+            row.3 = facts.now - 3 * 86_400;
+        }
+    }
+    let page = present_usage(&older);
+    let five = page.cards.iter().find(|card| card.name == "Claude · 5 小时窗口").unwrap();
+    assert_eq!(five.percent, None);
+    assert!(five.note.contains("过时"), "{}", five.note);
+    let mut days_old = facts.clone();
+    for row in days_old.rows.iter_mut() {
+        if row.2 == "window_at" {
+            row.3 = facts.now - 2 * 86_400;
+        }
+    }
+    let page = present_usage(&days_old);
+    let week = page.cards.iter().find(|card| card.name == "Claude · 每周额度").unwrap();
+    assert_eq!(week.percent, Some(64));
+    assert!(week.note.contains("月"), "{}", week.note);
+
+    let mut empty_plan = empty();
+    empty_plan.claude_access = RecordAccess::Authorized;
+    let page = present_usage(&empty_plan);
+    let five = page.cards.iter().find(|card| card.name == "Claude · 5 小时窗口").unwrap();
+    assert_eq!(five.note, "无本机记录");
 }

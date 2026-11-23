@@ -201,7 +201,38 @@ fn refresh_body(
             && grant.capability == Capability::Usage
             && grant.status == GrantStatus::Active
     });
+    let claude_records = grants.iter().find(|grant| {
+        grant.tool == ToolId::Claude
+            && grant.capability == Capability::Usage
+            && grant.status == GrantStatus::Active
+            && grant.pattern == wanxiang_adapter_claude::PROJECTS_PATTERN
+    });
+    let claude_plan = grants
+        .iter()
+        .find(|grant| {
+            grant.tool == ToolId::Claude
+                && grant.capability == Capability::Usage
+                && grant.status == GrantStatus::Active
+                && grant.pattern == wanxiang_adapter_claude::PLAN_PATTERN
+        })
+        .map(|grant| grant.root.clone());
     std::thread::scope(|scope| {
+        scope.spawn(|| {
+            if let Some(records) = claude_records {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &ClaudeUsage {
+                        config: records.root.clone(),
+                        plan: claude_plan.clone(),
+                        offset: store.offset_secs(),
+                        guard: store.guard_handle(),
+                    },
+                );
+            }
+            emit("claude");
+        });
         scope.spawn(|| {
             // Harness 与 DS Bot 同属 ~/.dsh，按顺序读，界面上一起显示「刷新中」
             if let Some(root) = harness {
@@ -375,6 +406,86 @@ impl UsageSource for HarnessSessions {
         let mut snapshot = UsageSnapshot::empty();
         snapshot.tokens = tokens.into_iter().collect();
         snapshot.calls = calls.into_iter().collect();
+        Ok(snapshot)
+    }
+}
+
+/// Claude：会话记录里的 token 按天合计；桌面应用的额度历史给出 5 小时与每周百分比。
+struct ClaudeUsage {
+    config: PathBuf,
+    plan: Option<PathBuf>,
+    offset: i32,
+    guard: Arc<Guard>,
+}
+
+impl UsageSource for ClaudeUsage {
+    fn tool(&self) -> ToolId {
+        ToolId::Claude
+    }
+    fn capability(&self) -> Capability {
+        Capability::Usage
+    }
+    fn metric(&self) -> &'static str {
+        "tokens"
+    }
+    fn collect(&self, stop: &TaskStop) -> Result<UsageSnapshot, UsageError> {
+        use wanxiang_adapter_claude as claude;
+        let mut tokens = BTreeMap::<String, i64>::new();
+        let mut calls = BTreeMap::<String, i64>::new();
+        let mut readable = 0_usize;
+        let paths = claude::session_paths(&self.config);
+        for path in &paths {
+            if stop.is_stopped() {
+                return Err(UsageError::Stopped);
+            }
+            let Ok(bytes) = claude::read_file(&self.guard, Capability::Usage, path) else {
+                continue;
+            };
+            readable += 1;
+            let id = path
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let session = claude::parse_session(&id, &bytes);
+            drop(bytes);
+            for call in &session.calls {
+                let instant = UNIX_EPOCH + Duration::from_millis(call.time_ms.max(0) as u64);
+                let day = local_calendar_day(instant, self.offset);
+                *tokens.entry(day.clone()).or_default() += call.tokens;
+                *calls.entry(day).or_default() += 1;
+            }
+        }
+        if readable == 0 && !paths.is_empty() {
+            return Err(UsageError::Unreadable);
+        }
+        let mut snapshot = UsageSnapshot::empty();
+        snapshot.tokens = tokens.into_iter().collect();
+        snapshot.calls = calls.into_iter().collect();
+        if let Some(plan) = self.plan.as_ref().map(|root| root.join(claude::PLAN_PATTERN)) {
+            if let Some(sample) = claude::read_file(&self.guard, Capability::Usage, &plan)
+                .ok()
+                .and_then(|bytes| claude::latest_plan(&bytes))
+            {
+                let mut windows = Vec::new();
+                if let Some(percent) = sample.five_hour {
+                    windows.push(WindowSample {
+                        minutes: Some(300),
+                        used_percent: percent,
+                        resets_at: None,
+                    });
+                }
+                if let Some(percent) = sample.seven_day {
+                    windows.push(WindowSample {
+                        minutes: Some(10080),
+                        used_percent: percent,
+                        resets_at: None,
+                    });
+                }
+                snapshot.windows = windows;
+                snapshot.window_live = false;
+                snapshot.window_at = Some(sample.at_ms / 1000);
+            }
+        }
         Ok(snapshot)
     }
 }
