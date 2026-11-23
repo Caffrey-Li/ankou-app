@@ -119,42 +119,82 @@ span.end-icon {
   display: none;
 }
 
-.t-stamp {
+.t-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--fill-1);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
-.t-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+.t-status.attention {
+  background: color-mix(in srgb, var(--color-ochre) 14%, transparent);
+  color: var(--color-warn-text);
 }
 
-.t-stat {
+/* 概况：一条铺满，各项等分，中间细竖线 */
+.t-summary {
+  display: flex;
+  padding: 0;
+}
+
+.t-cell {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.t-cell + .t-cell {
+  border-left: 1px solid var(--card-edge);
+}
+
+.t-cell.ring {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+}
+
+.t-cell-head {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.t-stat.column {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 6px;
-}
-
-.t-stat p {
-  margin: 6px 0 0;
+.t-cell p {
+  margin: 4px 0 0;
   color: var(--color-graphite);
   font-size: 13px;
 }
 
-.t-stat small {
+.t-cell small {
+  overflow: hidden;
   color: var(--color-text-secondary);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t-value {
+  color: var(--color-graphite);
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+}
+
+.t-value.muted {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
 }
 
 .t-cols {
@@ -188,15 +228,92 @@ span.end-icon {
   font-size: 11px;
 }
 
-.t-side {
+/* 授权：每个端一段，能勾的逐行列出，做不到的合成一行 */
+.t-access .vendor-access {
+  padding: 0 16px 8px;
+}
+
+.va-end {
+  padding: 12px 0;
+}
+
+.va-end + .va-end {
+  border-top: 1px solid var(--card-edge);
+}
+
+.va-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.va-head strong {
+  color: var(--color-graphite);
+  font-size: 13px;
+}
+
+.va-state {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.va-state.authorized {
+  color: var(--color-ok);
+}
+
+.va-state.needs_reauth {
+  color: var(--color-warn-text);
+}
+
+.va-note {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.va-rows {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  margin-top: 6px;
+}
+
+.va-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.va-row .check {
+  flex: none;
+  margin-top: 1px;
+}
+
+.va-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.t-access .vendor-access {
-  padding: 4px 14px 14px;
+.va-copy strong {
+  color: var(--color-graphite);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.va-copy span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.va-rest {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1040px) {
@@ -205,7 +322,11 @@ span.end-icon {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .t-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .t-summary {
+    flex-wrap: wrap;
+  }
+
+  .t-cell {
+    flex-basis: 40%;
   }
 }

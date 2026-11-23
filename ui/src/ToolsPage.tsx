@@ -84,9 +84,16 @@ export function ToolsPage({
   const rings = cards.filter((card) => card.percent != null);
   const balance = cards.find((card) => card.name === "DeepSeek 账户");
   const group = groupDetails(usage.details).find((item) => item.id === vendor.id);
-  const talks = [...vendorRows(rows, vendor.id)].sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1)).slice(0, 6);
+  const talks = [...vendorRows(rows, vendor.id)].sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1)).slice(0, 8);
   const vendorSpace = space?.find((item) => item.vendor === vendor.id) ?? null;
   const authorized = mark?.presence === "authorized";
+  // 「需要处理」要说清楚是什么：额度快用完、对话快满
+  const hotCount = vendorRows(rows, vendor.id).filter((row) => row.percent != null && row.percent >= threshold).length;
+  const reasons = [
+    ...rings.filter((card) => (card.percent ?? 0) >= 90).map((card) => `${card.name.split(" · ")[1] ?? "额度"}已用 ${card.percent}%`),
+    ...(hotCount ? [`${hotCount} 个对话快满`] : []),
+  ];
+  const statusText = mark?.tone === "attention" && reasons.length ? reasons.join(" · ") : mark?.status;
   return (
     <div className="t-page">
       <Rail marks={marks} usage={usage} selected={vendor.id} onSelect={onSelect} />
@@ -104,13 +111,19 @@ export function ToolsPage({
               ))}
             </div>
           </div>
-          <span className="t-stamp">{mark?.status ?? ""}</span>
+          {mark ? (
+            <span className={`t-status ${mark.tone}`}>
+              <StatusDot mark={mark} />
+              {statusText}
+            </span>
+          ) : null}
         </header>
 
-        <div className="t-stats">
+        {/* 概况一条：额度、余额、token、空间并排，有几项排几项，宽度总是铺满 */}
+        <section className="c-panel t-summary" aria-label="概况">
           {rings.slice(0, 2).map((card) => (
-            <div key={card.name} className="c-panel t-stat">
-              <Ring percent={card.percent ?? 0} size={72} />
+            <div key={card.name} className="t-cell ring">
+              <Ring percent={card.percent ?? 0} size={52} />
               <div>
                 <h2 className="c-h">{card.name.split(" · ")[1] ?? card.name}</h2>
                 <p>{card.reset ?? card.note}</p>
@@ -119,30 +132,48 @@ export function ToolsPage({
             </div>
           ))}
           {balance ? (
-            <div className="c-panel t-stat column">
+            <div className="t-cell">
               <h2 className="c-h">余额</h2>
-              <strong className="c-big">{balance.value === "—" ? balance.note : balance.value}</strong>
+              <strong className="t-value">{balance.value === "—" ? balance.note : balance.value}</strong>
               <small>Harness 与 DS Bot 共用</small>
             </div>
           ) : null}
           {group ? (
-            <div className="c-panel t-stat column">
+            <div className="t-cell">
               <h2 className="c-h">本月 token</h2>
-              <strong className="c-big">{/^[\d,]+$/.test(group.row.tokens) ? cnCount(group.row.tokens) : group.row.tokens}</strong>
+              <strong className={/^[\d,]+$/.test(group.row.tokens) ? "t-value" : "t-value muted"}>
+                {/^[\d,]+$/.test(group.row.tokens) ? cnCount(group.row.tokens) : group.row.tokens}
+              </strong>
               <small>
-                {/^[\d,]+$/.test(group.row.calls) ? `${group.row.calls} 次调用` : group.row.source || "—"}
+                {/^[\d,]+$/.test(group.row.calls) ? `${group.row.calls} 次调用` : group.row.source && group.row.source !== "—" ? group.row.source : "本机没有可读的 token 记录"}
                 {group.ends.length > 1 ? ` · ${group.ends.length} 端合计` : ""}
               </small>
             </div>
           ) : null}
           {rings.length === 0 && !balance && !group ? (
-            <div className="c-panel t-stat column">
+            <div className="t-cell">
               <h2 className="c-h">额度与用量</h2>
-              <strong className="c-big">暂不提供</strong>
+              <strong className="t-value muted">暂不提供</strong>
               <small>本机没有可读的额度或 token 记录</small>
             </div>
           ) : null}
-        </div>
+          <div className="t-cell">
+            <div className="t-cell-head">
+              <h2 className="c-h">本机空间</h2>
+              <button type="button" className="text-button" onClick={onClean}>
+                去清理
+              </button>
+            </div>
+            <strong className={vendorSpace ? "t-value" : "t-value muted"}>{vendorSpace ? formatBytes(vendorSpace.bytes, 1) : "尚未统计"}</strong>
+            <small>
+              {vendorSpace
+                ? vendorSpace.cleanable > 0
+                  ? `可安全清理 ${formatBytes(vendorSpace.cleanable, 1)}`
+                  : "全部是对话与设置，受保护"
+                : "授权空间扫描后，在「清理」里统计"}
+            </small>
+          </div>
+        </section>
 
         <div className="t-cols">
           <section className="c-panel t-talks" aria-label="对话">
@@ -175,34 +206,12 @@ export function ToolsPage({
               })
             )}
           </section>
-          <div className="t-side">
-            <section className="c-panel" aria-label="空间">
-              <div className="c-panel-head">
-                <h2 className="c-h">空间</h2>
-                <button type="button" className="text-button" onClick={onClean}>
-                  去清理
-                </button>
-              </div>
-              <div className="c-item">
-                <span className="c-item-copy">
-                  <strong>{vendorSpace ? `占用 ${formatBytes(vendorSpace.bytes, 1)}` : "尚未扫描"}</strong>
-                  <span>
-                    {vendorSpace
-                      ? vendorSpace.cleanable > 0
-                        ? `可安全清理 ${formatBytes(vendorSpace.cleanable, 1)}`
-                        : "全部是对话与设置，受保护"
-                      : "授权空间扫描后，在「清理」里统计"}
-                  </span>
-                </span>
-              </div>
-            </section>
-            <section className="c-panel t-access" aria-label="授权">
-              <div className="c-panel-head">
-                <h2 className="c-h">授权 · 只读</h2>
-              </div>
-              <VendorAccess vendorId={vendor.id} snapshot={snapshot} onChange={onChange} onReload={onReload} />
-            </section>
-          </div>
+          <section className="c-panel t-access" aria-label="授权">
+            <div className="c-panel-head">
+              <h2 className="c-h">授权 · 只读</h2>
+            </div>
+            <VendorAccess vendorId={vendor.id} snapshot={snapshot} onChange={onChange} onReload={onReload} />
+          </section>
         </div>
       </div>
     </div>

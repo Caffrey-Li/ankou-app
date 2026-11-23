@@ -23,7 +23,7 @@ export function Ring({ percent, size = 56 }: { percent: number; size?: number })
         <circle cx="28" cy="28" r="22" className="c-ring-track" />
         <circle cx="28" cy="28" r="22" className="c-ring-value" pathLength={100} strokeDasharray={`${value} 100`} />
       </svg>
-      <strong>{value}%</strong>
+      <strong style={{ fontSize: Math.max(10, Math.round(size * 0.22)) }}>{value}%</strong>
     </div>
   );
 }

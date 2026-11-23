@@ -301,8 +301,6 @@ export function VendorAccess({
   const vendor = vendors.find((item) => item.id === vendorId);
   if (!vendor) return null;
   const members = vendor.members.map((id) => specOf(id)).filter((spec) => spec !== undefined);
-  const presences = members.map((spec) => snapshot.tools.find((tool) => tool.tool === spec.id)?.presence ?? "missing");
-  const open = true;
   const multi = members.length > 1;
   function toggleMeasured(kind: string, on: boolean) {
     void setCapability(kind, on).then(() => {
@@ -311,100 +309,72 @@ export function VendorAccess({
       if (on && kind.endsWith("_usage")) void refreshUsage().catch(() => undefined);
     });
   }
+  function revoke(id: number) {
+    void revokeGrant(id).then(() =>
+      onChange((current) => ({ ...current, grants: current.grants.filter((item) => item.id !== id) })),
+    );
+  }
   return (
     <div className="tool-block vendor-access" id={`tool-${vendor.id}`}>
-                {members.map((spec, index) => {
-                  const presence = presences[index];
-                  const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
-                  return (
-                    <div className={multi ? "tool-end" : "tool-end single"} key={spec.id}>
-                      {multi || (open && spec.ends) ? (
-                        <div className="end-head">
-                          <strong>{multi ? spec.name : "覆盖"}</strong>
-                          {multi ? <span className="end-state">{presenceLabel(presence)}</span> : null}
-                          {open && spec.ends ? <span className="end-note">{spec.ends}</span> : null}
-                        </div>
-                      ) : null}
-                      <div className="tag-row">
-                        {spec.tags.map((tag) => {
-                          const state = tagState(tag.badge, tag.capability, grants);
-                          return (
-                            <span key={tag.label} className={authTagClass(state)}>
-                              {tag.badge === "已实测" ? tag.label : `${tag.label} · ${tag.badge}`}
-                            </span>
-                          );
-                        })}
-                      </div>
-                      {open ? (
-                        <div className="cap-list">
-                          {spec.caps.map((cap) => {
-                            const grant = grants.find((item) => item.capability === cap.capability);
-                            const kind = grantableKind(spec.id, cap);
-                            if (kind) {
-                              const checked = capChecked(cap, grants);
-                              return (
-                                <div className="cap-row" key={cap.title}>
-                                  <Check
-                                    aria-label={multi ? `${spec.name} ${cap.title}` : cap.title}
-                                    checked={checked}
-                                    onChange={(event) => toggleMeasured(kind, event.target.checked)}
-                                  />
-                                  <span className="cap-copy">
-                                    <strong>{cap.title}</strong>
-                                    <span>{cap.detail}</span>
-                                  </span>
-                                </div>
-                              );
-                            }
-                            return (
-                              <div className="cap-row disabled" key={cap.title}>
-                                <Check disabled aria-label={multi ? `${spec.name} ${cap.title}` : cap.title} />
-                                <span className="cap-copy">
-                                  <strong>{cap.title}</strong>
-                                  <span>
-                                    {grant ? (grant.status === "needs_reauth" ? "需要重新授权" : "已授权") : cap.detail}
-                                  </span>
-                                </span>
-                                <span className="grow" />
-                                {grant ? (
-                                  <button
-                                    type="button"
-                                    className="text-button"
-                                    onClick={() => {
-                                      void revokeGrant(grant.id).then(() =>
-                                        onChange((current) => ({
-                                          ...current,
-                                          grants: current.grants.filter((item) => item.id !== grant.id),
-                                        })),
-                                      );
-                                    }}
-                                  >
-                                    撤销
-                                  </button>
-                                ) : (
-                                  <span className={authTagClass(cap.badge)}>{cap.badge}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {spec.id === "codex" ? (
-                            <div className="cap-row">
-                              <Check
-                                aria-label="ChatGPT app-server"
-                                checked={snapshot.settings.codex_app_server}
-                                onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
-                              />
-                              <span className="cap-copy">
-                                <strong>ChatGPT app-server</strong>
-                                <span>读取额度窗口，只在启动和手动刷新时调用</span>
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+      {members.map((spec) => {
+        const presence = snapshot.tools.find((tool) => tool.tool === spec.id)?.presence ?? "missing";
+        const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
+        // 能勾的、已经授权过的逐行列出；做不到的合成一行说明，不占地方
+        const rows = spec.caps.filter((cap) => grantableKind(spec.id, cap) || grants.some((grant) => grant.capability === cap.capability));
+        const rest = spec.caps.filter((cap) => !rows.includes(cap));
+        return (
+          <section className="va-end" key={spec.id} aria-label={spec.name}>
+            <div className="va-head">
+              <strong>{spec.name}</strong>
+              <span className={`va-state ${presence}`}>{presenceLabel(presence)}</span>
+            </div>
+            {spec.ends ? <p className="va-note">{spec.ends}</p> : null}
+            <div className="va-rows">
+              {rows.map((cap) => {
+                const kind = grantableKind(spec.id, cap);
+                const grant = grants.find((item) => item.capability === cap.capability);
+                const label = multi ? `${spec.name} ${cap.title}` : cap.title;
+                return (
+                  <label className="va-row" key={cap.title}>
+                    {kind ? (
+                      <Check aria-label={label} checked={capChecked(cap, grants)} onChange={(event) => toggleMeasured(kind, event.target.checked)} />
+                    ) : (
+                      <Check aria-label={label} checked disabled />
+                    )}
+                    <span className="va-copy">
+                      <strong>{cap.title}</strong>
+                      <span>{grant?.status === "needs_reauth" ? "需要重新授权" : cap.detail}</span>
+                    </span>
+                    {!kind && grant ? (
+                      <button type="button" className="text-button" onClick={() => revoke(grant.id)}>
+                        撤销
+                      </button>
+                    ) : null}
+                  </label>
+                );
+              })}
+              {spec.id === "codex" ? (
+                <label className="va-row">
+                  <Check
+                    aria-label="ChatGPT app-server"
+                    checked={snapshot.settings.codex_app_server}
+                    onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
+                  />
+                  <span className="va-copy">
+                    <strong>额度窗口</strong>
+                    <span>通过 app-server 读取，只在启动和手动刷新时调用</span>
+                  </span>
+                </label>
+              ) : null}
+            </div>
+            {rest.length ? (
+              <p className="va-rest">
+                {rest.map((cap) => `${cap.title}${cap.badge === "已实测" ? "" : `：${cap.badge}`}`).join(" · ")}
+              </p>
+            ) : null}
+          </section>
+        );
+      })}
     </div>
   );
 }
