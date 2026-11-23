@@ -24,8 +24,12 @@ export function SettingsPage({
     if (!focusTool) return;
     setOpenTool(focusTool.id);
     requestAnimationFrame(() => {
-      // 只在内容区里滚到能看见为止，已经看得见就不动
-      document.getElementById(`tool-${focusTool.id}`)?.scrollIntoView({ block: "nearest" });
+      // 只滚右侧授权一栏，把这一块顶到栏顶；页面标题和中间一栏不动
+      const block = document.getElementById(`tool-${focusTool.id}`);
+      const side = block?.closest(".settings-side");
+      if (!block || !side) return;
+      const offset = block.getBoundingClientRect().top - side.getBoundingClientRect().top;
+      side.scrollTo({ top: side.scrollTop + offset - 8 });
     });
   }, [focusTool]);
   const [keyOpen, setKeyOpen] = useState(false);

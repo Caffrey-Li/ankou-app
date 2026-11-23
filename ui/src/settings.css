@@ -1,8 +1,25 @@
+/* 设置页：标题固定，中间一栏固定，右侧授权一栏自己滚动 */
+main.main-fixed {
+  overflow: hidden;
+}
+
 .settings-layout {
   display: flex;
-  align-items: flex-start;
+  flex: 1;
+  align-items: stretch;
   gap: 20px;
   min-width: 0;
+  min-height: 0;
+}
+
+.settings-column,
+.settings-side {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 卡片阴影留出位置，不被滚动区裁掉 */
+  margin: -6px -8px -24px;
+  padding: 6px 8px 24px;
 }
 
 .settings-column {
@@ -19,6 +36,15 @@
   flex-direction: column;
   gap: 8px;
   width: 380px;
+}
+
+.settings-column > *,
+.settings-side > * {
+  flex-shrink: 0;
+}
+
+.tool-block {
+  scroll-margin-top: 8px;
 }
 
 .section-label {

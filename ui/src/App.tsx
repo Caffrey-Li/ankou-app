@@ -460,7 +460,7 @@ export function App() {
           <span>数据只保存在这台电脑</span>
         </p>
       </aside>
-      <main>
+      <main className={page === "settings" ? "main-fixed" : undefined}>
         <header className="toolbar">
           <div className="title-block">
             <h1>{current.label}</h1>
