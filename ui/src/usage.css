@@ -2,9 +2,14 @@
 .overview-page {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 16px;
-  min-height: 0;
-  overflow: auto;
+}
+
+/* 页面各区块按内容高度排开，窗口不够高时整页滚动，不能被压扁（否则内容会溢出到下面的卡片上） */
+.usage-page > *,
+.overview-page > * {
+  flex-shrink: 0;
 }
 
 /* 提示 · 部分覆盖 18:397：赭色 8% 底、11/14 内边距、16 图标、正文石墨 12 */
