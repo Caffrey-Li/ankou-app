@@ -3,6 +3,7 @@ import { cancelScan, prepareCleanup, runCleanup, scanSpace, type CleanupItem, ty
 import { inTauri } from "./api";
 import { Check } from "./Check";
 import { IconCheck, IconLock, IconTrash } from "./icons";
+import { vendors } from "./catalog";
 import { ToolIcon } from "./tool-status";
 import "./space.css";
 
@@ -79,12 +80,24 @@ export type SpaceToolId =
   | "gemini"
   | "workbuddy"
   | "grok_bot"
-  | "muse";
+  | "muse"
+  | "codebuddy"
+  | "cursor_cli";
 
 /** 只统计、不清理的工具。 */
-type StatTool = "cursor" | "codex" | "claude" | "antigravity" | "gemini" | "workbuddy" | "grok_bot" | "muse";
+type StatTool =
+  | "cursor"
+  | "codex"
+  | "claude"
+  | "antigravity"
+  | "gemini"
+  | "workbuddy"
+  | "grok_bot"
+  | "muse"
+  | "codebuddy"
+  | "cursor_cli";
 /** 后来接入的工具：扫描结果放在一起。 */
-const extraTools = ["antigravity", "gemini", "workbuddy", "grok_bot", "muse"] as const;
+const extraTools = ["antigravity", "gemini", "workbuddy", "grok_bot", "muse", "codebuddy", "cursor_cli"] as const;
 type ExtraTool = (typeof extraTools)[number];
 
 const toolNames: Record<SpaceToolId, string> = {
@@ -98,6 +111,8 @@ const toolNames: Record<SpaceToolId, string> = {
   workbuddy: "WorkBuddy",
   grok_bot: "Grok Bot",
   muse: "Muse",
+  codebuddy: "CodeBuddy",
+  cursor_cli: "Cursor 命令行",
 };
 
 /** 只统计、不清理的工具的说明（决策：Cursor 与 ChatGPT 全部受保护）。 */
@@ -110,6 +125,8 @@ export const statOnlyNote: Record<StatTool, string> = {
   workbuddy: "WorkBuddy 的数据全部受保护，万象只统计占用，不清理",
   grok_bot: "Grok Bot 的数据全部受保护，万象只统计占用，不清理",
   muse: "Muse 桌面应用的数据全部受保护，万象只统计占用，不清理",
+  codebuddy: "CodeBuddy 命令行的会话与配置全部受保护，万象只统计占用，不清理",
+  cursor_cli: "Cursor 命令行的对话与配置全部受保护，万象只统计占用，不清理",
 };
 
 export function groupEntries(entries: SpaceEntry[]) {
@@ -161,6 +178,8 @@ export function SpacePage({
     workbuddy: null,
     grok_bot: null,
     muse: null,
+    codebuddy: null,
+    cursor_cli: null,
   });
   const [tool, setTool] = useState<SpaceToolId>(initialTool);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -181,13 +200,12 @@ export function SpacePage({
   const known = (scan?.protected_bytes ?? 0) + (scan?.cleanable_bytes ?? 0);
   const cleanable = scan?.cleanable_bytes ?? 0;
   const protectedBytes = scan?.protected_bytes ?? 0;
-  const over = known > thresholdGb * GB;
   const cursorKnown = cursor ? cursor.protected_bytes + cursor.cleanable_bytes : 0;
   const codexKnown = codex ? codex.protected_bytes + codex.cleanable_bytes : 0;
   const claude = fixture ? null : claudeScan;
   const claudeKnown = claude ? claude.protected_bytes + claude.cleanable_bytes : 0;
   const extras: Record<ExtraTool, SpaceScan | null> = fixture
-    ? { antigravity: null, gemini: null, workbuddy: null, grok_bot: null, muse: null }
+    ? { antigravity: null, gemini: null, workbuddy: null, grok_bot: null, muse: null, codebuddy: null, cursor_cli: null }
     : extraScans;
   const extraKnown = (id: ExtraTool) => {
     const found = extras[id];
@@ -200,7 +218,32 @@ export function SpacePage({
     (bytes) => bytes > thresholdGb * GB,
   ).length;
   const unscannedCount = (scan?.unscanned ?? 0) + (cursor?.unscanned ?? 0) + (codex?.unscanned ?? 0);
-  const barMax = Math.max(known, cursorKnown, codexKnown, claudeKnown, ...extraSizes, 1);
+  /** 每一端的扫描结果；DS Bot 与 Harness 共用目录，已计入 Harness。 */
+  const scanOf = (id: SpaceToolId): SpaceScan | null =>
+    id === "deepseek_harness"
+      ? scan
+      : id === "cursor"
+        ? cursor
+        : id === "codex"
+          ? codex
+          : id === "claude"
+            ? claude
+            : id === "ds_bot"
+              ? null
+              : extras[id];
+  const sizeOf = (id: SpaceToolId) => {
+    const found = scanOf(id);
+    return found ? found.protected_bytes + found.cleanable_bytes : 0;
+  };
+  const vendorRows = vendors.map((vendor) => {
+    const members = vendor.members as SpaceToolId[];
+    const found = members.filter((id) => scanOf(id));
+    const protectedSum = found.reduce((sum, id) => sum + (scanOf(id)?.protected_bytes ?? 0), 0);
+    const cleanSum = found.reduce((sum, id) => sum + (scanOf(id)?.cleanable_bytes ?? 0), 0);
+    return { vendor, members, scanned: found.length > 0, protectedSum, cleanSum, total: protectedSum + cleanSum };
+  });
+  const vendorMax = Math.max(...vendorRows.map((row) => row.total), 1);
+  const currentVendor = vendors.find((vendor) => (vendor.members as string[]).includes(tool));
   const quit = scan?.quit ?? null;
   const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
@@ -224,7 +267,8 @@ export function SpacePage({
     setScanning(true);
     setNotice("");
     try {
-      const [harness, cursor, codex, claudeResult, antigravity, gemini, workbuddy, grokBot, muse] = await Promise.all([
+      const [harness, cursor, codex, claudeResult, antigravity, gemini, workbuddy, grokBot, muse, codebuddy, cursorCli] =
+        await Promise.all([
         scanSpace("deepseek_harness").catch(() => null),
         scanSpace("cursor").catch(() => null),
         scanSpace("codex").catch(() => null),
@@ -234,11 +278,13 @@ export function SpacePage({
         scanSpace("workbuddy").catch(() => null),
         scanSpace("grok_bot").catch(() => null),
         scanSpace("muse").catch(() => null),
+        scanSpace("codebuddy").catch(() => null),
+        scanSpace("cursor_cli").catch(() => null),
       ]);
       setCursorScan(cursor);
       setCodexScan(codex);
       setClaudeScan(claudeResult);
-      setExtraScans({ antigravity, gemini, workbuddy, grok_bot: grokBot, muse });
+      setExtraScans({ antigravity, gemini, workbuddy, grok_bot: grokBot, muse, codebuddy, cursor_cli: cursorCli });
       if (!harness) {
         setNotice("扫描没有完成");
         return;
@@ -321,56 +367,32 @@ export function SpacePage({
       </section>
       <div className="space-body">
         <aside className="space-tools" aria-label="工具">
-          <ToolRow
-            id="deepseek_harness"
-            selected={tool === "deepseek_harness"}
-            onSelect={setTool}
-            size={scan ? formatBytes(known, 1) : "未扫描"}
-            over={over}
-            bar={scan ? { width: known / barMax, protectedBytes, cleanable } : null}
-          />
-          <ToolRow
-            id="cursor"
-            selected={tool === "cursor"}
-            onSelect={setTool}
-            size={cursor ? formatBytes(cursorKnown, 1) : "未扫描"}
-            over={cursorKnown > thresholdGb * GB}
-            bar={cursor ? { width: cursorKnown / barMax, protectedBytes: cursor.protected_bytes, cleanable: 0 } : null}
-          />
-          <ToolRow
-            id="codex"
-            selected={tool === "codex"}
-            onSelect={setTool}
-            size={codex ? formatBytes(codexKnown, 1) : "未扫描"}
-            over={codexKnown > thresholdGb * GB}
-            bar={codex ? { width: codexKnown / barMax, protectedBytes: codex.protected_bytes, cleanable: 0 } : null}
-          />
-          <ToolRow
-            id="claude"
-            selected={tool === "claude"}
-            onSelect={setTool}
-            size={claude ? formatBytes(claudeKnown, 1) : "未扫描"}
-            over={claudeKnown > thresholdGb * GB}
-            bar={claude ? { width: claudeKnown / barMax, protectedBytes: claude.protected_bytes, cleanable: 0 } : null}
-          />
-          {extraTools.map((id) => {
-            const found = extras[id];
-            const size = extraKnown(id);
-            return (
-              <ToolRow
-                key={id}
-                id={id}
-                selected={tool === id}
-                onSelect={setTool}
-                size={found ? formatBytes(size, 1) : "未扫描"}
-                over={size > thresholdGb * GB}
-                bar={found ? { width: size / barMax, protectedBytes: found.protected_bytes, cleanable: 0 } : null}
-              />
-            );
-          })}
-          <ToolRow id="ds_bot" selected={tool === "ds_bot"} onSelect={setTool} size="—" over={false} bar={null} note="已计入 Harness（共用 ~/.dsh）" />
+          {vendorRows.map((row) => (
+            <ToolRow
+              key={row.vendor.id}
+              id={row.vendor.members[0] as SpaceToolId}
+              icon={row.vendor.icon}
+              name={row.vendor.name}
+              selected={(row.vendor.members as string[]).includes(tool)}
+              onSelect={setTool}
+              size={row.scanned ? formatBytes(row.total, 1) : "未扫描"}
+              over={row.total > thresholdGb * GB}
+              bar={row.scanned ? { width: row.total / vendorMax, protectedBytes: row.protectedSum, cleanable: row.cleanSum } : null}
+            />
+          ))}
           <p>{statOnlyNote.codex}</p>
         </aside>
+        <div className="space-detail-col">
+        {currentVendor && currentVendor.members.length > 1 ? (
+          <div className="range-pills space-ends" role="tablist" aria-label={`${currentVendor.name} 的各端`}>
+            {(currentVendor.members as SpaceToolId[]).map((id) => (
+              <button key={id} type="button" role="tab" aria-selected={tool === id} onClick={() => setTool(id)}>
+                {toolNames[id]}
+                <small>{id === "ds_bot" ? "计入 Harness" : scanOf(id) ? formatBytes(sizeOf(id), 1) : "未扫描"}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {tool === "deepseek_harness" ? (
           <section className="space-detail" aria-label="DeepSeek Harness">
             <DetailHead
@@ -487,18 +509,11 @@ export function SpacePage({
         ) : (
           <StatOnlyDetail
             id={tool}
-            scan={
-              tool === "cursor"
-                ? cursor
-                : tool === "claude"
-                  ? claude
-                  : tool === "codex"
-                    ? codex
-                    : extras[tool]
-            }
+            scan={scanOf(tool)}
             thresholdGb={thresholdGb}
           />
         )}
+        </div>
       </div>
       {dialog === "confirm" && (
         <dialog className="space-dialog" open>
@@ -673,6 +688,8 @@ function StatOnlyDetail({ id, scan, thresholdGb }: { id: StatTool; scan: SpaceSc
 
 function ToolRow({
   id,
+  icon,
+  name,
   selected,
   onSelect,
   size,
@@ -681,6 +698,8 @@ function ToolRow({
   note,
 }: {
   id: SpaceToolId;
+  icon?: string;
+  name?: string;
   selected: boolean;
   onSelect: (id: SpaceToolId) => void;
   size: string;
@@ -696,10 +715,10 @@ function ToolRow({
       aria-pressed={selected}
       onClick={() => onSelect(id)}
     >
-      <ToolIcon id={id} className="space-mark" />
+      <ToolIcon id={icon ?? id} className="space-mark" />
       <span className="space-tool-copy">
         <strong>
-          {toolNames[id]}
+          {name ?? toolNames[id]}
           {over && <em className="tag ochre">超过阈值</em>}
         </strong>
         {note ? (

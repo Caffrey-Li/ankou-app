@@ -139,6 +139,8 @@ pub struct ConversationPage {
     pub antigravity: SourceStatus,
     pub workbuddy: SourceStatus,
     pub grok_bot: SourceStatus,
+    pub codebuddy: SourceStatus,
+    pub cursor_cli: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -425,8 +427,18 @@ fn conversations(hub: &Hub) -> ConversationPage {
         antigravity_rows(hub.store.guard(), &antigravity_roots, &mut rows)
     };
     let (workbuddy_auth, _) = conversation_auth(&grants, ToolId::WorkBuddy);
-    let workbuddy_local = match workbuddy_root(&grants) {
-        Some(root) => workbuddy_rows(hub.store.guard(), &root, &mut rows),
+    let workbuddy_local = match workbuddy_root(&grants, ToolId::WorkBuddy) {
+        Some(root) => workbuddy_rows(hub.store.guard(), ToolId::WorkBuddy, &root, &mut rows),
+        None => LocalRead::Unread,
+    };
+    let (codebuddy_auth, _) = conversation_auth(&grants, ToolId::CodeBuddy);
+    let codebuddy_local = match workbuddy_root(&grants, ToolId::CodeBuddy) {
+        Some(root) => workbuddy_rows(hub.store.guard(), ToolId::CodeBuddy, &root, &mut rows),
+        None => LocalRead::Unread,
+    };
+    let (cursor_cli_auth, _) = conversation_auth(&grants, ToolId::CursorCli);
+    let cursor_cli_local = match cursor_cli_root(&grants) {
+        Some(root) => cursor_cli_rows(hub.store.guard(), &root, &mut rows),
         None => LocalRead::Unread,
     };
     let (grok_auth, grok_grant) = conversation_auth(&grants, ToolId::GrokBot);
@@ -445,6 +457,8 @@ fn conversations(hub: &Hub) -> ConversationPage {
         antigravity: bot_status(antigravity_auth, antigravity_local),
         workbuddy: bot_status(workbuddy_auth, workbuddy_local),
         grok_bot: bot_status(grok_auth, grok_local),
+        codebuddy: bot_status(codebuddy_auth, codebuddy_local),
+        cursor_cli: bot_status(cursor_cli_auth, cursor_cli_local),
     }
 }
 
@@ -599,12 +613,12 @@ fn antigravity_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
     })
 }
 
-/// WorkBuddy 对话的授权目录：会话记录授权了才算（会话表可选）。
-fn workbuddy_root(grants: &[wanxiang_core::StoredGrant]) -> Option<std::path::PathBuf> {
+/// WorkBuddy / CodeBuddy 对话的授权目录：会话记录授权了才算（WorkBuddy 的会话表可选）。
+fn workbuddy_root(grants: &[wanxiang_core::StoredGrant], tool: ToolId) -> Option<std::path::PathBuf> {
     grants
         .iter()
         .find(|grant| {
-            grant.tool == ToolId::WorkBuddy
+            grant.tool == tool
                 && grant.capability == Capability::Conversation
                 && grant.status == GrantStatus::Active
                 && grant.pattern == wanxiang_adapter_workbuddy::PROJECTS_PATTERN
@@ -615,11 +629,17 @@ fn workbuddy_root(grants: &[wanxiang_core::StoredGrant]) -> Option<std::path::Pa
 /// WorkBuddy 对话：会话记录给出首句与时间；会话表给出标题、删除标记与上下文占用。
 fn workbuddy_rows(
     guard: &wanxiang_core::Guard,
+    tool: ToolId,
     root: &std::path::Path,
     rows: &mut Vec<ConversationRow>,
 ) -> LocalRead {
     use wanxiang_adapter_workbuddy as wb;
-    let meta = wb::session_meta(guard, root).unwrap_or_default();
+    let meta = if tool == ToolId::WorkBuddy {
+        wb::session_meta(guard, root).unwrap_or_default()
+    } else {
+        Default::default()
+    };
+    let name = if tool == ToolId::WorkBuddy { "workbuddy" } else { "codebuddy" };
     let paths = wb::session_paths(root);
     if paths.is_empty() {
         return LocalRead::Empty;
@@ -627,7 +647,7 @@ fn workbuddy_rows(
     let mut readable = 0;
     let mut listed = 0;
     for path in paths {
-        let Ok(bytes) = wb::read_file(guard, Capability::Conversation, &path) else {
+        let Ok(bytes) = wb::read_file_for(guard, tool, Capability::Conversation, &path) else {
             continue;
         };
         readable += 1;
@@ -654,7 +674,7 @@ fn workbuddy_rows(
         listed += 1;
         rows.push(ConversationRow {
             id,
-            tool: "workbuddy".to_string(),
+            tool: name.to_string(),
             title: if title.is_empty() {
                 "未命名对话".to_string()
             } else {
@@ -681,19 +701,78 @@ fn workbuddy_rows(
     }
 }
 
-fn workbuddy_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+fn workbuddy_draft(hub: &Hub, tool: ToolId, id: &str) -> Result<HandoffDraft, String> {
+    let label = if tool == ToolId::WorkBuddy { "WorkBuddy" } else { "CodeBuddy" };
     let grants = hub.store.grants().map_err(|err| err.to_string())?;
-    let Some(root) = workbuddy_root(&grants) else {
-        return Err("WorkBuddy 对话未授权".to_string());
+    let Some(root) = workbuddy_root(&grants, tool) else {
+        return Err(format!("{label} 对话未授权"));
     };
     let path = wanxiang_adapter_workbuddy::find_session(&root, id)
         .ok_or_else(|| "这条对话已经不在，无法交接".to_string())?;
     let bytes =
-        wanxiang_adapter_workbuddy::read_file(hub.store.guard(), Capability::Conversation, &path)
-            .map_err(|_| "读取 WorkBuddy 对话失败".to_string())?;
+        wanxiang_adapter_workbuddy::read_file_for(hub.store.guard(), tool, Capability::Conversation, &path)
+            .map_err(|_| format!("读取 {label} 对话失败"))?;
     let chunks = wanxiang_adapter_workbuddy::transcript(&bytes);
     drop(bytes);
     Ok(recent_draft(&chunks))
+}
+
+/// Cursor 命令行对话的授权目录：元数据与消息库都授权了才算。
+fn cursor_cli_root(grants: &[wanxiang_core::StoredGrant]) -> Option<std::path::PathBuf> {
+    let find = |pattern: &str| {
+        grants.iter().find(|grant| {
+            grant.tool == ToolId::CursorCli
+                && grant.capability == Capability::Conversation
+                && grant.status == GrantStatus::Active
+                && grant.pattern == pattern
+        })
+    };
+    find(wanxiang_adapter_cursor::CLI_META_PATTERN)?;
+    find(wanxiang_adapter_cursor::CLI_STORE_PATTERN).map(|grant| grant.root.clone())
+}
+
+/// Cursor 命令行对话：标题与时间来自元数据，上下文占用本机没有。
+fn cursor_cli_rows(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    let Ok(chats) = wanxiang_adapter_cursor::list_cli_chats(guard, root) else {
+        return LocalRead::Denied;
+    };
+    if chats.is_empty() {
+        return LocalRead::Empty;
+    }
+    for chat in chats {
+        rows.push(ConversationRow {
+            id: chat.id,
+            tool: "cursor_cli".to_string(),
+            title: if chat.title.is_empty() {
+                "未命名对话".to_string()
+            } else {
+                chat.title
+            },
+            updated: chat.updated_ms.to_string(),
+            percent: None,
+            cwd: None,
+            status: String::new(),
+            context: "未知".to_string(),
+            source: "cli_store".to_string(),
+        });
+    }
+    LocalRead::Rows
+}
+
+fn cursor_cli_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let Some(root) = cursor_cli_root(&grants) else {
+        return Err("Cursor 命令行对话未授权".to_string());
+    };
+    match wanxiang_adapter_cursor::cli_chunks(hub.store.guard(), &root, id) {
+        Ok(Some(chunks)) => Ok(recent_draft(&chunks)),
+        Ok(None) => Err("这条对话已经不在，无法交接".to_string()),
+        Err(_) => Err("读取 Cursor 命令行对话失败".to_string()),
+    }
 }
 
 /// Claude 对话的两个授权根：会话记录（必需）与桌面应用的会话标题（可选）。
@@ -1033,7 +1112,9 @@ fn draft(hub: &Hub, tool: &str, id: &str) -> Result<HandoffDraft, String> {
         "cursor" => cursor_draft(hub, id),
         "claude" => claude_draft(hub, id),
         "antigravity" => antigravity_draft(hub, id),
-        "workbuddy" => workbuddy_draft(hub, id),
+        "workbuddy" => workbuddy_draft(hub, ToolId::WorkBuddy, id),
+        "codebuddy" => workbuddy_draft(hub, ToolId::CodeBuddy, id),
+        "cursor_cli" => cursor_cli_draft(hub, id),
         "grok_bot" => grok_draft(hub, id),
         "deepseek_harness" => {
             let grants = hub.store.grants().map_err(|err| err.to_string())?;

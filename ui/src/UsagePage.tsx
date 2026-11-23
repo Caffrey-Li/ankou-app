@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { UsageDay, UsageView } from "./api";
+import type { UsageDay, UsageDetail, UsageView } from "./api";
+import { toolSpecs, vendors } from "./catalog";
 import { DateRangeButton, presetSpan } from "./DateRange";
 import { IconAlert, IconChart } from "./icons";
 import "./usage.css";
@@ -70,6 +71,56 @@ function placeholderDays(date = new Date()): UsageDay[] {
   return days;
 }
 
+export type DetailGroup = {
+  id: string;
+  name: string;
+  /** 合并后的一行；只有一端时就是那一端 */
+  row: UsageDetail;
+  ends: UsageDetail[];
+};
+
+function numeric(text: string) {
+  const plain = text.replace(/,/g, "");
+  return /^\d+$/.test(plain) ? Number(plain) : null;
+}
+
+function combine(values: string[]) {
+  const numbers = values.map(numeric);
+  if (numbers.some((value) => value != null)) {
+    const total = numbers.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+    return total.toLocaleString("en-US");
+  }
+  const unique = [...new Set(values)];
+  return unique.length === 1 ? unique[0] : "见各端";
+}
+
+/** 明细按厂商合并：一个厂商一行，有多端时可以展开看各端。 */
+export function groupDetails(details: UsageDetail[]): DetailGroup[] {
+  const used = new Set<string>();
+  const groups: DetailGroup[] = [];
+  for (const vendor of vendors) {
+    const names = vendor.members.map((id) => toolSpecs.find((spec) => spec.id === id)?.name ?? id);
+    const ends = details.filter((row) => names.includes(row.name));
+    if (ends.length === 0) continue;
+    for (const row of ends) used.add(row.name);
+    const row =
+      ends.length === 1
+        ? { ...ends[0], name: vendor.name }
+        : {
+            name: vendor.name,
+            tokens: combine(ends.map((end) => end.tokens)),
+            calls: combine(ends.map((end) => end.calls)),
+            fee: combine(ends.map((end) => end.fee)),
+            source: combine(ends.map((end) => end.source || "—")),
+          };
+    groups.push({ id: vendor.id, name: vendor.name, row, ends });
+  }
+  for (const row of details) {
+    if (!used.has(row.name)) groups.push({ id: row.name, name: row.name, row, ends: [row] });
+  }
+  return groups;
+}
+
 function tick(label: string) {
   return label.replace(" 月 ", "/").replace(" 日", "");
 }
@@ -123,6 +174,7 @@ export function UsagePage({
   range?: UsageRange;
 }) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("工具");
+  const [expanded, setExpanded] = useState<string[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const bannerLines = orderBanner(usage.banner);
   const days = usage.days.length > 0 ? usage.days : placeholderDays();
@@ -282,24 +334,63 @@ export function UsagePage({
               <span className="num">费用</span>
               <span className="source">来源</span>
             </div>
-            {usage.details.map((row) => {
-              const waiting =
-                (row.name === "DS Bot" && pending.ds_bot) ||
-                (row.name === "ChatGPT" && pending.codex) ||
-                (row.name === "Claude" && Boolean(pending.claude)) ||
-                (row.name === "Antigravity" && Boolean(pending.antigravity));
+            {groupDetails(usage.details).map((group) => {
+              const waitingFor = (name: string) =>
+                (name === "DS Bot" && pending.ds_bot) ||
+                (name === "ChatGPT" && pending.codex) ||
+                (name === "Claude" && Boolean(pending.claude)) ||
+                (name === "Antigravity" && Boolean(pending.antigravity));
+              const waiting = group.ends.some((end) => waitingFor(end.name));
+              const multi = group.ends.length > 1;
+              const open = multi && expanded.includes(group.id);
+              const row = group.row;
               return (
-              <div key={row.name} className="detail-row">
-                <span className="detail-name">{row.name}</span>
-                <span>工具</span>
-                <span className="num">{waiting ? "刷新中" : row.tokens}</span>
-                <span className="num">{waiting ? "刷新中" : row.calls}</span>
-                <span className="num">{row.fee}</span>
-                <span className="source">
-                  {row.source || "—"}
-                  <AuthLink source={row.source} onSettings={onSettings} />
-                </span>
-              </div>
+                <div key={group.id} className="detail-group">
+                  <div className={multi ? "detail-row vendor" : "detail-row"}>
+                    {multi ? (
+                      <button
+                        type="button"
+                        className="detail-name detail-toggle"
+                        aria-expanded={open}
+                        onClick={() =>
+                          setExpanded((current) =>
+                            current.includes(group.id)
+                              ? current.filter((id) => id !== group.id)
+                              : [...current, group.id],
+                          )
+                        }
+                      >
+                        <i aria-hidden="true">{open ? "▾" : "▸"}</i>
+                        {group.name}
+                      </button>
+                    ) : (
+                      <span className="detail-name">{row.name}</span>
+                    )}
+                    <span>{multi ? `${group.ends.length} 端` : "工具"}</span>
+                    <span className="num">{waiting ? "刷新中" : row.tokens}</span>
+                    <span className="num">{waiting ? "刷新中" : row.calls}</span>
+                    <span className="num">{row.fee}</span>
+                    <span className="source">
+                      {row.source || "—"}
+                      <AuthLink source={row.source} onSettings={onSettings} />
+                    </span>
+                  </div>
+                  {open
+                    ? group.ends.map((end) => (
+                        <div key={end.name} className="detail-row end">
+                          <span className="detail-name">{end.name}</span>
+                          <span>端</span>
+                          <span className="num">{waitingFor(end.name) ? "刷新中" : end.tokens}</span>
+                          <span className="num">{waitingFor(end.name) ? "刷新中" : end.calls}</span>
+                          <span className="num">{end.fee}</span>
+                          <span className="source">
+                            {end.source || "—"}
+                            <AuthLink source={end.source} onSettings={onSettings} />
+                          </span>
+                        </div>
+                      ))
+                    : null}
+                </div>
               );
             })}
           </div>
@@ -346,7 +437,7 @@ export function QuotaCard({
           </>
         )}
       </div>
-      <div className="quota-line">
+      <div className="quota-line quota-push">
         <span>DeepSeek 余额</span>
         <strong>
           {pending.balance

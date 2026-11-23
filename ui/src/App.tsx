@@ -9,8 +9,8 @@ import { SettingsPage } from "./SettingsPage";
 import { fixtureSpaceSummary, formatBytes, SpacePage } from "./SpacePage";
 import { OverviewSpaceCard, OverviewTalkCard, type SpaceSummary } from "./OverviewCards";
 import { SetupPage } from "./SetupPage";
-import { OverviewToolRows, SidebarTools, toolMarks } from "./tool-status";
-import type { ToolId } from "./catalog";
+import { OverviewToolRows, SidebarTools, toolMarks, vendorMarks } from "./tool-status";
+import type { VendorId } from "./catalog";
 import { QuotaCard, RangeControl, UsagePage, type RefreshPending, type UsageRange } from "./UsagePage";
 
 const pages = [
@@ -155,13 +155,13 @@ function initialPage(): PageId {
 export function App() {
   const forced = new URLSearchParams(window.location.search).get("page");
   const [page, setPage] = useState<PageId>(initialPage);
-  const [focusTool, setFocusTool] = useState<{ id: ToolId; at: number } | undefined>(undefined);
+  const [focusTool, setFocusTool] = useState<{ id: VendorId; at: number } | undefined>(undefined);
   useEffect(() => {
     // 换页时内容区回到顶部（工具直达的定位在设置页里另行处理）
     document.querySelector("main")?.scrollTo(0, 0);
   }, [page]);
 
-  function openTool(id: ToolId) {
+  function openTool(id: VendorId) {
     setFocusTool({ id, at: Date.now() });
     setPage("settings");
   }
@@ -211,7 +211,9 @@ export function App() {
   const staleTools = new Set<string>(
     usage.cards.some((card) => card.name.startsWith("ChatGPT") && card.note.includes("过时")) ? ["codex"] : [],
   );
-  const marks = toolMarks(snapshot.tools, usage.details, fixture, attentionTools, staleTools, snapshot.grants);
+  const marks = vendorMarks(
+    toolMarks(snapshot.tools, usage.details, fixture, attentionTools, staleTools, snapshot.grants),
+  );
   const windows =
     typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
   const threshold = snapshot.settings.context_threshold_percent;
@@ -369,6 +371,8 @@ export function App() {
           antigravity: page.antigravity,
           workbuddy: page.workbuddy,
           grok_bot: page.grok_bot,
+          codebuddy: page.codebuddy,
+          cursor_cli: page.cursor_cli,
         });
       })
       .catch(() => {
@@ -740,13 +744,16 @@ function Attention({
     );
   }
   return (
-    <section className="overview-card attention">
-      <p className="attention-kicker">
-        <i />
-        需要处理
-      </p>
-      <h2>{items.length} 件事需要你处理</h2>
-      {total ? <p className="attention-lead">{total}</p> : null}
+    <section className="overview-card attention attention-split">
+      <div className="attention-head">
+        <p className="attention-kicker">
+          <i />
+          需要处理
+        </p>
+        <h2>{items.length} 件事需要你处理</h2>
+        {total ? <p className="attention-lead">{total}</p> : null}
+      </div>
+      <div className="attention-list">
       {items.map((item) => (
         <div key={item.title} className="attention-item">
           <span className="attention-icon" aria-hidden="true">
@@ -765,6 +772,7 @@ function Attention({
           </button>
         </div>
       ))}
+      </div>
     </section>
   );
 }

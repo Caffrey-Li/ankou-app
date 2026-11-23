@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties, type SelectHTMLAttributes } fr
 import type { Settings, Snapshot } from "./api";
 import { clearHistory, deleteKey, refreshUsage, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
 import { Check } from "./Check";
-import { presenceLabel, toolSpecs, type CapabilityId, type ToolId } from "./catalog";
+import { presenceLabel, specOf, toolSpecs, vendors, type CapabilityId, type Presence, type VendorId } from "./catalog";
 import { capChecked, grantableKind } from "./grants";
 import { ToolIcon } from "./tool-status";
 import "./settings.css";
@@ -17,9 +17,9 @@ export function SettingsPage({
   onChange: (update: (current: Snapshot) => Snapshot) => void;
   onReload: () => void;
   /** 从侧栏或概览点进来的工具：展开它的授权并滚到眼前。 */
-  focusTool?: { id: ToolId; at: number };
+  focusTool?: { id: VendorId; at: number };
 }) {
-  const [openTool, setOpenTool] = useState<ToolId | "">(focusTool?.id ?? "");
+  const [openTool, setOpenTool] = useState<VendorId | "">(focusTool?.id ?? "");
   useEffect(() => {
     if (!focusTool) return;
     setOpenTool(focusTool.id);
@@ -255,107 +255,127 @@ export function SettingsPage({
       <aside className="settings-side" aria-label="工具与授权">
         <p className="section-label">工具与授权</p>
         <div className="card">
-          {toolSpecs.map((spec) => {
-            const live = snapshot.tools.find((tool) => tool.tool === spec.id);
-            const presence = live?.presence ?? "missing";
-            const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
+          {vendors.map((vendor) => {
+            const members = vendor.members.map((id) => specOf(id)).filter((spec) => spec !== undefined);
+            const presences = members.map(
+              (spec) => snapshot.tools.find((tool) => tool.tool === spec.id)?.presence ?? "missing",
+            );
+            const open = openTool === vendor.id;
+            const multi = members.length > 1;
             return (
-              <div className="tool-block" key={spec.id} id={`tool-${spec.id}`}>
+              <div className="tool-block" key={vendor.id} id={`tool-${vendor.id}`}>
                 <div className="tool-head">
-                  <ToolIcon id={spec.id} className="mark sm" />
+                  <ToolIcon id={vendor.icon} className="mark sm" />
                   <span className="tool-copy">
-                    <strong>{spec.name}</strong>
-                    <span>{presenceLabel(presence)}</span>
+                    <strong>{vendor.name}</strong>
+                    <span>{vendorPresence(presences)}</span>
                   </span>
                   <span className="grow" />
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() => setOpenTool(openTool === spec.id ? "" : spec.id)}
+                    onClick={() => setOpenTool(open ? "" : vendor.id)}
                   >
                     管理
                   </button>
                 </div>
-                <div className="tag-row">
-                  {spec.tags.map((tag) => {
-                    const state = tagState(tag.badge, tag.capability, grants);
-                    return (
-                      <span key={tag.label} className={authTagClass(state)}>
-                        {tag.badge === "已实测" ? tag.label : `${tag.label} · ${tag.badge}`}
-                      </span>
-                    );
-                  })}
-                </div>
-                {openTool === spec.id ? (
-                  <div className="cap-list">
-                    {spec.caps.map((cap) => {
-                      const grant = grants.find((item) => item.capability === cap.capability);
-                      const kind = grantableKind(spec.id, cap);
-                      if (kind) {
-                        const checked = capChecked(cap, grants);
-                        return (
-                          <div className="cap-row" key={cap.title}>
-                            <Check
-                              aria-label={cap.title}
-                              checked={checked}
-                              onChange={(event) => toggleMeasured(kind, event.target.checked)}
-                            />
-                            <span className="cap-copy">
-                              <strong>{cap.title}</strong>
-                              <span>{cap.detail}</span>
-                            </span>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div className="cap-row disabled" key={cap.title}>
-                          <Check disabled aria-label={cap.title} />
-                          <span className="cap-copy">
-                            <strong>{cap.title}</strong>
-                            <span>{grant ? (grant.status === "needs_reauth" ? "需要重新授权" : "已授权") : cap.detail}</span>
-                          </span>
-                          <span className="grow" />
-                          {grant ? (
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => {
-                                void revokeGrant(grant.id).then(() =>
-                                  onChange((current) => ({
-                                    ...current,
-                                    grants: current.grants.filter((item) => item.id !== grant.id),
-                                  })),
-                                );
-                              }}
-                            >
-                              撤销
-                            </button>
-                          ) : (
-                            <span className={authTagClass(cap.badge)}>{cap.badge}</span>
-                          )}
+                {members.map((spec, index) => {
+                  const presence = presences[index];
+                  const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
+                  return (
+                    <div className={multi ? "tool-end" : "tool-end single"} key={spec.id}>
+                      {multi || (open && spec.ends) ? (
+                        <div className="end-head">
+                          <strong>{multi ? spec.name : "覆盖"}</strong>
+                          {multi ? <span className="end-state">{presenceLabel(presence)}</span> : null}
+                          {open && spec.ends ? <span className="end-note">{spec.ends}</span> : null}
                         </div>
-                      );
-                    })}
-                    {spec.id === "codex" ? (
-                      <div className="cap-row">
-                        <Check
-                          aria-label="ChatGPT app-server"
-                          checked={snapshot.settings.codex_app_server}
-                          onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
-                        />
-                        <span className="cap-copy">
-                          <strong>ChatGPT app-server</strong>
-                          <span>读取额度窗口，只在启动和手动刷新时调用</span>
-                        </span>
+                      ) : null}
+                      <div className="tag-row">
+                        {spec.tags.map((tag) => {
+                          const state = tagState(tag.badge, tag.capability, grants);
+                          return (
+                            <span key={tag.label} className={authTagClass(state)}>
+                              {tag.badge === "已实测" ? tag.label : `${tag.label} · ${tag.badge}`}
+                            </span>
+                          );
+                        })}
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      {open ? (
+                        <div className="cap-list">
+                          {spec.caps.map((cap) => {
+                            const grant = grants.find((item) => item.capability === cap.capability);
+                            const kind = grantableKind(spec.id, cap);
+                            if (kind) {
+                              const checked = capChecked(cap, grants);
+                              return (
+                                <div className="cap-row" key={cap.title}>
+                                  <Check
+                                    aria-label={multi ? `${spec.name} ${cap.title}` : cap.title}
+                                    checked={checked}
+                                    onChange={(event) => toggleMeasured(kind, event.target.checked)}
+                                  />
+                                  <span className="cap-copy">
+                                    <strong>{cap.title}</strong>
+                                    <span>{cap.detail}</span>
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="cap-row disabled" key={cap.title}>
+                                <Check disabled aria-label={multi ? `${spec.name} ${cap.title}` : cap.title} />
+                                <span className="cap-copy">
+                                  <strong>{cap.title}</strong>
+                                  <span>
+                                    {grant ? (grant.status === "needs_reauth" ? "需要重新授权" : "已授权") : cap.detail}
+                                  </span>
+                                </span>
+                                <span className="grow" />
+                                {grant ? (
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    onClick={() => {
+                                      void revokeGrant(grant.id).then(() =>
+                                        onChange((current) => ({
+                                          ...current,
+                                          grants: current.grants.filter((item) => item.id !== grant.id),
+                                        })),
+                                      );
+                                    }}
+                                  >
+                                    撤销
+                                  </button>
+                                ) : (
+                                  <span className={authTagClass(cap.badge)}>{cap.badge}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {spec.id === "codex" ? (
+                            <div className="cap-row">
+                              <Check
+                                aria-label="ChatGPT app-server"
+                                checked={snapshot.settings.codex_app_server}
+                                onChange={(event) => toggleMeasured("codex_app_server", event.target.checked)}
+                              />
+                              <span className="cap-copy">
+                                <strong>ChatGPT app-server</strong>
+                                <span>读取额度窗口，只在启动和手动刷新时调用</span>
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
         </div>
-        <div className="legend">
+        <div className="settings-legend">
           <span className={authTagClass("已授权")}>已授权</span>
           <span className={authTagClass("未授权")}>未授权</span>
           {toolSpecs.some((spec) => spec.tags.some((tag) => tag.badge === "未验证")) ? (
@@ -365,6 +385,19 @@ export function SettingsPage({
       </aside>
     </div>
   );
+}
+
+/** 厂商一行的状态：各端里只要有一端已授权就算已授权，有失效的优先提示。 */
+export function vendorPresence(presences: Presence[]) {
+  const found = presences.filter((presence) => presence !== "missing").length;
+  const label = presences.includes("needs_reauth")
+    ? presenceLabel("needs_reauth")
+    : presences.includes("authorized")
+      ? presenceLabel("authorized")
+      : presences.includes("unauthorized")
+        ? presenceLabel("unauthorized")
+        : presenceLabel("missing");
+  return presences.length > 1 && found > 0 ? `${label} · 发现 ${found}/${presences.length} 端` : label;
 }
 
 export function tagState(

@@ -222,7 +222,7 @@
 }
 
 .tag-row,
-.legend {
+.settings-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -368,4 +368,34 @@
   color: var(--color-text-secondary);
   font-family: var(--font-latin);
   font-size: var(--font-size-caption);
+}
+
+/* 按厂商合并：一个厂商下列出各端（应用、命令行、IDE） */
+.tool-end + .tool-end {
+  border-top: 0.5px solid var(--color-separator);
+  padding-top: 10px;
+}
+
+.end-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.end-head strong {
+  color: var(--color-graphite);
+  font-weight: var(--font-weight-semibold);
+}
+
+.end-state {
+  color: var(--color-text-secondary);
+}
+
+.end-note {
+  flex-basis: 100%;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
 }

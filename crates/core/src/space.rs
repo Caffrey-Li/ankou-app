@@ -25,6 +25,7 @@ pub const LABEL_QUIT_ANTIGRAVITY: &str = "请先退出 Antigravity";
 pub const LABEL_QUIT_WORKBUDDY: &str = "请先退出 WorkBuddy";
 pub const LABEL_QUIT_GROK_BOT: &str = "请先退出 Grok Bot";
 pub const LABEL_QUIT_MUSE: &str = "请先退出 Muse";
+pub const LABEL_QUIT_CODEBUDDY: &str = "请先退出 CodeBuddy";
 pub const LABEL_QUIT_HARNESS: &str = "请先退出 DeepSeek Harness";
 pub const LABEL_QUIT_DSH_PROCESS: &str = "请先退出 DeepSeek Harness / DS Bot";
 pub const LABEL_UNKNOWN_APP: &str = "无法确认应用是否在运行，已停止清理";
@@ -65,6 +66,7 @@ const ANTIGRAVITY_BUNDLE: &str = "com.google.antigravity";
 const WORKBUDDY_BUNDLE: &str = "com.tencent.workbuddy.mac";
 const GROK_BOT_BUNDLE: &str = "com.anysphere.sand";
 const MUSE_BUNDLE: &str = "com.meta.endo";
+const CODEBUDDY_BUNDLE: &str = "com.tencent.codebuddycn";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpaceClass {
@@ -191,6 +193,8 @@ pub fn cleanup_block(tool: ToolId, view: &RunningView<'_>) -> Option<&'static st
         ToolId::WorkBuddy => app_block(view.bundle_ids, WORKBUDDY_BUNDLE, LABEL_QUIT_WORKBUDDY),
         ToolId::GrokBot => app_block(view.bundle_ids, GROK_BOT_BUNDLE, LABEL_QUIT_GROK_BOT),
         ToolId::Muse => app_block(view.bundle_ids, MUSE_BUNDLE, LABEL_QUIT_MUSE),
+        ToolId::CodeBuddy => app_block(view.bundle_ids, CODEBUDDY_BUNDLE, LABEL_QUIT_CODEBUDDY),
+        ToolId::CursorCli => app_block(view.bundle_ids, CURSOR_BUNDLE, LABEL_QUIT_CURSOR),
     }
 }
 
@@ -972,6 +976,8 @@ fn tool_name(tool: ToolId) -> &'static str {
         ToolId::WorkBuddy => "workbuddy",
         ToolId::GrokBot => "grok_bot",
         ToolId::Muse => "muse",
+        ToolId::CodeBuddy => "codebuddy",
+        ToolId::CursorCli => "cursor_cli",
     }
 }
 

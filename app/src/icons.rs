@@ -16,6 +16,7 @@ const ANTIGRAVITY_BUNDLE_ID: &str = "com.google.antigravity";
 const WORKBUDDY_BUNDLE_ID: &str = "com.tencent.workbuddy.mac";
 const GROK_BOT_BUNDLE_ID: &str = "com.anysphere.sand";
 const MUSE_BUNDLE_ID: &str = "com.meta.endo";
+const CODEBUDDY_BUNDLE_ID: &str = "com.tencent.codebuddycn";
 
 #[derive(Debug, Serialize)]
 pub struct ToolIcon {
@@ -33,6 +34,7 @@ struct Located {
     workbuddy: Option<PathBuf>,
     grok_bot: Option<PathBuf>,
     muse: Option<PathBuf>,
+    codebuddy: Option<PathBuf>,
 }
 
 #[cfg(target_os = "macos")]
@@ -67,6 +69,8 @@ fn null_icons() -> Vec<ToolIcon> {
         ToolId::WorkBuddy,
         ToolId::GrokBot,
         ToolId::Muse,
+        ToolId::CodeBuddy,
+        ToolId::CursorCli,
     ]
     .into_iter()
     .map(|tool| ToolIcon {
@@ -87,6 +91,7 @@ fn locate(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Located {
         workbuddy: app_with_bundle_id(root, WORKBUDDY_BUNDLE_ID, &bundle_id),
         grok_bot: app_with_bundle_id(root, GROK_BOT_BUNDLE_ID, &bundle_id),
         muse: app_with_bundle_id(root, MUSE_BUNDLE_ID, &bundle_id),
+        codebuddy: app_with_bundle_id(root, CODEBUDDY_BUNDLE_ID, &bundle_id),
     }
 }
 
@@ -119,6 +124,7 @@ fn assemble(
             .map(base64_encode)
     };
     let harness = icon(found.harness);
+    let cursor = icon(found.cursor);
     vec![
         ToolIcon {
             tool: ToolId::DeepSeekHarness,
@@ -130,7 +136,7 @@ fn assemble(
         },
         ToolIcon {
             tool: ToolId::Cursor,
-            png_base64: icon(found.cursor),
+            png_base64: cursor.clone(),
         },
         ToolIcon {
             tool: ToolId::Codex,
@@ -159,6 +165,14 @@ fn assemble(
         ToolIcon {
             tool: ToolId::Muse,
             png_base64: icon(found.muse),
+        },
+        ToolIcon {
+            tool: ToolId::CodeBuddy,
+            png_base64: icon(found.codebuddy),
+        },
+        ToolIcon {
+            tool: ToolId::CursorCli,
+            png_base64: cursor,
         },
     ]
 }
@@ -397,6 +411,7 @@ mod tests {
                 workbuddy: None,
                 grok_bot: None,
                 muse: None,
+                codebuddy: None,
             },
             &mut read,
         );
@@ -420,6 +435,7 @@ mod tests {
                 workbuddy: None,
                 grok_bot: None,
                 muse: None,
+                codebuddy: None,
             },
             &mut read,
         );
@@ -455,6 +471,7 @@ mod tests {
             workbuddy: None,
             grok_bot: None,
             muse: None,
+            codebuddy: None,
         };
         let first = assemble(&cache, found, &mut read);
         assert!(first
@@ -474,6 +491,7 @@ mod tests {
             workbuddy: None,
             grok_bot: None,
             muse: None,
+            codebuddy: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 1);
@@ -491,6 +509,7 @@ mod tests {
             workbuddy: None,
             grok_bot: None,
             muse: None,
+            codebuddy: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 2);

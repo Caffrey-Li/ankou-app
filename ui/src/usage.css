@@ -183,6 +183,15 @@
   border-top: 1px solid var(--color-separator);
 }
 
+/* 概览额度卡：最后一行贴底，分隔线与对话卡、空间卡的底部分隔线对齐 */
+.overview-quota .quota-push {
+  margin-top: auto;
+}
+
+.overview-quota .quota-line + .quota-line {
+  padding-top: 12px;
+}
+
 .muted {
   color: var(--color-text-tertiary);
 }
@@ -750,6 +759,38 @@
   font-size: var(--font-size-caption);
 }
 
+/* 按厂商合并：可展开的厂商行与缩进的各端行 */
+.detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-toggle i {
+  width: 10px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.detail-row.end {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.detail-row.end .detail-name {
+  padding-left: 16px;
+  font-weight: var(--font-weight-regular, 400);
+}
+
 .detail-foot {
   margin: 0;
   padding-top: 12px;
@@ -985,4 +1026,36 @@
 
 .tool-status .dot.attention {
   background: var(--color-ochre);
+}
+
+/* 需要处理：标题在左，待办在右（用户要求减少留白）；窗口窄时上下排 */
+.overview-card.attention.attention-split {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+  gap: 12px 28px;
+  align-items: center;
+}
+
+.attention-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.attention-head h2 {
+  margin: 0;
+}
+
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .overview-card.attention.attention-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

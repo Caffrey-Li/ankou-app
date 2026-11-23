@@ -451,6 +451,35 @@
   font-size: 15px;
 }
 
+/* 发送前确认框：标题、说明、勾选与按钮自上而下排列 */
+.handoff-dialog {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.handoff-dialog p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.handoff-dialog button {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+
+.handoff-dialog label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
 .sheet-steps {
   display: flex;
   gap: 14px;

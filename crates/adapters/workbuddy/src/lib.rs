@@ -27,6 +27,15 @@ pub fn config_root(home: &Path) -> PathBuf {
     home.join(".workbuddy")
 }
 
+/// CodeBuddy 命令行的数据目录。
+pub fn codebuddy_root(home: &Path) -> PathBuf {
+    home.join(".codebuddy")
+}
+
+pub fn codebuddy_installed(home: &Path, applications: &Path) -> bool {
+    applications.join("CodeBuddy CN.app").is_dir() || codebuddy_root(home).join("projects").is_dir()
+}
+
 pub fn installed(home: &Path, applications: &Path) -> bool {
     applications.join("WorkBuddy.app").is_dir() || config_root(home).is_dir()
 }
@@ -71,7 +80,17 @@ pub fn find_session(config: &Path, id: &str) -> Option<PathBuf> {
 
 /// 经守卫读取一个会话文件。
 pub fn read_file(guard: &Guard, capability: Capability, path: &Path) -> Result<Vec<u8>, GuardError> {
-    let mut opened = guard.open_read(ToolId::WorkBuddy, capability, path)?;
+    read_file_for(guard, ToolId::WorkBuddy, capability, path)
+}
+
+/// CodeBuddy 命令行（`~/.codebuddy`）与 WorkBuddy 同一格式，按各自的工具授权读取。
+pub fn read_file_for(
+    guard: &Guard,
+    tool: ToolId,
+    capability: Capability,
+    path: &Path,
+) -> Result<Vec<u8>, GuardError> {
+    let mut opened = guard.open_read(tool, capability, path)?;
     let mut raw = Vec::new();
     let mut chunk = [0u8; 64 * 1024];
     loop {

@@ -34,8 +34,11 @@ try {
   assert.match(html, /证据不足/);
   assert.equal(html.includes("session.log"), false);
   assert.match(html, /日志/);
-  // 十个工具都是可以选中的按钮，默认选中 Harness
-  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 10);
+  // 按厂商合并：八个厂商各一行，默认选中 DeepSeek（Harness 那一端）
+  assert.equal((html.match(/aria-pressed="(true|false)"/g) ?? []).length, 8);
+  // DeepSeek 有两端：右侧先给出端的切换
+  assert.match(html, /aria-label="DeepSeek 的各端"/);
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 2);
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1);
   assert.match(html, /清理所选项/);
 
@@ -48,6 +51,8 @@ try {
     ["workbuddy", "WorkBuddy"],
     ["grok_bot", "Grok Bot"],
     ["muse", "Muse"],
+    ["codebuddy", "CodeBuddy"],
+    ["cursor_cli", "Cursor 命令行"],
   ]) {
     const detail = renderToStaticMarkup(
       createElement(SpacePage, {

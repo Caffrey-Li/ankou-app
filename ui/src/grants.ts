@@ -28,6 +28,10 @@ export function measuredKind(tool: ToolId, capability: CapabilityId, title: stri
   if (tool === "grok_bot" && capability === "conversation") return "grok_conversation";
   if (tool === "grok_bot" && capability === "space_scan") return "grok_space";
   if (tool === "muse" && capability === "space_scan") return "muse_space";
+  if (tool === "codebuddy" && capability === "conversation") return "codebuddy_conversation";
+  if (tool === "codebuddy" && capability === "space_scan") return "codebuddy_space";
+  if (tool === "cursor_cli" && capability === "conversation") return "cursor_cli_conversation";
+  if (tool === "cursor_cli" && capability === "space_scan") return "cursor_cli_space";
   return null;
 }
 

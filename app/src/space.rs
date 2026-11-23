@@ -240,6 +240,8 @@ fn tool_id(name: &str) -> Result<ToolId, String> {
         "workbuddy" => Ok(ToolId::WorkBuddy),
         "grok_bot" => Ok(ToolId::GrokBot),
         "muse" => Ok(ToolId::Muse),
+        "codebuddy" => Ok(ToolId::CodeBuddy),
+        "cursor_cli" => Ok(ToolId::CursorCli),
         _ => Err("没有这项工具".to_string()),
     }
 }

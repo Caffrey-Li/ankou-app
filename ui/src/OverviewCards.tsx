@@ -15,6 +15,12 @@ const toolLabels: Record<string, string> = {
   ds_bot: "DS Bot",
   cursor: "Cursor",
   deepseek_harness: "Harness",
+  claude: "Claude",
+  antigravity: "Antigravity",
+  workbuddy: "WorkBuddy",
+  grok_bot: "Grok Bot",
+  codebuddy: "CodeBuddy",
+  cursor_cli: "Cursor 命令行",
 };
 
 /** 概览 · 对话卡 18:214：上下文占用最高的一条对话。 */

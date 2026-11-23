@@ -8,7 +8,9 @@ export type ToolId =
   | "antigravity"
   | "workbuddy"
   | "grok_bot"
-  | "muse";
+  | "muse"
+  | "codebuddy"
+  | "cursor_cli";
 export type CapabilityId =
   | "usage"
   | "conversation"
@@ -38,6 +40,8 @@ export type ToolSpec = {
   id: ToolId;
   letter: string;
   name: string;
+  /** 这一端覆盖哪些形态（应用、命令行、IDE），在厂商里区分各端时显示。 */
+  ends?: string;
   caps: CapRow[];
   tags: ToolTag[];
 };
@@ -48,6 +52,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "deepseek_harness",
     letter: "H",
     name: "DeepSeek Harness",
+    ends: "应用与 dsh 命令行",
     caps: [
       { capability: "usage", title: "用量", detail: "读取本机会话里的调用用量，不含 Bot 工作区", badge: "已实测" },
       { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
@@ -84,6 +89,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "ds_bot",
     letter: "B",
     name: "DS Bot",
+    ends: "Bot 与群聊",
     caps: [
       { capability: "usage", title: "用量", detail: "读取 Bot 本机用量记录", badge: "已实测" },
       {
@@ -106,6 +112,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "cursor",
     letter: "C",
     name: "Cursor",
+    ends: "桌面应用（编辑器）；Cursor BYOK 本机无记录",
     caps: [
       {
         capability: "conversation",
@@ -155,6 +162,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "codex",
     letter: "Cx",
     name: "ChatGPT",
+    ends: "ChatGPT 桌面应用、Codex 命令行与 IDE 插件共用记录",
     caps: [
       {
         capability: "usage",
@@ -182,6 +190,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "claude",
     letter: "Cl",
     name: "Claude",
+    ends: "桌面应用（额度）与 Claude Code（对话、用量）",
     caps: [
       {
         capability: "usage",
@@ -209,6 +218,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "antigravity",
     letter: "Ag",
     name: "Antigravity",
+    ends: "应用与 agy 命令行",
     caps: [
       {
         capability: "usage",
@@ -241,6 +251,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "gemini",
     letter: "G",
     name: "Gemini",
+    ends: "桌面应用，对话在云端",
     caps: [
       {
         capability: "space_scan",
@@ -271,6 +282,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "workbuddy",
     letter: "W",
     name: "WorkBuddy",
+    ends: "桌面应用",
     caps: [
       {
         capability: "conversation",
@@ -303,6 +315,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "grok_bot",
     letter: "Gk",
     name: "Grok Bot",
+    ends: "桌面应用",
     caps: [
       {
         capability: "usage",
@@ -335,6 +348,7 @@ export const toolSpecs: ToolSpec[] = [
     id: "muse",
     letter: "M",
     name: "Muse",
+    ends: "桌面应用，对话在云端",
     caps: [
       {
         capability: "space_scan",
@@ -361,7 +375,93 @@ export const toolSpecs: ToolSpec[] = [
       { label: "用量", capability: "usage", badge: "暂不提供" },
     ],
   },
+  {
+    id: "cursor_cli",
+    letter: "C>",
+    name: "Cursor 命令行",
+    ends: "cursor-agent 命令行",
+    caps: [
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "列出命令行对话，交接时读取所选对话的文字 · 只读",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计 ~/.cursor 目录大小，不读取内容",
+        badge: "已实测",
+      },
+      { capability: "usage", title: "用量", detail: "本机没有用量记录", badge: "暂不提供" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "codebuddy",
+    letter: "CB",
+    name: "CodeBuddy",
+    ends: "命令行；CodeBuddy CN 应用本机无记录",
+    caps: [
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "列出命令行会话，交接时读取所选会话 · 只读",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计 ~/.codebuddy 目录大小，不读取内容",
+        badge: "已实测",
+      },
+      { capability: "usage", title: "用量", detail: "本机没有 token 记录", badge: "暂不提供" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
 ];
+
+export type VendorId = "deepseek" | "cursor" | "openai" | "anthropic" | "google" | "tencent" | "grok" | "meta";
+
+export type Vendor = {
+  id: VendorId;
+  name: string;
+  /** 厂商图标借用哪一端的应用图标 */
+  icon: ToolId;
+  members: ToolId[];
+};
+
+/** 按厂商合并：一个厂商一行，点进去看各端。 */
+export const vendors: Vendor[] = [
+  { id: "deepseek", name: "DeepSeek", icon: "deepseek_harness", members: ["deepseek_harness", "ds_bot"] },
+  { id: "cursor", name: "Cursor", icon: "cursor", members: ["cursor", "cursor_cli"] },
+  { id: "openai", name: "ChatGPT", icon: "codex", members: ["codex"] },
+  { id: "anthropic", name: "Claude", icon: "claude", members: ["claude"] },
+  { id: "google", name: "Google", icon: "gemini", members: ["antigravity", "gemini"] },
+  { id: "tencent", name: "腾讯", icon: "workbuddy", members: ["workbuddy", "codebuddy"] },
+  { id: "grok", name: "Grok Bot", icon: "grok_bot", members: ["grok_bot"] },
+  { id: "meta", name: "Muse", icon: "muse", members: ["muse"] },
+];
+
+export function vendorOf(tool: string): Vendor | undefined {
+  return vendors.find((vendor) => vendor.members.includes(tool as ToolId));
+}
+
+export function specOf(tool: string): ToolSpec | undefined {
+  return toolSpecs.find((spec) => spec.id === tool);
+}
 
 export function presenceLabel(presence: Presence) {
   switch (presence) {

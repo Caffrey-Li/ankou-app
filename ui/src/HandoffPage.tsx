@@ -98,6 +98,8 @@ export type ConversationSources = {
   antigravity?: SourceStatus;
   workbuddy?: SourceStatus;
   grok_bot?: SourceStatus;
+  codebuddy?: SourceStatus;
+  cursor_cli?: SourceStatus;
 };
 
 const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
@@ -118,6 +120,8 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
     (sources.antigravity ?? "unauthorized") === "unauthorized" &&
     (sources.workbuddy ?? "unauthorized") === "unauthorized" &&
     (sources.grok_bot ?? "unauthorized") === "unauthorized" &&
+    (sources.codebuddy ?? "unauthorized") === "unauthorized" &&
+    (sources.cursor_cli ?? "unauthorized") === "unauthorized" &&
     (sources.cursor ?? "unauthorized") === "unauthorized"
   )
     return "未授权";
@@ -135,6 +139,8 @@ export function sourcesWhenListFails(): ConversationSources {
     antigravity: "read_failed",
     workbuddy: "read_failed",
     grok_bot: "read_failed",
+    codebuddy: "read_failed",
+    cursor_cli: "read_failed",
   };
 }
 
@@ -151,6 +157,10 @@ export function handoffEmptyLines(sources: ConversationSources | null) {
       : []),
     ...(sources.workbuddy ? [["workbuddy", "WorkBuddy", sources.workbuddy] as [string, string, SourceStatus]] : []),
     ...(sources.grok_bot ? [["grok_bot", "Grok Bot", sources.grok_bot] as [string, string, SourceStatus]] : []),
+    ...(sources.cursor_cli
+      ? [["cursor_cli", "Cursor 命令行", sources.cursor_cli] as [string, string, SourceStatus]]
+      : []),
+    ...(sources.codebuddy ? [["codebuddy", "CodeBuddy", sources.codebuddy] as [string, string, SourceStatus]] : []),
   ];
   return tools.flatMap(([tool, label, status]) => {
     if (status === "ok") return [];
@@ -664,6 +674,8 @@ function toolKind(tool: string) {
   if (name === "antigravity") return "antigravity";
   if (name === "workbuddy") return "workbuddy";
   if (name === "grok_bot") return "grok_bot";
+  if (name === "codebuddy") return "codebuddy";
+  if (name === "cursor_cli") return "cursor_cli";
   return "cursor";
 }
 
@@ -676,6 +688,8 @@ function toolLabel(tool: string) {
   if (kind === "antigravity") return "Antigravity";
   if (kind === "workbuddy") return "WorkBuddy";
   if (kind === "grok_bot") return "Grok Bot";
+  if (kind === "codebuddy") return "CodeBuddy";
+  if (kind === "cursor_cli") return "Cursor 命令行";
   return "Cursor";
 }
 

@@ -742,3 +742,26 @@ img.space-mark {
 .space-page:has(.space-dialog) {
   position: relative;
 }
+
+/* 按厂商合并：右侧先选端，再看这一端的明细 */
+.space-detail-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.space-ends {
+  align-self: flex-start;
+}
+
+.space-ends button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.space-ends small {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}

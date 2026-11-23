@@ -29,6 +29,12 @@ pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     if kind.starts_with("grok_") {
         return set_grok(store, kind, on, &wanxiang_adapter_grokbot::support_root(&home));
     }
+    if kind.starts_with("codebuddy_") {
+        return set_codebuddy(store, kind, on, &wanxiang_adapter_workbuddy::codebuddy_root(&home));
+    }
+    if kind.starts_with("cursor_cli_") {
+        return set_cursor_cli(store, kind, on, &wanxiang_adapter_cursor::cli_root(&home));
+    }
     if kind.starts_with("workbuddy_") {
         return set_workbuddy(store, kind, on, &wanxiang_adapter_workbuddy::config_root(&home));
     }
@@ -366,12 +372,69 @@ pub fn set_workbuddy(store: &Store, kind: &str, on: bool, config: &Path) -> Resu
     }
 }
 
+/// CodeBuddy 命令行：会话记录在 `~/.codebuddy/projects`，与 WorkBuddy 同一格式。
+pub fn set_codebuddy(store: &Store, kind: &str, on: bool, config: &Path) -> Result<(), String> {
+    match kind {
+        "codebuddy_conversation" => set_path(
+            store,
+            ToolId::CodeBuddy,
+            Capability::Conversation,
+            config,
+            wanxiang_adapter_workbuddy::PROJECTS_PATTERN,
+            on,
+        ),
+        "codebuddy_space" => set_path(store, ToolId::CodeBuddy, Capability::SpaceScan, config, "**", on),
+        _ => Err("没有这项授权".to_string()),
+    }
+}
+
+/// Cursor 命令行：只放行对话目录里的元数据与消息库。
+pub fn set_cursor_cli(store: &Store, kind: &str, on: bool, root: &Path) -> Result<(), String> {
+    use wanxiang_adapter_cursor::{CLI_META_PATTERN, CLI_STORE_PATTERN};
+    match kind {
+        "cursor_cli_conversation" => {
+            set_path(store, ToolId::CursorCli, Capability::Conversation, root, CLI_META_PATTERN, on)?;
+            set_path(store, ToolId::CursorCli, Capability::Conversation, root, CLI_STORE_PATTERN, on)
+        }
+        "cursor_cli_space" => set_path(store, ToolId::CursorCli, Capability::SpaceScan, root, "**", on),
+        _ => Err("没有这项授权".to_string()),
+    }
+}
+
 fn show(err: impl std::fmt::Display) -> String {
     err.to_string()
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codebuddy_and_cursor_cli_grants_use_their_own_tool() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-cli-grant-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let cb = dir.join("codebuddy");
+        let cc = dir.join("cursor");
+        std::fs::create_dir_all(&cb).unwrap();
+        std::fs::create_dir_all(&cc).unwrap();
+        let store = open_store(&dir);
+        super::set_codebuddy(&store, "codebuddy_conversation", true, &cb).unwrap();
+        super::set_codebuddy(&store, "codebuddy_space", true, &cb).unwrap();
+        super::set_cursor_cli(&store, "cursor_cli_conversation", true, &cc).unwrap();
+        super::set_cursor_cli(&store, "cursor_cli_space", true, &cc).unwrap();
+        let grants = store.grants().unwrap();
+        assert_eq!(grants.len(), 5, "{grants:?}");
+        assert_eq!(grants.iter().filter(|g| g.tool == wanxiang_core::ToolId::CodeBuddy).count(), 2);
+        assert_eq!(grants.iter().filter(|g| g.tool == wanxiang_core::ToolId::CursorCli).count(), 3);
+        for kind in ["codebuddy_conversation", "codebuddy_space"] {
+            super::set_codebuddy(&store, kind, false, &cb).unwrap();
+        }
+        for kind in ["cursor_cli_conversation", "cursor_cli_space"] {
+            super::set_cursor_cli(&store, kind, false, &cc).unwrap();
+        }
+        assert!(store.grants().unwrap().is_empty());
+        assert!(super::set_cursor_cli(&store, "cursor_cli_usage", true, &cc).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn claude_grants_cover_records_plan_and_titles_only() {
         let dir = std::env::temp_dir().join(format!("wanxiang-claude-grant-{}", std::process::id()));

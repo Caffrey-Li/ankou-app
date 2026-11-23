@@ -83,6 +83,8 @@ fn files_and_database_need_the_grant() {
     }
     assert!(read_file(&guard, Capability::Conversation, &paths[0]).is_ok());
     assert!(read_file(&guard, Capability::Conversation, &root.join("keyblob")).is_err());
+    // 同一目录换成 CodeBuddy 的工具身份读取：没有 CodeBuddy 的授权就读不到
+    assert!(wanxiang_adapter_workbuddy::read_file_for(&guard, ToolId::CodeBuddy, Capability::Conversation, &paths[0]).is_err());
     let meta = session_meta(&guard, &root).unwrap();
     assert_eq!(meta["ab-12"].title, "我的标题");
     assert_eq!(meta["ab-12"].context, Some((64_000, 256_000)));

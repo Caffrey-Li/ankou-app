@@ -1,8 +1,13 @@
 //! Cursor 接入：对话只读本机对话数据库里与对话有关的键（见 chats.rs）。
 
 mod chats;
+mod cli;
 
 pub use chats::{chat_chunks, list_chats, state_db, valid_id, CursorChat, STATE_PATTERN};
+pub use cli::{
+    cli_chunks, cli_installed, cli_root, list_cli_chats, parse_messages, CliChat, CLI_META_PATTERN,
+    CLI_STORE_PATTERN,
+};
 
 use wanxiang_core::{Capability, Guard, GuardError, ToolId};
 

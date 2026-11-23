@@ -254,6 +254,8 @@ export type ConversationPage = {
   antigravity?: SourceStatus;
   workbuddy?: SourceStatus;
   grok_bot?: SourceStatus;
+  codebuddy?: SourceStatus;
+  cursor_cli?: SourceStatus;
 };
 
 export function listConversations() {
@@ -268,6 +270,8 @@ export function listConversations() {
       antigravity: "unauthorized",
       workbuddy: "unauthorized",
       grok_bot: "unauthorized",
+      codebuddy: "unauthorized",
+      cursor_cli: "unauthorized",
     } satisfies ConversationPage);
   }
   return call<ConversationPage>("list_conversations");

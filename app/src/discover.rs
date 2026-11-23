@@ -8,6 +8,8 @@ use wanxiang_adapter_cursor::installed as cursor_installed;
 use wanxiang_adapter_dsh::{installed as dsh_installed, Product};
 use wanxiang_adapter_grokbot::installed as grok_installed;
 use wanxiang_adapter_workbuddy::installed as workbuddy_installed;
+use wanxiang_adapter_workbuddy::codebuddy_installed;
+use wanxiang_adapter_cursor::cli_installed as cursor_cli_installed;
 use wanxiang_core::{GrantStatus, StoredGrant, ToolId, ToolPresence};
 
 #[derive(Clone, Debug, Serialize)]
@@ -62,6 +64,11 @@ pub fn snapshot(roots: &HostRoots, grants: &[StoredGrant]) -> Vec<ToolSnapshot> 
             ToolId::Muse,
             muse_installed(&roots.home, &roots.applications),
         ),
+        (
+            ToolId::CodeBuddy,
+            codebuddy_installed(&roots.home, &roots.applications),
+        ),
+        (ToolId::CursorCli, cursor_cli_installed(&roots.home)),
     ];
     found
         .into_iter()

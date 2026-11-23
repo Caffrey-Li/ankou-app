@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { loadToolIcons, type ToolSnapshot, type UsageDetail } from "./api";
-import { presenceLabel, toolSpecs, type Presence, type ToolId } from "./catalog";
+import { presenceLabel, toolSpecs, vendors, type Presence, type ToolId, type VendorId } from "./catalog";
 
 const iconSrc = new Map<string, string | null>();
 let iconLoad: Promise<void> | null = null;
@@ -88,14 +88,7 @@ export function toolMarks(
       else presence = "authorized";
     }
     const tone = toolTone(presence, attention.has(tool.id), stale.has(tool.id));
-    const status =
-      presence !== "authorized"
-        ? presenceLabel(presence)
-        : tone === "attention"
-          ? "需要处理"
-          : tone === "quiet"
-            ? "数据过时"
-            : "正常";
+    const status = statusText(presence, tone);
     const withheld = row?.tokens === "暂不提供";
     const caps = grantedLabels(tool.id, grants);
     const granted = caps.length > 0 ? `已授权${caps.join("、")}` : "";
@@ -132,13 +125,75 @@ function grantedLabels(tool: string, grants: { tool: string; capability: string;
   return capLabels.filter(([cap]) => own.some((grant) => grant.capability === cap)).map(([, label]) => label);
 }
 
-export function SidebarTools({ marks, onOpen }: { marks: ToolMark[]; onOpen?: (id: ToolId) => void }) {
+function statusText(presence: Presence, tone: ToolMark["tone"]) {
+  return presence !== "authorized"
+    ? presenceLabel(presence)
+    : tone === "attention"
+      ? "需要处理"
+      : tone === "quiet"
+        ? "数据过时"
+        : "正常";
+}
+
+/** 按厂商合并后的一行：状态取各端里最需要注意的那个。 */
+export type VendorMark = {
+  id: VendorId;
+  icon: ToolId;
+  name: string;
+  tone: ToolMark["tone"];
+  presence: Presence;
+  status: string;
+  subtitle: string;
+  members: ToolMark[];
+};
+
+export function vendorMarks(marks: ToolMark[]): VendorMark[] {
+  return vendors.map((vendor) => {
+    const members = vendor.members
+      .map((id) => marks.find((mark) => mark.id === id))
+      .filter((mark): mark is ToolMark => Boolean(mark));
+    const has = (presence: Presence) => members.some((mark) => mark.presence === presence);
+    const presence: Presence = has("needs_reauth")
+      ? "needs_reauth"
+      : has("authorized")
+        ? "authorized"
+        : has("unauthorized")
+          ? "unauthorized"
+          : "missing";
+    const tone: ToolMark["tone"] = members.some((mark) => mark.tone === "attention")
+      ? "attention"
+      : presence === "authorized" && members.some((mark) => mark.tone === "ok")
+        ? "ok"
+        : "quiet";
+    let subtitle = members[0]?.subtitle ?? "未发现";
+    if (members.length > 1) {
+      const found = members.filter((mark) => mark.presence !== "missing");
+      const authorized = members.filter((mark) => mark.presence === "authorized").length;
+      subtitle =
+        found.length === 0
+          ? "未发现"
+          : `${found.map((mark) => mark.name).join("、")} · ${authorized > 0 ? `${authorized} 端已授权` : "尚未授权"}`;
+    }
+    return {
+      id: vendor.id,
+      icon: vendor.icon,
+      name: vendor.name,
+      tone,
+      presence,
+      status: statusText(presence, tone),
+      subtitle,
+      members,
+    };
+  });
+}
+
+export function SidebarTools({ marks, onOpen }: { marks: VendorMark[]; onOpen?: (id: VendorId) => void }) {
   return (
     <ul className="tools">
       {marks.map((mark) => (
         <li key={mark.id}>
           <button type="button" className="tool-link" onClick={() => onOpen?.(mark.id)}>
-            <ToolIcon id={mark.id} className="letter" />
+            <ToolIcon id={mark.icon} className="letter" />
             <span className="tool-name">{mark.name}</span>
             <span className={`tool-dot ${mark.tone}`} role="img" aria-label={mark.status} />
           </button>
@@ -153,13 +208,13 @@ export function OverviewToolRows({
   onOpen,
   stamp = "—",
 }: {
-  marks: ToolMark[];
-  onOpen: (id: ToolId) => void;
+  marks: VendorMark[];
+  onOpen: (id: VendorId) => void;
   stamp?: string;
 }) {
   return marks.map((mark) => (
     <button key={mark.id} type="button" className="tool-row" onClick={() => onOpen(mark.id)}>
-      <ToolIcon id={mark.id} className="tool-mark" />
+      <ToolIcon id={mark.icon} className="tool-mark" />
       <span className="tool-copy">
         <strong>{mark.name}</strong>
         <small>{mark.subtitle}</small>
