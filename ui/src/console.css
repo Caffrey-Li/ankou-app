@@ -1,0 +1,385 @@
+/* 主窗口新版（深浅两套共用）：总览控制台、工具页的公共部件 */
+
+.c-panel {
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+}
+
+.c-h {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+}
+
+.c-big {
+  color: var(--color-graphite);
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.c-empty {
+  margin: 0;
+  padding: 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.c-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.c-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+span.c-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill-2);
+  color: var(--color-graphite);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+}
+
+.c-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+}
+
+.c-dot.ok {
+  background: var(--color-ok);
+}
+
+.c-dot.attention {
+  background: var(--color-ochre);
+}
+
+.c-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--color-mist);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-btn.quiet {
+  background: var(--fill-2);
+  color: var(--color-graphite);
+}
+
+.c-btn:disabled {
+  opacity: 0.55;
+}
+
+/* 圆环 */
+.c-ring {
+  position: relative;
+  flex: none;
+}
+
+.c-ring svg {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.c-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.c-ring-track {
+  stroke: var(--fill-2);
+}
+
+.c-ring-value {
+  stroke: var(--color-mist);
+  stroke-linecap: round;
+}
+
+.c-ring strong {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-graphite);
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+}
+
+/* 总览 */
+.c-overview {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.c-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.c-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.c-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+  color: var(--color-graphite);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.c-tile:hover {
+  box-shadow: var(--shadow-panel), inset 0 0 0 1px color-mix(in srgb, var(--color-mist) 40%, transparent);
+}
+
+.c-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.c-tile-head strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-tile-head .c-dot {
+  margin-left: auto;
+}
+
+.c-tile-value {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  overflow: hidden;
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.c-tile-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.c-tile-foot small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-chart {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+  padding: 16px;
+}
+
+.c-chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.c-legend {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.c-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+
+.c-bars {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 0;
+}
+
+.c-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+  height: 100%;
+  min-width: 0;
+}
+
+.c-bar i {
+  display: block;
+  min-height: 1px;
+  border-radius: 2px;
+}
+
+.c-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.c-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.c-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 14px 4px;
+}
+
+.c-panel-head .text-button {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.c-count {
+  color: var(--color-warn-text);
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+}
+
+.c-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.c-item + .c-item {
+  border-top: 1px solid var(--color-separator);
+}
+
+.c-item .c-dot {
+  margin-top: 6px;
+}
+
+.c-item-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.c-item-copy strong {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-item-copy span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-space {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.c-space > :not(.c-panel-head) {
+  margin: 0 14px;
+}
+
+.c-stack {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+.c-space-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 12px;
+}
+
+.c-space-list small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.c-space-list .over small {
+  color: var(--color-warn-text);
+}
+
+@media (max-width: 1040px) {
+  .c-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .c-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

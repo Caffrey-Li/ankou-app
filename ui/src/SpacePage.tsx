@@ -149,6 +149,29 @@ export function groupMark(entries: SpaceEntry[], checked: Record<string, boolean
   };
 }
 
+/** 能统计空间的各端（DS Bot 与 Harness 共用目录，不单独扫）。 */
+export const spaceTools = [
+  "deepseek_harness",
+  "cursor",
+  "codex",
+  "claude",
+  "antigravity",
+  "gemini",
+  "workbuddy",
+  "grok_bot",
+  "muse",
+  "codebuddy",
+  "cursor_cli",
+] as const;
+
+export type SpaceScans = Record<(typeof spaceTools)[number], SpaceScan | null>;
+
+/** 一次扫完所有端；没授权或失败的记为 null。只统计大小，不读内容。 */
+export async function scanAllTools(): Promise<SpaceScans> {
+  const results = await Promise.all(spaceTools.map((tool) => scanSpace(tool).catch(() => null)));
+  return Object.fromEntries(spaceTools.map((tool, index) => [tool, results[index]])) as SpaceScans;
+}
+
 export function SpacePage({
   fixture,
   windows,
@@ -157,8 +180,11 @@ export function SpacePage({
   scanRequest,
   onStamp,
   onSummary,
+  onScans,
   initialTool = "deepseek_harness",
 }: {
+  /** 每次扫描完，把各端的结果交给总览和工具页 */
+  onScans?: (scans: SpaceScans) => void;
   onSummary?: (summary: { tool: string; known: number; protectedBytes: number; cleanable: number }) => void;
   initialTool?: SpaceToolId;
   fixture: boolean;
@@ -267,20 +293,15 @@ export function SpacePage({
     setScanning(true);
     setNotice("");
     try {
-      const [harness, cursor, codex, claudeResult, antigravity, gemini, workbuddy, grokBot, muse, codebuddy, cursorCli] =
-        await Promise.all([
-        scanSpace("deepseek_harness").catch(() => null),
-        scanSpace("cursor").catch(() => null),
-        scanSpace("codex").catch(() => null),
-        scanSpace("claude").catch(() => null),
-        scanSpace("antigravity").catch(() => null),
-        scanSpace("gemini").catch(() => null),
-        scanSpace("workbuddy").catch(() => null),
-        scanSpace("grok_bot").catch(() => null),
-        scanSpace("muse").catch(() => null),
-        scanSpace("codebuddy").catch(() => null),
-        scanSpace("cursor_cli").catch(() => null),
-      ]);
+      const all = await scanAllTools();
+      onScans?.(all);
+      const harness = all.deepseek_harness;
+      const cursor = all.cursor;
+      const codex = all.codex;
+      const claudeResult = all.claude;
+      const { antigravity, gemini, workbuddy, muse, codebuddy } = all;
+      const grokBot = all.grok_bot;
+      const cursorCli = all.cursor_cli;
       setCursorScan(cursor);
       setCodexScan(codex);
       setClaudeScan(claudeResult);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import mark from "../../brand/mark.svg";
+import { Logo } from "./Logo";
 import {
   emptyUsage,
   fallbackSnapshot,
@@ -13,7 +13,12 @@ import {
   type Snapshot,
   type UsageView,
 } from "./api";
-import { IconBubble, IconDisk, IconRefresh } from "./icons";
+import { specOf, vendorOf, vendors } from "./catalog";
+import { Ring } from "./Console";
+import { IconRefresh, IconSet } from "./icons";
+import { applyAppearance } from "./theme";
+import { ToolIcon } from "./tool-status";
+import { cnCount, vendorHeadline } from "./vendor-data";
 import "./settings.css";
 import "./tray.css";
 
@@ -60,7 +65,10 @@ export function TrayPanel() {
   const [refreshing, setRefreshing] = useState(false);
 
   const reload = useCallback(() => {
-    void loadSnapshot().then(setSnapshot);
+    void loadSnapshot().then((next) => {
+      setSnapshot(next);
+      applyAppearance(next.settings.appearance ?? "system");
+    });
     void loadUsage("month").then(setUsage);
     void listConversations()
       .then((page) => setRows(page.rows))
@@ -74,8 +82,9 @@ export function TrayPanel() {
     if (!inTauri()) return () => window.removeEventListener("focus", onFocus);
     let stop: (() => void) | undefined;
     let alive = true;
-    void import("@tauri-apps/api/event").then(({ listen }) =>
-      listen<string>("usage-item", (event) => {
+    void import("@tauri-apps/api/event").then(({ listen }) => {
+      void listen<Snapshot["settings"]["appearance"]>("appearance", (event) => applyAppearance(event.payload));
+      return listen<string>("usage-item", (event) => {
         if (event.payload === "started") setRefreshing(true);
         if (event.payload === "done") {
           setRefreshing(false);
@@ -84,8 +93,8 @@ export function TrayPanel() {
       }).then((unlisten) => {
         if (alive) stop = unlisten;
         else unlisten();
-      }),
-    );
+      });
+    });
     return () => {
       alive = false;
       stop?.();
@@ -95,7 +104,7 @@ export function TrayPanel() {
 
   const panelRef = useRef<HTMLDivElement>(null);
   const items = trayItems(rows, usage, snapshot);
-  const shape = `${items.length}|${refreshing}`;
+  const shape = `${items.length}|${refreshing}|${rows.length}|${usage.cards.length}`;
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel || !inTauri()) return;
@@ -106,17 +115,25 @@ export function TrayPanel() {
       getCurrentWindow().setSize(new LogicalSize(width, height)),
     );
   }, [shape]);
-  const window5h = usage.cards.find((card) => card.name.includes("5 小时窗口"));
-  const balance = usage.cards.find((card) => card.name === "DeepSeek 账户");
-  const balanceText = balance && balance.value !== "—" ? balance.value : balance?.note ?? "未保存密钥";
+  const threshold = snapshot.settings.context_threshold_percent;
+  const hot = rows
+    .filter((row) => row.percent != null && row.percent >= threshold)
+    .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0));
+  const top = hot[0] ?? null;
+  const quotas = vendors
+    .filter((vendor) => ["openai", "anthropic", "grok", "deepseek"].includes(vendor.id))
+    .map((vendor) => ({ vendor, head: vendorHeadline(usage, vendor) }))
+    .filter(({ head }) => head.kind === "ring" || head.value !== "—")
+    .slice(0, 4);
+  const reauth = items.filter((item) => item.icon === "alert");
 
   return (
     <div className="tray-panel" ref={panelRef} role="dialog" aria-label="万象快速面板">
       <div className="tray-head">
-        <img src={mark} alt="" width={22} height={22} />
+        <Logo />
         <strong>万象</strong>
-        <span className="grow" />
         <span className="tray-stamp">{refreshing ? "刷新中" : usage.stamp === "—" ? "尚未刷新" : `${usage.stamp} 更新`}</span>
+        <span className="grow" />
         <button
           type="button"
           className="tray-icon-button"
@@ -131,68 +148,100 @@ export function TrayPanel() {
         >
           <IconRefresh />
         </button>
+        <button type="button" className="tray-icon-button" aria-label="设置" onClick={() => void trayAction("settings")}>
+          <IconSet />
+        </button>
       </div>
-      <p className="tray-status">
-        <i className={items.length > 0 ? "attention" : "ok"} />
-        {items.length > 0 ? `${items.length} 件事需要处理` : "一切正常"}
-      </p>
-      {items.map((item) => (
-        <div className="tray-item" key={`${item.title}-${item.detail}`}>
-          <span className={item.icon === "alert" ? "tray-badge alert" : "tray-badge"}>
-            {item.icon === "disk" ? <IconDisk /> : <IconBubble />}
+
+      {top ? (
+        <div className="tray-alert">
+          <span className="tray-alert-kicker">对话快满了 · {top.percent}%</span>
+          <strong>{top.title}</strong>
+          <span className="tray-alert-row">
+            <ToolIcon id={vendorOf(top.tool)?.icon ?? top.tool} className="tray-alert-icon" />
+            <span>{specOf(top.tool)?.name ?? top.tool}</span>
+            <button type="button" onClick={() => void trayAction("handoff")}>
+              一键交接
+            </button>
           </span>
+        </div>
+      ) : (
+        <p className="tray-status">
+          <i className={reauth.length > 0 ? "attention" : "ok"} />
+          {reauth.length > 0 ? `${reauth.length} 件事需要处理` : "一切正常"}
+        </p>
+      )}
+
+      {reauth.map((item) => (
+        <div className="tray-item" key={`${item.title}-${item.detail}`}>
           <span className="tray-copy">
             <strong>{item.title}</strong>
             <span>{item.detail}</span>
           </span>
           <span className="grow" />
-          <button type="button" className="text-button" onClick={() => void trayAction(item.to)}>
+          <button type="button" className="text-button" onClick={() => void trayAction("overview")}>
             {item.action}
           </button>
         </div>
       ))}
-      <hr />
-      <div className="tray-quota">
-        <TrayRing percent={window5h?.percent ?? null} />
-        <span className="tray-copy">
-          <strong>
-            {window5h?.percent != null ? `ChatGPT 5 小时窗口 ${window5h.percent}%` : "ChatGPT 5 小时窗口"}
-          </strong>
-          <span>{window5h?.percent != null ? window5h.reset ?? window5h.note : window5h?.note ?? "未授权"}</span>
-        </span>
-      </div>
-      <div className="tray-line">
-        <span>DeepSeek 余额</span>
-        <strong className={balance && balance.value !== "—" ? "" : "muted"}>{balanceText}</strong>
-      </div>
-      <div className="tray-line">
-        <span>Cursor 额度</span>
-        <strong className="muted">暂不提供</strong>
-      </div>
-      <hr />
-      <div className="tray-actions">
-        <button type="button" className="pill-button primary" onClick={() => void trayAction("overview")}>
-          打开万象
-        </button>
+
+      {quotas.length > 0 ? (
+        <section className="tray-section">
+          <h2>额度</h2>
+          <div className="tray-quotas">
+            {quotas.map(({ vendor, head }) => (
+              <div key={vendor.id} className="tray-quota-tile">
+                {head.kind === "ring" ? (
+                  <Ring percent={head.percent} size={44} />
+                ) : (
+                  <span className="tray-quota-value">{head.value}</span>
+                )}
+                <span className="tray-copy">
+                  <strong>
+                    <ToolIcon id={vendor.icon} className="tray-mini-icon" />
+                    {vendor.name}
+                  </strong>
+                  <span>{head.kind === "ring" ? `${head.label} · ${head.sub}` : head.label}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {hot.length > 1 ? (
+        <section className="tray-section">
+          <h2>也快满了</h2>
+          <div className="tray-list">
+            {hot.slice(1, 4).map((row) => (
+              <div key={`${row.tool}:${row.id}`} className="tray-row">
+                <span className="tray-copy">
+                  <strong>{row.title}</strong>
+                  <span>
+                    <ToolIcon id={vendorOf(row.tool)?.icon ?? row.tool} className="tray-mini-icon" />
+                    {specOf(row.tool)?.name ?? row.tool}
+                  </span>
+                </span>
+                <b>{row.percent}%</b>
+                <button type="button" className="tray-chip" onClick={() => void trayAction("handoff")}>
+                  交接
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="tray-foot-row">
+        <span>{usage.total && usage.total !== "—" ? `本月 ${cnCount(usage.total)} token` : "本机运行"}</span>
         <span className="grow" />
-        <button type="button" className="text-button" onClick={() => void trayAction("settings")}>
-          设置
-        </button>
         <button type="button" className="text-button" onClick={() => void trayAction("quit")}>
           退出
         </button>
+        <button type="button" className="tray-open" onClick={() => void trayAction("overview")}>
+          打开主窗口
+        </button>
       </div>
-      <p className="tray-foot">退出后停止所有后台检查</p>
     </div>
-  );
-}
-
-function TrayRing({ percent }: { percent: number | null }) {
-  const turn = percent == null ? 0 : Math.max(0, Math.min(100, percent));
-  return (
-    <svg className="tray-ring" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
-      <circle cx="20" cy="20" r="16" />
-      {percent == null ? null : <circle cx="20" cy="20" r="16" pathLength={100} strokeDasharray={`${turn} 100`} />}
-    </svg>
   );
 }

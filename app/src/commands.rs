@@ -116,6 +116,11 @@ fn set_settings<R: tauri::Runtime>(
     settings: Settings,
 ) -> Result<(), String> {
     hub.store.set_settings(&settings).map_err(text)?;
+    for window in app.webview_windows().values() {
+        crate::apply_theme(window, settings.appearance);
+    }
+    // 菜单栏面板跟着主窗口换主题
+    let _ = app.emit("appearance", settings.appearance);
     crate::system::apply(&app, &settings)
 }
 

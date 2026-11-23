@@ -1,52 +1,29 @@
-import { useEffect, useState, type CSSProperties, type SelectHTMLAttributes } from "react";
+import { useState, type CSSProperties, type SelectHTMLAttributes } from "react";
 import type { Settings, Snapshot } from "./api";
 import { clearHistory, deleteKey, refreshUsage, revokeGrant, saveKey, saveSettings, setCapability } from "./api";
 import { Check } from "./Check";
-import { presenceLabel, specOf, toolSpecs, vendors, type CapabilityId, type Presence, type VendorId } from "./catalog";
+import { presenceLabel, specOf, vendors, type CapabilityId, type Presence, type VendorId } from "./catalog";
 import { capChecked, grantableKind } from "./grants";
-import { ToolIcon } from "./tool-status";
 import { UpdateSection, type Updater } from "./update";
 import "./settings.css";
 
 export function SettingsPage({
   snapshot,
   onChange,
-  onReload,
-  focusTool,
   updater,
+  onTools,
 }: {
   snapshot: Snapshot;
   onChange: (update: (current: Snapshot) => Snapshot) => void;
   onReload: () => void;
-  /** 从侧栏或概览点进来的工具：展开它的授权并滚到眼前。 */
-  focusTool?: { id: VendorId; at: number };
   /** 版本与更新；没有传时不显示这一节 */
   updater?: Updater;
+  /** 授权已移到「工具」里：设置页顶部给一个入口 */
+  onTools?: () => void;
 }) {
-  const [openTool, setOpenTool] = useState<VendorId | "">(focusTool?.id ?? "");
-  useEffect(() => {
-    if (!focusTool) return;
-    setOpenTool(focusTool.id);
-    requestAnimationFrame(() => {
-      // 只滚右侧授权一栏，把这一块顶到栏顶；页面标题和中间一栏不动
-      const block = document.getElementById(`tool-${focusTool.id}`);
-      const side = block?.closest(".settings-side");
-      if (!block || !side) return;
-      const offset = block.getBoundingClientRect().top - side.getBoundingClientRect().top;
-      side.scrollTo({ top: side.scrollTop + offset - 8 });
-    });
-  }, [focusTool]);
   const [keyOpen, setKeyOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
-
-  function toggleMeasured(kind: string, on: boolean) {
-    void setCapability(kind, on).then(() => {
-      onReload();
-      // 刚授权的用量要马上读一次，不然用量页还停在「未授权」
-      if (on && kind.endsWith("_usage")) void refreshUsage().catch(() => undefined);
-    });
-  }
 
   function update(patch: Partial<Settings>) {
     let previous: Settings | null = null;
@@ -71,6 +48,15 @@ export function SettingsPage({
   }
 
   return (
+    <div className="settings-page">
+      {onTools ? (
+        <div className="settings-banner">
+          <span>各工具的授权已移到「工具」里，每个厂商一页管理。</span>
+          <button type="button" className="text-button" onClick={onTools}>
+            去工具
+          </button>
+        </div>
+      ) : null}
     <div className="settings-layout">
       <div className="settings-column">
         <section>
@@ -152,6 +138,39 @@ export function SettingsPage({
                 </button>
               </div>
             ) : null}
+          </div>
+        </section>
+      </div>
+      <div className="settings-column">
+        <section>
+          <p className="section-label">外观</p>
+          <div className="card">
+            <div className="setting-row">
+              <span className="setting-copy">
+                <strong>主题</strong>
+                <span>主窗口和菜单栏面板一起切换</span>
+              </span>
+              <span className="grow" />
+              <div className="segmented" role="radiogroup" aria-label="主题">
+                {(
+                  [
+                    ["system", "跟随系统"],
+                    ["light", "浅色"],
+                    ["dark", "深色"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={snapshot.settings.appearance === value}
+                    onClick={() => update({ appearance: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
         <section>
@@ -261,33 +280,39 @@ export function SettingsPage({
         </section>
         {updater ? <UpdateSection updater={updater} /> : null}
       </div>
-      <aside className="settings-side" aria-label="工具与授权">
-        <p className="section-label">工具与授权</p>
-        <div className="card">
-          {vendors.map((vendor) => {
-            const members = vendor.members.map((id) => specOf(id)).filter((spec) => spec !== undefined);
-            const presences = members.map(
-              (spec) => snapshot.tools.find((tool) => tool.tool === spec.id)?.presence ?? "missing",
-            );
-            const open = openTool === vendor.id;
-            const multi = members.length > 1;
-            return (
-              <div className="tool-block" key={vendor.id} id={`tool-${vendor.id}`}>
-                <div className="tool-head">
-                  <ToolIcon id={vendor.icon} className="mark sm" />
-                  <span className="tool-copy">
-                    <strong>{vendor.name}</strong>
-                    <span>{vendorPresence(presences)}</span>
-                  </span>
-                  <span className="grow" />
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => setOpenTool(open ? "" : vendor.id)}
-                  >
-                    管理
-                  </button>
-                </div>
+    </div>
+    </div>
+  );
+}
+
+
+/** 一个厂商下各端的授权：在「工具」页里显示。 */
+export function VendorAccess({
+  vendorId,
+  snapshot,
+  onChange,
+  onReload,
+}: {
+  vendorId: VendorId;
+  snapshot: Snapshot;
+  onChange: (update: (current: Snapshot) => Snapshot) => void;
+  onReload: () => void;
+}) {
+  const vendor = vendors.find((item) => item.id === vendorId);
+  if (!vendor) return null;
+  const members = vendor.members.map((id) => specOf(id)).filter((spec) => spec !== undefined);
+  const presences = members.map((spec) => snapshot.tools.find((tool) => tool.tool === spec.id)?.presence ?? "missing");
+  const open = true;
+  const multi = members.length > 1;
+  function toggleMeasured(kind: string, on: boolean) {
+    void setCapability(kind, on).then(() => {
+      onReload();
+      // 刚授权的用量要马上读一次，不然用量还停在「未授权」
+      if (on && kind.endsWith("_usage")) void refreshUsage().catch(() => undefined);
+    });
+  }
+  return (
+    <div className="tool-block vendor-access" id={`tool-${vendor.id}`}>
                 {members.map((spec, index) => {
                   const presence = presences[index];
                   const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
@@ -380,18 +405,6 @@ export function SettingsPage({
                     </div>
                   );
                 })}
-              </div>
-            );
-          })}
-        </div>
-        <div className="settings-legend">
-          <span className={authTagClass("已授权")}>已授权</span>
-          <span className={authTagClass("未授权")}>未授权</span>
-          {toolSpecs.some((spec) => spec.tags.some((tag) => tag.badge === "未验证")) ? (
-            <span className={authTagClass("未验证")}>未验证</span>
-          ) : null}
-        </div>
-      </aside>
     </div>
   );
 }

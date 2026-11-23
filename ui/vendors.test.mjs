@@ -39,24 +39,26 @@ try {
     ],
   );
 
-  const { SettingsPage, vendorPresence } = await server.ssrLoadModule("/src/SettingsPage.tsx");
+  const { SettingsPage, VendorAccess, vendorPresence } = await server.ssrLoadModule("/src/SettingsPage.tsx");
   assert.equal(vendorPresence(["authorized", "missing"]), "已授权 · 发现 1/2 端");
   assert.equal(vendorPresence(["missing", "missing"]), "未发现");
   assert.equal(vendorPresence(["authorized", "needs_reauth"]), "需要重新授权 · 发现 2/2 端");
   const { fallbackSnapshot } = await server.ssrLoadModule("/src/api.ts");
-  const html = renderToStaticMarkup(
-    createElement(SettingsPage, {
-      snapshot: fallbackSnapshot(),
-      onChange() {},
-      onReload() {},
-      focusTool: { id: "cursor", at: 1 },
-    }),
+  // 授权移到「工具」页：一个厂商一块，里面是各端的授权
+  const access = renderToStaticMarkup(
+    createElement(VendorAccess, { vendorId: "cursor", snapshot: fallbackSnapshot(), onChange() {}, onReload() {} }),
   );
-  // 设置里一个厂商一块；展开 Cursor 后两端的授权都在里面
-  assert.equal((html.match(/class="tool-block"/g) ?? []).length, 8);
-  assert.match(html, /id="tool-cursor"/);
-  assert.match(html, /aria-label="Cursor 命令行 对话"/);
-  assert.match(html, /cursor-agent 命令行/);
+  assert.match(access, /id="tool-cursor"/);
+  assert.match(access, /aria-label="Cursor 命令行 对话"/);
+  assert.match(access, /cursor-agent 命令行/);
+  // 设置页只剩通用设置：有「外观」，没有授权列表
+  const html = renderToStaticMarkup(
+    createElement(SettingsPage, { snapshot: fallbackSnapshot(), onChange() {}, onReload() {}, onTools() {} }),
+  );
+  assert.equal((html.match(/class="tool-block/g) ?? []).length, 0);
+  assert.match(html, /aria-label="主题"/);
+  assert.match(html, /跟随系统/);
+  assert.match(html, /去工具/);
 } finally {
   await server.close();
 }

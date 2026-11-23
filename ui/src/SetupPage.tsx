@@ -1,12 +1,14 @@
 import { useState } from "react";
-import mark from "../../brand/icon-macos.svg";
+import { Logo } from "./Logo";
 import type { Snapshot } from "./api";
 import { finishSetup, openPrivacySettings, refreshUsage, setCapability } from "./api";
 import { Check } from "./Check";
-import { presenceLabel, toolSpecs, type CapRow, type ToolId } from "./catalog";
+import { presenceLabel, specOf, vendors, type CapRow, type ToolId, type Vendor, type VendorId } from "./catalog";
 import { capChecked, grantableKind, grantedCount } from "./grants";
 import { IconCheck, IconLock } from "./icons";
 import { ToolIcon } from "./tool-status";
+import { EndIcon } from "./ToolsPage";
+import "./console.css";
 import "./setup.css";
 import "./settings.css";
 
@@ -19,9 +21,11 @@ export function SetupPage({
   onDone: () => void;
   onReload: () => void;
 }) {
-  const [open, setOpen] = useState<ToolId | "">("");
+  const [open, setOpen] = useState<VendorId | "">("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const found = snapshot.tools.filter((tool) => tool.installed).length;
+  const presenceOf = (id: ToolId) => snapshot.tools.find((tool) => tool.tool === id)?.presence ?? "missing";
+  const found = vendors.filter((vendor) => vendor.members.some((id) => presenceOf(id) !== "missing"));
 
   async function finish() {
     await finishSetup();
@@ -38,93 +42,148 @@ export function SetupPage({
       .finally(onReload);
   }
 
+  /** 一个厂商的所有可授权项（只读），只对本机发现了的端。 */
+  function kindsOf(vendor: Vendor) {
+    return vendor.members
+      .filter((id) => presenceOf(id) !== "missing")
+      .flatMap((id) => (specOf(id)?.caps ?? []).map((cap) => grantableKind(id, cap)))
+      .filter((kind) => kind != null) as string[];
+  }
+
+  function vendorOn(vendor: Vendor) {
+    return vendor.members.some((id) => grantedCount(id, specOf(id)?.caps ?? [], snapshot.grants) > 0);
+  }
+
+  async function setVendor(vendor: Vendor, on: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      for (const kind of kindsOf(vendor)) await setCapability(kind, on);
+      if (on) void refreshUsage().catch(() => undefined);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+      onReload();
+    }
+  }
+
+  async function connectAll() {
+    for (const vendor of found) if (!vendorOn(vendor)) await setVendor(vendor, true);
+  }
+
+  const chosen = found.filter(vendorOn).length;
+
   return (
     <div className="setup">
+      <div className="setup-traffic" data-tauri-drag-region aria-hidden="true" />
       <section className="setup-card" data-compare-frame="setup" aria-label="首次启动">
-        <img className="setup-mark" src={mark} alt="" width={84} height={84} />
-        <div className="setup-title">
-          <h1>欢迎使用万象小助手</h1>
-          <p>看清用量 · 延续对话 · 管理空间</p>
-        </div>
-        <div className="steps" aria-label="步骤">
-          <span className="step done">
-            <b aria-hidden="true">
-              <IconCheck />
-            </b>
-            发现工具
-          </span>
-          <i className="step-line" />
-          <span className="step current">
-            <b>2</b>选择授权
-          </span>
-          <i className="step-line" />
-          <span className="step">
-            <b>3</b>开始使用
-          </span>
-        </div>
-        <div className="setup-list">
-          <div className="setup-heading">
-            <p>在这台电脑上找到 {found} 个工具</p>
-            <span>只检查是否安装，未读取任何内容</span>
+        <header className="setup-top">
+          <Logo className="setup-mark" size={44} />
+          <div className="setup-title">
+            <h1>欢迎使用万象小助手</h1>
+            <p>
+              在这台 Mac 上发现了 {found.length} 个 AI 工具。打开开关即接入（只读），随时可以在「工具」里改。
+            </p>
           </div>
-          <div className="setup-tools">
-            {toolSpecs.map((spec) => {
-              const live = snapshot.tools.find((tool) => tool.tool === spec.id);
-              const presence = live?.presence ?? "missing";
-              const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
-              const expanded = open === spec.id;
-              const count = grantedCount(spec.id, spec.caps, snapshot.grants);
-              const parts = [presence === "missing" ? presenceLabel(presence) : count > 0 ? `已授权 ${count} 项` : "未授权"];
-              if (spec.id === "ds_bot") parts.push("随 Harness");
-              if (expanded && spec.id === "cursor") parts.push("能力逐项授权");
-              const head = (
-                <button
-                  type="button"
-                  className="setup-tool"
-                  aria-expanded={expanded}
-                  onClick={() => setOpen(expanded ? "" : spec.id)}
-                >
-                  <ToolIcon id={spec.id} className="mark lg" />
-                  <span className="tool-copy">
-                    <strong>{spec.name}</strong>
-                    <span>{parts.join(" · ")}</span>
-                  </span>
-                  <span className={expanded ? "chev text" : "chev"}>{expanded ? "收起" : "›"}</span>
-                </button>
-              );
-              if (!expanded) {
-                return (
-                  <div className="setup-row" key={spec.id}>
-                    {head}
-                  </div>
-                );
-              }
-              return (
-                <div className="setup-panel" key={spec.id}>
-                  {head}
-                  {spec.caps.map((cap) => (
-                    <SetupCap
-                      key={cap.title}
-                      tool={spec.id}
-                      cap={cap}
-                      checked={capChecked(cap, grants)}
-                      onToggle={toggle}
-                    />
+          <div className="steps" aria-label="步骤">
+            <span className="step done">
+              <b aria-hidden="true">
+                <IconCheck />
+              </b>
+              发现工具
+            </span>
+            <i className="step-line" />
+            <span className="step current">
+              <b>2</b>选择授权
+            </span>
+            <i className="step-line" />
+            <span className="step">
+              <b>3</b>完成
+            </span>
+          </div>
+        </header>
+
+        <div className="setup-grid">
+          {vendors.map((vendor) => {
+            const members = vendor.members.map((id) => specOf(id)).filter((spec) => spec !== undefined);
+            const seen = members.filter((spec) => presenceOf(spec.id) !== "missing");
+            const on = vendorOn(vendor);
+            const reads = [
+              ...new Set(
+                seen.flatMap((spec) =>
+                  spec.caps.filter((cap) => grantableKind(spec.id, cap)).map((cap) => cap.title.replace(/与.*$/, "")),
+                ),
+              ),
+            ];
+            const expanded = open === vendor.id;
+            return (
+              <div key={vendor.id} className={on ? "setup-vendor on" : seen.length ? "setup-vendor" : "setup-vendor missing"}>
+                <div className="setup-vendor-head">
+                  <ToolIcon id={vendor.icon} className="c-icon" />
+                  <strong>{vendor.name}</strong>
+                  {seen.length ? (
+                    <button
+                      type="button"
+                      className="switch"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`接入 ${vendor.name}`}
+                      disabled={busy || reads.length === 0}
+                      onClick={() => void setVendor(vendor, !on)}
+                    >
+                      <i />
+                    </button>
+                  ) : (
+                    <span className="setup-missing">{presenceLabel("missing")}</span>
+                  )}
+                </div>
+                <div className="setup-ends">
+                  {members.map((spec) => (
+                    <span key={spec.id} className={presenceOf(spec.id) === "missing" ? "dim" : undefined}>
+                      <EndIcon id={spec.id} />
+                      {members.length > 1 ? spec.name : spec.ends ?? spec.name}
+                    </span>
                   ))}
                 </div>
-              );
-            })}
-          </div>
-          {error ? <p className="setup-error">{error}</p> : null}
+                {seen.length ? (
+                  <p className="setup-reads">将读取：{reads.length ? reads.join(" · ") : "暂不提供"}</p>
+                ) : null}
+                {seen.length ? (
+                  <button type="button" className="text-button setup-more" aria-expanded={expanded} onClick={() => setOpen(expanded ? "" : vendor.id)}>
+                    {expanded ? "收起" : "逐项选择"}
+                  </button>
+                ) : null}
+                {expanded
+                  ? seen.map((spec) => {
+                      const grants = snapshot.grants.filter((grant) => grant.tool === spec.id);
+                      return (
+                        <div key={spec.id} className="setup-caps">
+                          {seen.length > 1 ? <p className="setup-end-name">{spec.name}</p> : null}
+                          {spec.caps.map((cap) => (
+                            <SetupCap key={cap.title} tool={spec.id} cap={cap} checked={capChecked(cap, grants)} onToggle={toggle} />
+                          ))}
+                        </div>
+                      );
+                    })
+                  : null}
+              </div>
+            );
+          })}
+        </div>
+        {error ? <p className="setup-error">{error}</p> : null}
+
+        <div className="setup-note">
+          <IconLock />
+          <p>只读：不读取登录凭据、密钥或验证码；数据只保存在这台电脑；授权随时可以撤销。</p>
         </div>
         <div className="setup-foot">
-          <IconLock />
-          <p>不会读取登录凭据、密钥或验证码 · 授权可在设置中随时撤销</p>
+          <span className="setup-count">已接入 {chosen} 个厂商</span>
           <span className="grow" />
-          <button type="button" className="pill-button" onClick={finish}>
-            稍后
+          <button type="button" className="pill-button" disabled={busy} onClick={() => void connectAll()}>
+            全部接入
           </button>
-          <button type="button" className="pill-button primary" onClick={finish}>
+          <button type="button" className="pill-button primary" disabled={busy} onClick={finish}>
             继续
           </button>
         </div>

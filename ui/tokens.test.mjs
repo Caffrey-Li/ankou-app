@@ -4,17 +4,21 @@ import { readFileSync } from "node:fs";
 const css = readFileSync(new URL("./src/tokens.css", import.meta.url), "utf8").toLowerCase();
 
 const required = [
+  // 浅色
   "#1d1d1f",
-  "#4a6fa0",
-  "#b9733f",
-  "#6e6e73",
-  "#a1a1a6",
-  "#e5e5ea",
-  "#f5f5f7",
-  "#f7f7f8",
+  "#2f5d9a",
+  "#b5652a",
+  "#5f6370",
+  "#f2f3f5",
   "#ffffff",
-  "#f9f9fa",
-  "#f4f4f6",
+  // 深色
+  'html[data-theme="dark"]',
+  "#ececf1",
+  "#7fa6e0",
+  "#e39a5e",
+  "#a1a4ad",
+  "#111317",
+  "#1a1d23",
   "--radius-window: 24px",
   "--radius-popover: 22px",
   "--radius-card: 16px",

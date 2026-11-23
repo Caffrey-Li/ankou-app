@@ -1,6 +1,7 @@
 import { toolSpecs, type CapabilityId, type Presence, type ToolId } from "./catalog";
 
 export type SummaryMode = "ask" | "local" | "ai";
+export type Appearance = "system" | "light" | "dark";
 export type GrantStatus = "active" | "needs_reauth";
 
 export type Settings = {
@@ -17,6 +18,7 @@ export type Settings = {
   setup_complete: boolean;
   codex_app_server: boolean;
   cursor_deeplink: boolean;
+  appearance: Appearance;
 };
 
 export type StoredGrant = {
@@ -54,6 +56,7 @@ export const defaultSettings: Settings = {
   setup_complete: false,
   codex_app_server: false,
   cursor_deeplink: false,
+  appearance: "system",
 };
 
 export function inTauri() {

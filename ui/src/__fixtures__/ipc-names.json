@@ -13,5 +13,6 @@
   "grant_status": ["active", "needs_reauth"],
   "tool_presence": ["authorized", "missing", "needs_reauth", "unauthorized"],
   "summary_mode": ["ai", "ask", "local"],
+  "appearance": ["dark", "light", "system"],
   "source_status": ["needs_reauth", "no_records", "ok", "read_failed", "server_unavailable", "unauthorized"]
 }

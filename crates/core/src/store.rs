@@ -83,6 +83,16 @@ pub enum SummaryMode {
     Ai,
 }
 
+/// 外观：跟随系统，或固定浅色、深色。主窗口和菜单栏面板一起切换。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Appearance {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     pub retention_months: u32,
@@ -100,6 +110,8 @@ pub struct Settings {
     pub codex_app_server: bool,
     #[serde(default)]
     pub cursor_deeplink: bool,
+    #[serde(default)]
+    pub appearance: Appearance,
 }
 
 impl Default for Settings {
@@ -118,6 +130,7 @@ impl Default for Settings {
             setup_complete: false,
             codex_app_server: false,
             cursor_deeplink: false,
+            appearance: Appearance::System,
         }
     }
 }
@@ -927,6 +940,7 @@ fn write_settings(conn: &Connection, settings: &Settings) -> Result<(), StoreErr
         ("setup_complete", bit(settings.setup_complete)),
         ("codex_app_server", bit(settings.codex_app_server)),
         ("cursor_deeplink", bit(settings.cursor_deeplink)),
+        ("appearance", enum_name(settings.appearance)),
     ];
     for (key, value) in pairs {
         conn.execute(
@@ -972,6 +986,13 @@ fn apply_setting(settings: &mut Settings, key: &str, value: &str) {
         "setup_complete" => settings.setup_complete = value == "1",
         "codex_app_server" => settings.codex_app_server = value == "1",
         "cursor_deeplink" => settings.cursor_deeplink = value == "1",
+        "appearance" => {
+            settings.appearance = match value {
+                "light" => Appearance::Light,
+                "dark" => Appearance::Dark,
+                _ => Appearance::System,
+            }
+        }
         _ => {}
     }
 }

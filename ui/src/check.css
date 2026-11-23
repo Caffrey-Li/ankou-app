@@ -5,14 +5,14 @@
   margin: 0;
   appearance: none;
   -webkit-appearance: none;
-  border: 1.5px solid #c5c5c8;
+  border: 1.5px solid var(--fill-3);
   border-radius: 5px;
-  background: #fff;
+  background: var(--color-card);
 }
 
 .check:checked {
-  border-color: #4a6fa0;
-  background-color: #4a6fa0;
+  border-color: var(--color-mist);
+  background-color: var(--color-mist);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.2 6.2 4.7 8.7 9.8 3.4' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center;

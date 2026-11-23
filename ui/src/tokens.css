@@ -3,16 +3,16 @@
 :root {
   color-scheme: light;
   --color-graphite: #1d1d1f;
-  --color-mist: #4a6fa0;
-  --color-ochre: #b9733f;
-  --color-text-secondary: #6e6e73;
-  --color-text-tertiary: #a1a1a6;
-  --color-separator: #e5e5ea;
-  --color-window: #f5f5f7;
+  --color-mist: #2f5d9a;
+  --color-ochre: #b5652a;
+  --color-text-secondary: #5f6370;
+  --color-text-tertiary: #8a8d96;
+  --color-separator: rgba(0, 0, 0, 0.08);
+  --color-window: #f2f3f5;
   --color-window-l1: #f7f7f8;
   --color-card: #ffffff;
-  --color-window-top: #f9f9fa;
-  --color-window-bottom: #f4f4f6;
+  --color-window-top: #f2f3f5;
+  --color-window-bottom: #f2f3f5;
   --glass: color-mix(in srgb, var(--color-card) 55%, transparent);
   --tint-mist: color-mix(in srgb, var(--color-mist) 12%, transparent);
   --tint-ochre: color-mix(in srgb, var(--color-ochre) 12%, transparent);
@@ -51,7 +51,47 @@
   --shadow-sidebar: 0 6px 20px -4px rgba(26, 31, 41, 0.08);
   /* 卡片 L3：Figma 20:316 等 */
   --shadow-card: 0 8px 24px -4px rgba(26, 31, 41, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  /* 深浅两套共用的语义色 */
+  --color-on-accent: #ffffff;
+  --color-ok: #2f8a5a;
+  --color-warn-text: #a8541f;
+  --fill-1: color-mix(in srgb, var(--color-graphite) 5%, transparent);
+  --fill-2: color-mix(in srgb, var(--color-graphite) 8%, transparent);
+  --fill-3: color-mix(in srgb, var(--color-graphite) 12%, transparent);
+  --card-edge: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-panel: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 4px 14px -6px rgba(20, 26, 36, 0.1);
+  --chart-1: #c46a3f;
+  --chart-2: #2f5d9a;
+  --chart-3: #7d93b8;
+  --chart-4: #4f8f86;
 }
+
+/* 深色：设置里选「深色」，或「跟随系统」且系统是深色 */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-graphite: #ececf1;
+  --color-mist: #7fa6e0;
+  --color-ochre: #e39a5e;
+  --color-text-secondary: #a1a4ad;
+  --color-text-tertiary: #7d818b;
+  --color-separator: rgba(255, 255, 255, 0.07);
+  --color-window: #111317;
+  --color-window-l1: #15181d;
+  --color-card: #1a1d23;
+  --color-window-top: #111317;
+  --color-window-bottom: #111317;
+  --color-on-accent: #0f1a2b;
+  --color-ok: #5fbf8c;
+  --color-warn-text: #e9a774;
+  --card-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-panel: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-card: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --chart-1: #d08a62;
+  --chart-2: #7fa6e0;
+  --chart-3: #8fa3c4;
+  --chart-4: #6fb0a6;
+}
+
 
 html,
 body,
@@ -73,4 +113,10 @@ body {
   font-weight: var(--font-weight-regular);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 标志按主题切换：隐藏规则要压过各处 img 的 display 设定 */
+html:not([data-theme="dark"]) .logo-dark,
+html[data-theme="dark"] .logo-light {
+  display: none !important;
 }

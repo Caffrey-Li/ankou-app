@@ -1,7 +1,7 @@
 button.space-overview {
   width: 100%;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid color-mix(in srgb, var(--color-card) 85%, transparent);
   font: inherit;
   color: inherit;
   text-align: left;
@@ -34,7 +34,7 @@ button.space-overview {
 .space-card-bar i {
   display: block;
   height: 100%;
-  background: #8ea0b5;
+  background: var(--chart-3);
 }
 
 .space-card-bar b {
@@ -185,7 +185,7 @@ button.space-overview {
 }
 
 .space-tools > button:hover {
-  background: rgba(29, 29, 31, 0.035);
+  background: color-mix(in srgb, var(--color-graphite) 3.5%, transparent);
 }
 
 .space-tools > button.active {
@@ -218,7 +218,7 @@ button.space-overview {
   font-size: 11px;
 }
 
-/* 工具图标位 24:42：白到 #E5E5EB 渐变，0.47px 描边，圆角 7/30 */
+/* 工具图标位 24:42：白到 var(--color-separator) 渐变，0.47px 描边，圆角 7/30 */
 .space-mark {
   display: grid;
   flex: none;
@@ -226,9 +226,9 @@ button.space-overview {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 0.5px solid rgba(29, 29, 31, 0.08);
+  border: 0.5px solid color-mix(in srgb, var(--color-graphite) 8%, transparent);
   border-radius: 7px;
-  background: linear-gradient(180deg, #ffffff, #e5e5eb);
+  background: var(--color-card);
   color: var(--color-graphite);
   font-family: var(--font-latin);
   font-size: 12px;
@@ -278,7 +278,7 @@ img.space-mark {
   height: 6px;
   overflow: hidden;
   border-radius: 3px;
-  background: rgba(29, 29, 31, 0.07);
+  background: color-mix(in srgb, var(--color-graphite) 7%, transparent);
 }
 
 .space-meter span {
@@ -362,7 +362,7 @@ img.space-mark {
   height: 10px;
   overflow: hidden;
   border-radius: 5px;
-  background: rgba(29, 29, 31, 0.07);
+  background: color-mix(in srgb, var(--color-graphite) 7%, transparent);
 }
 
 .space-legend {
@@ -569,7 +569,7 @@ img.space-mark {
   border-radius: var(--radius-control);
   background: var(--color-ochre);
   box-shadow: 0 2px 6px -1px rgba(26, 38, 64, 0.18);
-  color: white;
+  color: var(--color-on-accent);
   font-size: 13px;
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -585,7 +585,7 @@ img.space-mark {
 }
 
 .space-detail footer button:disabled {
-  background: color-mix(in srgb, var(--color-ochre) 35%, white);
+  background: color-mix(in srgb, var(--color-ochre) 35%, var(--color-card));
   box-shadow: none;
   cursor: default;
 }
@@ -597,14 +597,14 @@ img.space-mark {
 .space-secondary {
   padding: 7px 14px;
   border-radius: var(--radius-control);
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   color: var(--color-graphite);
   font-size: 13px;
   font-weight: var(--font-weight-medium);
 }
 
 .space-secondary:hover {
-  background: rgba(29, 29, 31, 0.09);
+  background: color-mix(in srgb, var(--color-graphite) 9%, transparent);
 }
 
 .space-dialog p,
@@ -616,7 +616,7 @@ img.space-mark {
 }
 
 .space-dialog {
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid color-mix(in srgb, var(--color-card) 85%, transparent);
   color: var(--color-graphite);
   display: flex;
   flex-direction: column;
@@ -636,12 +636,12 @@ img.space-mark {
 }
 
 .space-dialog-icon.ochre {
-  background: color-mix(in srgb, var(--color-ochre) 12%, white);
+  background: color-mix(in srgb, var(--color-ochre) 12%, var(--color-card));
   color: var(--color-ochre);
 }
 
 .space-dialog-icon.mist {
-  background: color-mix(in srgb, var(--color-mist) 12%, white);
+  background: color-mix(in srgb, var(--color-mist) 12%, var(--color-card));
   color: var(--color-mist);
 }
 
@@ -700,7 +700,7 @@ img.space-mark {
   border-radius: var(--radius-control);
   font-size: 13px;
   font-weight: var(--font-weight-medium);
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   color: var(--color-graphite);
 }
 

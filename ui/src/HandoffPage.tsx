@@ -204,7 +204,10 @@ export function HandoffPage({
   defaultMode = "ai",
   searchRequest = 0,
   onSettings = () => undefined,
+  focus,
 }: {
+  /** 从总览或工具页点「交接」带过来的对话 */
+  focus?: { tool: string; id: string; at: number };
   rows: HandoffRow[];
   sources: ConversationSources | null;
   threshold: number;
@@ -227,6 +230,9 @@ export function HandoffPage({
   const [transcript, setTranscript] = useState("");
   const [deeplinkToken, setDeeplinkToken] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focus) setSelectedId(focus.id);
+  }, [focus]);
   useEffect(() => {
     if (searchRequest > 0) searchRef.current?.focus();
   }, [searchRequest]);

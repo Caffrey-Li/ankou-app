@@ -34,7 +34,7 @@ pub use space::{
     LABEL_TRASH, LABEL_TRASHED, LABEL_UNKNOWN_APP, LABEL_UNKNOWN_DSH,
 };
 pub use store::{
-    presence, CodexFile, GrantStatus, Settings, Store, StoreError, StoredGrant, SummaryMode,
+    presence, Appearance, CodexFile, GrantStatus, Settings, Store, StoreError, StoredGrant, SummaryMode,
     ToolPresence,
 };
 pub use supervisor::{Supervisor, SupervisorHandle, TaskStop, TrackedChild};

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const files = ["UsagePage.tsx", "App.tsx", "api.ts", "catalog.ts", "usage.css", "OverviewCards.tsx"];
+const files = ["UsagePage.tsx", "App.tsx", "api.ts", "catalog.ts", "usage.css", "OverviewCards.tsx", "Console.tsx", "ToolsPage.tsx"];
 const source = files
   .map((name) => readFileSync(new URL(`./src/${name}`, import.meta.url), "utf8"))
   .join("\n");
@@ -21,7 +21,7 @@ assert.equal(source.includes("尚未接入"), false);
 assert.match(source, /一切正常/);
 assert.match(source, /不提供/);
 assert.match(source, /Harness 与 DS Bot 共用/);
-assert.match(source, /管理授权/);
+assert.match(source, /授权 · 只读/);
 assert.match(source, /个人账户来源待验证/);
 assert.match(source, /余额密钥未保存/);
 assert.match(source, /DeepSeek 账户 · 余额/);

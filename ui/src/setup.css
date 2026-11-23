@@ -22,9 +22,9 @@
   margin: 0;
   padding: 36px 48px 28px;
   overflow: hidden;
-  border: 1px solid rgba(29, 29, 31, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-graphite) 8%, transparent);
   border-radius: var(--radius-window);
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--color-card) 92%, transparent);
   box-shadow: 0 30px 80px -10px rgba(20, 26, 36, 0.22);
 }
 
@@ -90,7 +90,7 @@
   height: 20px;
   place-items: center;
   border-radius: 10px;
-  background: rgba(29, 29, 31, 0.08);
+  background: color-mix(in srgb, var(--color-graphite) 8%, transparent);
   color: var(--color-text-tertiary);
   font-family: var(--font-latin);
   font-size: 11px;
@@ -100,13 +100,13 @@
 .step.done b,
 .step.current b {
   background: var(--color-mist);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .step-line {
   width: 28px;
   height: 1px;
-  background: rgba(29, 29, 31, 0.15);
+  background: color-mix(in srgb, var(--color-graphite) 15%, transparent);
 }
 
 .setup-list {
@@ -164,7 +164,7 @@
   margin: 6px 0;
   padding: 2px 16px 6px;
   border-radius: 14px;
-  background: rgba(29, 29, 31, 0.035);
+  background: color-mix(in srgb, var(--color-graphite) 3.5%, transparent);
 }
 
 .setup-panel .setup-tool {
@@ -225,4 +225,181 @@
 .step b svg {
   width: 11px;
   height: 11px;
+}
+
+/* ===== 新版首次启动：厂商卡片 + 开关（深浅随主题） ===== */
+.setup {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+}
+
+.setup-traffic {
+  flex: none;
+  height: 44px;
+}
+
+.setup .setup-card {
+  align-items: stretch;
+  gap: 18px;
+  width: 100%;
+  height: auto;
+  flex: 1;
+  padding: 4px 48px 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow-y: auto;
+}
+
+.setup-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.setup .setup-mark {
+  width: 44px;
+  height: 44px;
+}
+
+.setup .setup-title {
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.setup .setup-title h1 {
+  font-size: 22px;
+}
+
+.setup .setup-title p {
+  font-size: 12px;
+}
+
+.setup-top .steps {
+  margin-left: auto;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.setup-vendor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+}
+
+.setup-vendor.on {
+  box-shadow: var(--shadow-panel), inset 0 0 0 1.5px var(--color-mist);
+}
+
+.setup-vendor.missing {
+  opacity: 0.6;
+}
+
+.setup-vendor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-vendor-head strong {
+  font-size: 13px;
+}
+
+.setup-vendor-head .switch {
+  margin-left: auto;
+}
+
+.setup-missing {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.setup-ends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.setup-ends span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setup-ends .dim {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.setup-reads {
+  margin: 0;
+  color: var(--color-graphite);
+  font-size: 12px;
+}
+
+.setup-more {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 12px;
+}
+
+.setup-caps {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-separator);
+}
+
+.setup-end-name {
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.setup .setup-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--fill-1);
+  font-size: 12px;
+}
+
+.setup .setup-note p {
+  margin: 0;
+}
+
+.setup .setup-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 0;
+  border: 0;
+}
+
+.setup-count {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .setup-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

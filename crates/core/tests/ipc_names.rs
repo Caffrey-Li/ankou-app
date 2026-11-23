@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde::Serialize;
-use wanxiang_core::{Capability, GrantStatus, SummaryMode, ToolId, ToolPresence};
+use wanxiang_core::{Appearance, Capability, GrantStatus, SummaryMode, ToolId, ToolPresence};
 
 #[derive(Serialize, serde::Deserialize, PartialEq, Debug)]
 struct IpcNames {
@@ -11,6 +11,7 @@ struct IpcNames {
     grant_status: Vec<String>,
     tool_presence: Vec<String>,
     summary_mode: Vec<String>,
+    appearance: Vec<String>,
 }
 
 fn json_name<T: Serialize>(value: T) -> String {
@@ -102,6 +103,7 @@ fn ipc_names_match_the_ui_contract() {
             ToolPresence::NeedsReauth,
         ]),
         summary_mode: sorted(&[SummaryMode::Ask, SummaryMode::Local, SummaryMode::Ai]),
+        appearance: sorted(&[Appearance::System, Appearance::Light, Appearance::Dark]),
     };
     assert_eq!(actual, expected);
     assert!(expected.tool_id.iter().any(|name| name == "codex"));

@@ -77,10 +77,18 @@ pub fn run() {
                 window.app_handle().exit(0);
             }
         }
-        WindowEvent::Resized(_) => {
-            #[cfg(target_os = "macos")]
-            {
-                let _ = place_sidebar_effect(window);
+        WindowEvent::ThemeChanged(_) => {
+            // 跟随系统时，系统切换深浅色后重新垫窗口底色
+            let appearance = window
+                .app_handle()
+                .try_state::<commands::Hub>()
+                .and_then(|hub| hub.store.settings().ok())
+                .map(|settings| settings.appearance)
+                .unwrap_or_default();
+            if appearance == wanxiang_core::Appearance::System {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    apply_theme(&webview, appearance);
+                }
             }
         }
         _ => {}
@@ -98,25 +106,14 @@ pub fn run() {
 fn apply_window_material(window: &tauri::WebviewWindow) {
     #[cfg(target_os = "macos")]
     {
-        let _ = window.set_theme(Some(Theme::Light));
-        paint_window_backdrop(window);
-        match window_vibrancy::apply_vibrancy(
-            window,
-            window_vibrancy::NSVisualEffectMaterial::Sidebar,
-            Some(window_vibrancy::NSVisualEffectState::Active),
-            Some(16.0),
-        ) {
-            Ok(()) if place_sidebar_effect(window) => {
-                let _ = window.eval("document.documentElement.dataset.vibrancy='sidebar'");
-            }
-            Ok(()) => {
-                let _ = window_vibrancy::clear_vibrancy(window);
-                eprintln!("无法把系统材质限制在侧栏内，侧栏改用半透明白");
-            }
-            Err(error) => {
-                eprintln!("系统侧栏材质不可用，侧栏改用半透明白：{error}");
-            }
-        }
+        // 按保存的外观先画一次底色，网页加载后会再按实际主题同步一次
+        let appearance = window
+            .app_handle()
+            .try_state::<commands::Hub>()
+            .and_then(|hub| hub.store.settings().ok())
+            .map(|settings| settings.appearance)
+            .unwrap_or_default();
+        apply_theme(window, appearance);
     }
     #[cfg(target_os = "windows")]
     {
@@ -135,42 +132,37 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn place_sidebar_effect(window: &impl raw_window_handle::HasWindowHandle) -> bool {
-    use objc2::msg_send;
-    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
-    use objc2_foundation::{NSPoint, NSRect, NSSize};
-    use raw_window_handle::RawWindowHandle;
 
-    let Ok(handle) = window.window_handle() else {
-        return false;
-    };
-    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
-        return false;
-    };
-    let root: &NSView = unsafe { appkit.ns_view.cast().as_ref() };
-    let Some(effect) = root.viewWithTag(91376254) else {
-        return false;
-    };
-    let bounds = root.bounds();
-    let sidebar_height = (bounds.size.height - 20.0).max(0.0);
-    let origin_y = if root.isFlipped() { 9.0 } else { 11.0 };
-    unsafe {
-        effect.setFrame(NSRect::new(
-            NSPoint::new(9.0, origin_y),
-            NSSize::new(224.0, sidebar_height),
-        ));
-        effect.setAutoresizingMask(NSAutoresizingMaskOptions::ViewHeightSizable);
-        let () = msg_send![&*effect, setCornerRadius: 16.0_f64];
+/// 外观：跟随系统或固定浅色、深色。设置窗口的系统主题（红绿灯、滚动条），
+/// 再给窗口垫一层与页面底色相同的颜色——拖动改变大小时网页比窗口慢一拍，
+/// 新露出的边缘显示这层底色，不会透出后面的窗口。
+pub(crate) fn apply_theme<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, appearance: wanxiang_core::Appearance) {
+    #[cfg(target_os = "macos")]
+    {
+        use wanxiang_core::Appearance;
+        let theme = match appearance {
+            Appearance::Light => Some(Theme::Light),
+            Appearance::Dark => Some(Theme::Dark),
+            Appearance::System => None,
+        };
+        let _ = window.set_theme(theme);
+        let dark = match appearance {
+            Appearance::Dark => true,
+            Appearance::Light => false,
+            Appearance::System => matches!(window.theme(), Ok(Theme::Dark)),
+        };
+        if window.label() == "main" {
+            paint_window_backdrop(window, dark);
+        }
     }
-    effect.frame().size.height > 0.0
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, appearance);
+    }
 }
 
-/// 窗口本身是透明的（侧栏要透出系统材质），拖动改变大小时网页内容比窗口慢一拍，
-/// 新露出的边缘没有内容，会透出后面的窗口，看起来是一片黑。
-/// 给窗口垫一层与页面底色相同的浅灰：侧栏的系统材质在它上面，不受影响。
 #[cfg(target_os = "macos")]
-fn paint_window_backdrop(window: &impl raw_window_handle::HasWindowHandle) {
+fn paint_window_backdrop(window: &impl raw_window_handle::HasWindowHandle, dark: bool) {
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
     use objc2_app_kit::NSView;
@@ -188,12 +180,13 @@ fn paint_window_backdrop(window: &impl raw_window_handle::HasWindowHandle) {
         if ns_window.is_null() {
             return;
         }
-        // 与 --color-window-bottom（#f4f4f6）一致
+        // 与页面底色一致：浅色 #f2f3f5，深色 #111317
+        let (red, green, blue) = if dark { (17.0, 19.0, 23.0) } else { (242.0, 243.0, 245.0) };
         let color: *mut AnyObject = msg_send![
             class!(NSColor),
-            colorWithSRGBRed: 244.0_f64 / 255.0,
-            green: 244.0_f64 / 255.0,
-            blue: 246.0_f64 / 255.0,
+            colorWithSRGBRed: red / 255.0_f64,
+            green: green / 255.0_f64,
+            blue: blue / 255.0_f64,
             alpha: 1.0_f64
         ];
         if !color.is_null() {

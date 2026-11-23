@@ -23,7 +23,7 @@ html[data-compare="1"] .window {
   height: calc(100% - 20px);
   margin: 9px 0 11px 9px;
   padding: 20px 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid color-mix(in srgb, var(--color-card) 85%, transparent);
   border-radius: var(--radius-card);
   background: var(--glass);
   box-shadow: var(--shadow-sidebar);
@@ -54,7 +54,7 @@ html[data-vibrancy] main {
 }
 
 html[data-vibrancy] .sidebar {
-  background: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--color-card) 45%, transparent);
   backdrop-filter: none;
 }
 
@@ -173,7 +173,7 @@ nav button[aria-current="page"] .nav-icon {
 }
 
 .tool-link:hover {
-  background: rgba(29, 29, 31, 0.05);
+  background: color-mix(in srgb, var(--color-graphite) 5%, transparent);
 }
 
 .letter {
@@ -183,9 +183,9 @@ nav button[aria-current="page"] .nav-icon {
   height: 20px;
   place-items: center;
   box-sizing: border-box;
-  border: 0.313px solid rgba(29, 29, 31, 0.08);
+  border: 0.313px solid color-mix(in srgb, var(--color-graphite) 8%, transparent);
   border-radius: 4.688px;
-  background: linear-gradient(#ffffff, #e5e5eb);
+  background: var(--color-card);
   color: var(--color-graphite);
   font-family: var(--font-latin);
   font-size: 8.13px;
@@ -313,9 +313,9 @@ h1 {
 .glass-icon {
   display: flex;
   align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid color-mix(in srgb, var(--color-card) 80%, transparent);
   border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.62);
+  background: color-mix(in srgb, var(--color-card) 62%, transparent);
   box-shadow: var(--shadow-sidebar);
   backdrop-filter: blur(var(--blur-glass));
   color: var(--color-text-secondary);
@@ -337,7 +337,7 @@ h1 {
 .pill-rule {
   width: 1px;
   height: 14px;
-  background: rgba(29, 29, 31, 0.12);
+  background: color-mix(in srgb, var(--color-graphite) 12%, transparent);
 }
 
 .icon-hit,
@@ -411,4 +411,149 @@ h1 {
   background: var(--tint-ochre);
   color: var(--color-ochre);
   font-size: var(--font-size-caption);
+}
+
+/* ===== 新版主窗口：顶部导航 + 内容区（深浅两套共用变量） ===== */
+.window.app-shell {
+  flex-direction: column;
+  background: var(--color-window);
+  color: var(--color-graphite);
+}
+
+.topbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 16px 0 20px;
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.topbar .traffic {
+  width: 60px;
+  height: 100%;
+}
+
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  color: var(--color-graphite);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.topbar .brand img {
+  width: 22px;
+  height: 22px;
+}
+
+.topnav {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  margin-left: 10px;
+}
+
+.topnav button {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+.topnav button:hover {
+  color: var(--color-graphite);
+}
+
+.topnav button[aria-current="page"] {
+  background: var(--fill-2);
+  color: var(--color-graphite);
+  font-weight: var(--font-weight-semibold);
+}
+
+.nav-count {
+  color: var(--color-warn-text);
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+}
+
+.topbar-stamp {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.topbar-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill-1);
+  color: var(--color-graphite);
+  place-items: center;
+  cursor: default;
+}
+
+.topbar-icon:hover {
+  background: var(--fill-2);
+}
+
+.topbar-icon:disabled {
+  opacity: 0.5;
+}
+
+.topbar .update-badge {
+  align-self: center;
+  margin: 0;
+}
+
+.app-shell main.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+}
+
+.app-shell main.page-overview,
+.app-shell main.page-tools,
+.app-shell main.page-settings {
+  overflow: hidden;
+}
+
+.page-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-head .toolbar-actions {
+  margin-left: auto;
+}
+
+.app-shell .glass-pill,
+.app-shell .glass-icon {
+  border: 0;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: none;
 }

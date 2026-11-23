@@ -10,9 +10,9 @@
   align-items: center;
   height: 30px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid color-mix(in srgb, var(--color-card) 80%, transparent);
   border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.62);
+  background: color-mix(in srgb, var(--color-card) 62%, transparent);
   box-shadow: var(--shadow-sidebar);
   backdrop-filter: blur(var(--blur-glass));
   color: var(--color-graphite);
@@ -28,7 +28,7 @@
 }
 
 .date-range-pill[aria-expanded="true"] {
-  background: white;
+  background: var(--color-card);
 }
 
 .date-range-pill:focus-visible,
@@ -45,7 +45,7 @@
   box-sizing: border-box;
   width: 304px;
   padding: 16px 16px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid color-mix(in srgb, var(--color-card) 90%, transparent);
   border-radius: var(--radius-popover);
   background: var(--color-card);
   box-shadow: 0 24px 60px -8px rgba(26, 31, 41, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
@@ -82,7 +82,7 @@
 }
 
 .date-nav:hover:not(:disabled) {
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
 }
 
 .date-nav:disabled,
@@ -146,13 +146,13 @@
 }
 
 .date-cell button:hover:not(:disabled) {
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
 }
 
 .date-cell.edge button,
 .date-cell.edge button:hover {
   background: var(--color-mist);
-  color: white;
+  color: var(--color-on-accent);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -189,18 +189,18 @@
 }
 
 .date-secondary {
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   color: var(--color-graphite);
 }
 
 .date-primary {
   background: var(--color-mist);
   box-shadow: 0 2px 6px -1px rgba(26, 38, 64, 0.18);
-  color: white;
+  color: var(--color-on-accent);
 }
 
 .date-primary:disabled {
-  background: color-mix(in srgb, var(--color-mist) 35%, white);
+  background: color-mix(in srgb, var(--color-mist) 35%, var(--color-card));
   box-shadow: none;
   cursor: default;
 }

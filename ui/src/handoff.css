@@ -26,7 +26,7 @@
   align-items: center;
   gap: 8px;
   border-radius: 10px;
-  background: rgba(29, 29, 31, 0.05);
+  background: color-mix(in srgb, var(--color-graphite) 5%, transparent);
   color: var(--color-text-tertiary);
   padding: 8px 10px;
 }
@@ -64,7 +64,7 @@
 }
 
 .handoff-meter small {
-  color: #a1a1a6;
+  color: var(--color-text-tertiary);
   font-size: 12px;
   line-height: 1;
 }
@@ -77,7 +77,7 @@
   width: 64px;
   height: 4px;
   border-radius: 2px;
-  background: rgba(29, 29, 31, 0.07);
+  background: color-mix(in srgb, var(--color-graphite) 7%, transparent);
   overflow: hidden;
 }
 
@@ -115,7 +115,7 @@
 }
 
 .handoff-row[aria-pressed="true"] {
-  background: rgba(74, 111, 160, 0.08);
+  background: color-mix(in srgb, var(--color-mist) 8%, transparent);
 }
 
 .handoff-mark {
@@ -124,8 +124,8 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(#fff, #e5e5eb);
-  border: 0.5px solid rgba(29, 29, 31, 0.08);
+  background: var(--color-card);
+  border: 0.5px solid color-mix(in srgb, var(--color-graphite) 8%, transparent);
   font-size: 11px;
   font-weight: 600;
 }
@@ -207,7 +207,7 @@
 
 .handoff-chip {
   border-radius: var(--radius-control);
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   padding: 2px 8px;
   color: var(--color-text-secondary);
   font-size: 11px;
@@ -226,7 +226,7 @@
   width: 132px;
   height: 132px;
   border-radius: 50%;
-  background: conic-gradient(var(--ring, var(--color-mist)) calc(var(--pct) * 1%), #ececf1 0);
+  background: conic-gradient(var(--ring, var(--color-mist)) calc(var(--pct) * 1%), var(--fill-2) 0);
 }
 
 .handoff-ring.hot {
@@ -240,7 +240,7 @@
   width: 108px;
   height: 108px;
   border-radius: 50%;
-  background: white;
+  background: var(--color-card);
   font-size: 26px;
   font-weight: 600;
 }
@@ -310,7 +310,7 @@
   width: 100%;
   border: 0;
   border-radius: 14px;
-  background: rgba(29, 29, 31, 0.04);
+  background: color-mix(in srgb, var(--color-graphite) 4%, transparent);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -319,7 +319,7 @@
 
 .handoff-choice em {
   border-radius: 999px;
-  background: rgba(74, 111, 160, 0.12);
+  background: color-mix(in srgb, var(--color-mist) 12%, transparent);
   color: var(--color-mist);
   font-size: 11px;
   font-style: normal;
@@ -328,8 +328,8 @@
 }
 
 .handoff-choice.recommended {
-  border: 1.5px solid rgba(74, 111, 160, 0.6);
-  background: rgba(74, 111, 160, 0.07);
+  border: 1.5px solid color-mix(in srgb, var(--color-mist) 60%, transparent);
+  background: color-mix(in srgb, var(--color-mist) 7%, transparent);
 }
 
 .handoff-choice small,
@@ -345,7 +345,7 @@
 }
 
 .handoff-note {
-  background: rgba(29, 29, 31, 0.04);
+  background: color-mix(in srgb, var(--color-graphite) 4%, transparent);
 }
 
 .handoff-note strong {
@@ -392,17 +392,17 @@
 .primary-button {
   margin-left: auto;
   background: var(--color-mist);
-  color: white;
+  color: var(--color-on-accent);
   box-shadow: 0 2px 6px -1px rgba(26, 38, 64, 0.18);
 }
 
 .quiet-button {
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   color: var(--color-graphite);
 }
 
 .handoff-alert {
-  background: rgba(185, 115, 63, 0.12);
+  background: color-mix(in srgb, var(--color-ochre) 12%, transparent);
   color: var(--color-graphite);
 }
 
@@ -411,7 +411,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(29, 29, 31, 0.16);
+  background: color-mix(in srgb, var(--color-graphite) 16%, transparent);
 }
 
 .handoff-sheet,
@@ -419,7 +419,7 @@
   box-sizing: border-box;
   width: min(780px, calc(100% - 48px));
   border-radius: 22px;
-  background: white;
+  background: var(--color-card);
   box-shadow: 0 24px 60px -8px rgba(26, 31, 41, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
   padding: 22px 26px 20px;
 }
@@ -484,7 +484,7 @@
   display: flex;
   gap: 14px;
   border-radius: var(--radius-control);
-  background: rgba(29, 29, 31, 0.04);
+  background: color-mix(in srgb, var(--color-graphite) 4%, transparent);
   color: var(--color-text-tertiary);
   font-size: 12px;
   padding: 5px 12px;
@@ -514,7 +514,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #a1a1a6;
+  background: var(--color-text-tertiary);
 }
 
 .sheet-steps .now i {
@@ -529,7 +529,7 @@
   margin-left: auto;
   border: 0;
   border-radius: 50%;
-  background: rgba(29, 29, 31, 0.06);
+  background: color-mix(in srgb, var(--color-graphite) 6%, transparent);
   color: var(--color-graphite);
 }
 
