@@ -21,6 +21,8 @@ tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+semver = "1"
 wanxiang-adapter-antigravity = { path = "../crates/adapters/antigravity" }
 wanxiang-adapter-claude = { path = "../crates/adapters/claude" }
 wanxiang-adapter-codex = { path = "../crates/adapters/codex" }

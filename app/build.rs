@@ -40,6 +40,8 @@ fn main() {
         "open_privacy_settings",
         "send_notice",
         "tray_action",
+        "check_update",
+        "install_update",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new()

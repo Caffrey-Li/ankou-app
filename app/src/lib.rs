@@ -18,6 +18,7 @@ mod measured;
 mod runtime;
 mod space;
 mod system;
+mod update;
 
 pub fn run() {
     commands::attach(
@@ -28,9 +29,11 @@ pub fn run() {
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent,
                 None,
             ))
-            .plugin(tauri_plugin_notification::init()),
+            .plugin(tauri_plugin_notification::init())
+            .plugin(tauri_plugin_updater::Builder::new().build()),
     )
     .manage(Supervisor::new())
+    .manage(update::PendingUpdate::default())
     .setup(|app| {
         app.manage(commands::Hub::open(app.handle())?);
         setup_app_menu(app.handle())?;

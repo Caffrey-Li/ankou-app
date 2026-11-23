@@ -11,6 +11,7 @@ import { OverviewSpaceCard, OverviewTalkCard, type SpaceSummary } from "./Overvi
 import { SetupPage } from "./SetupPage";
 import { OverviewToolRows, SidebarTools, toolMarks, vendorMarks } from "./tool-status";
 import type { VendorId } from "./catalog";
+import { UpdateBadge, UpdateGate, useUpdater } from "./update";
 import { QuotaCard, RangeControl, UsagePage, type RefreshPending, type UsageRange } from "./UsagePage";
 
 const pages = [
@@ -156,6 +157,7 @@ export function App() {
   const forced = new URLSearchParams(window.location.search).get("page");
   const [page, setPage] = useState<PageId>(initialPage);
   const [focusTool, setFocusTool] = useState<{ id: VendorId; at: number } | undefined>(undefined);
+  const updater = useUpdater();
   useEffect(() => {
     // 换页时内容区回到顶部（工具直达的定位在设置页里另行处理）
     document.querySelector("main")?.scrollTo(0, 0);
@@ -416,6 +418,7 @@ export function App() {
     (inTauri() && !snapshot.settings.setup_complete && !preview && forced !== "settings")
   ) {
     return (
+      <>
       <SetupPage
         snapshot={snapshot}
         onDone={() =>
@@ -428,12 +431,14 @@ export function App() {
           void loadSnapshot().then(setSnapshot);
         }}
       />
+      <UpdateGate updater={updater} />
+      </>
     );
   }
 
   return (
     <div className="window">
-      <aside className="sidebar">
+      <aside className="sidebar" inert={updater.info.mandatory ? true : undefined}>
         {windows ? null : <div className="traffic" data-tauri-drag-region aria-hidden="true" />}
         <div className="brand">
           <img src={mark} alt="" width={22} height={22} />
@@ -455,12 +460,16 @@ export function App() {
         <div className="nav-gap" aria-hidden="true" />
         <p className="tools-label">工具</p>
         <SidebarTools marks={marks} onOpen={openTool} />
+        <UpdateBadge updater={updater} onOpen={() => setPage("settings")} />
         <p className="local">
           <span>本机运行</span>
           <span>数据只保存在这台电脑</span>
         </p>
       </aside>
-      <main className={page === "settings" ? "main-fixed" : undefined}>
+      <main
+        className={page === "settings" ? "main-fixed" : undefined}
+        inert={updater.info.mandatory ? true : undefined}
+      >
         <header className="toolbar">
           <div className="title-block">
             <h1>{current.label}</h1>
@@ -567,6 +576,7 @@ export function App() {
               void loadSnapshot().then(setSnapshot);
             }}
             focusTool={focusTool}
+            updater={updater}
           />
         ) : page === "usage" ? (
           <UsagePage usage={usage} pending={pending} range={range} onSettings={() => setPage("settings")} />
@@ -639,6 +649,7 @@ export function App() {
         </section>
         )}
       </main>
+      <UpdateGate updater={updater} />
     </div>
   );
 }

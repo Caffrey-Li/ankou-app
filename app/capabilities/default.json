@@ -1,7 +1,10 @@
 {
   "identifier": "default",
-  "description": "本地主窗口。只放行授权、设置、密钥、历史和用量命令。窗口仍然不能发起网络请求。",
-  "windows": ["main", "tray"],
+  "description": "本地主窗口。只放行授权、设置、密钥、历史、用量与更新命令。窗口不能发起网络请求；检查与下载更新由应用后台进行。",
+  "windows": [
+    "main",
+    "tray"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -35,6 +38,8 @@
     "allow-run-cleanup",
     "allow-open-privacy-settings",
     "allow-send-notice",
-    "allow-tray-action"
+    "allow-tray-action",
+    "allow-check-update",
+    "allow-install-update"
   ]
 }

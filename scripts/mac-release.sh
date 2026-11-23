@@ -101,8 +101,41 @@ xcrun stapler staple "${APP}" >/dev/null || die ".app 装订公证票据失败"
 rm -f "${ZIP}"
 echo "  已装订"
 
+step "更新包（应用内更新用）"
+UPDATER_KEY="${HOME}/.tauri/wanxiang-updater.key"
+[ -f "${UPDATER_KEY}" ] || die "没有更新签名私钥 ${UPDATER_KEY}"
+BASE_URL=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["base_url"].rstrip("/"))')
+ENDPOINT=$(/usr/bin/python3 -c 'import json;print(json.load(open("app/tauri.conf.json"))["plugins"]["updater"]["endpoints"][0])')
+[ "${ENDPOINT}" = "${BASE_URL}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
+case "${BASE_URL}" in *UPDATE_HOST*) die "还没有配置更新服务地址（release/config.json）";; esac
+TARBALL="${OUT}/Wanxiang-${VERSION}-universal.app.tar.gz"
+COPYFILE_DISABLE=1 tar -czf "${TARBALL}" -C "${OUT}" "${NAME}.app" || die "打更新包失败"
+npx tauri signer sign -f "${UPDATER_KEY}" -p "" "${TARBALL}" >/dev/null 2>&1 || die "更新包签名失败"
+[ -s "${TARBALL}.sig" ] || die "没有生成更新包签名"
+NOTES_FILE="release/notes/${VERSION}.md"
+[ -f "${NOTES_FILE}" ] || die "缺少更新说明 ${NOTES_FILE}"
+/usr/bin/python3 - "${VERSION}" "${BASE_URL}" "${TARBALL}" "${NOTES_FILE}" "${OUT}/latest.json" <<'PY'
+import json, sys, datetime, os
+version, base, tarball, notes_file, out = sys.argv[1:6]
+signature = open(tarball + ".sig").read().strip()
+policy = json.load(open("release/update-policy.json"))
+url = f"{base}/v{version}/{os.path.basename(tarball)}"
+entry = {"signature": signature, "url": url}
+manifest = {
+    "version": version,
+    "notes": open(notes_file, encoding="utf-8").read().strip(),
+    "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "minimum_version": policy.get("minimum_version", version),
+    "download_url": f"{base}/Wanxiang.dmg",
+    "platforms": {"darwin-aarch64": entry, "darwin-x86_64": entry},
+}
+json.dump(manifest, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+print(f"  latest.json：版本 {version}，最低版本 {manifest['minimum_version']}")
+PY
+echo "  更新包：$(basename "${TARBALL}")（$(du -sh "${TARBALL}" | cut -f1)），已签名"
+
 step "打 dmg"
-DMG="${OUT}/${NAME}-${VERSION}.dmg"
+DMG="${OUT}/Wanxiang-${VERSION}.dmg"
 STAGE=$(mktemp -d)
 ditto "${APP}" "${STAGE}/${NAME}.app"
 ln -s /Applications "${STAGE}/Applications"
@@ -128,6 +161,7 @@ echo "dmg：${DMG}"
 echo "大小：$(du -sh "${DMG}" | cut -f1)"
 echo "SHA-256：$(shasum -a 256 "${DMG}" | cut -d' ' -f1)"
 if [ ${fail} -eq 0 ]; then
+  echo "下一步：bash scripts/mac-publish.sh 上传到更新服务"
   echo; echo "结论：可以分发"
 else
   echo; echo "结论：系统检查未通过"; exit 1

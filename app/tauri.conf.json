@@ -26,7 +26,10 @@
         "backgroundColor": "#00000000",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 27, "y": 34 }
+        "trafficLightPosition": {
+          "x": 27,
+          "y": 34
+        }
       }
     ],
     "security": {
@@ -49,6 +52,14 @@
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist",
       "signingIdentity": "Wanxiang Local Signing"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkzRjAzNjU2NTM4Mjk5NUMKUldSY21ZSlRWamJ3a3dLVGRGOVpYL3RBUFNoaUYxUkpLeXNxRDF6QjIxOTdxL2FUUGlDS3lrOFEK",
+      "endpoints": [
+        "https://pub-9d7d8ca156fd49efb4ffac4a982abeec.r2.dev/latest.json"
+      ]
     }
   }
 }

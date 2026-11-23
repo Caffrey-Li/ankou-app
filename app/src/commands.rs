@@ -323,6 +323,8 @@ pub fn attach<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         open_privacy_settings,
         send_notice,
         tray_action,
+        crate::update::check_update,
+        crate::update::install_update,
     ])
 }
 
@@ -434,6 +436,8 @@ mod tests {
             "open-privacy-settings",
             "send-notice",
             "tray-action",
+            "check-update",
+            "install-update",
         ];
         let text = include_str!("../capabilities/default.json");
         let value: serde_json::Value = serde_json::from_str(text).unwrap();

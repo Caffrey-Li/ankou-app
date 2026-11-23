@@ -5,6 +5,7 @@ import { Check } from "./Check";
 import { presenceLabel, specOf, toolSpecs, vendors, type CapabilityId, type Presence, type VendorId } from "./catalog";
 import { capChecked, grantableKind } from "./grants";
 import { ToolIcon } from "./tool-status";
+import { UpdateSection, type Updater } from "./update";
 import "./settings.css";
 
 export function SettingsPage({
@@ -12,12 +13,15 @@ export function SettingsPage({
   onChange,
   onReload,
   focusTool,
+  updater,
 }: {
   snapshot: Snapshot;
   onChange: (update: (current: Snapshot) => Snapshot) => void;
   onReload: () => void;
   /** 从侧栏或概览点进来的工具：展开它的授权并滚到眼前。 */
   focusTool?: { id: VendorId; at: number };
+  /** 版本与更新；没有传时不显示这一节 */
+  updater?: Updater;
 }) {
   const [openTool, setOpenTool] = useState<VendorId | "">(focusTool?.id ?? "");
   useEffect(() => {
@@ -255,6 +259,7 @@ export function SettingsPage({
             </div>
           </div>
         </section>
+        {updater ? <UpdateSection updater={updater} /> : null}
       </div>
       <aside className="settings-side" aria-label="工具与授权">
         <p className="section-label">工具与授权</p>

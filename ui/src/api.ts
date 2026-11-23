@@ -383,3 +383,36 @@ export function runCleanup(tool: string, token: string, entries: SpaceEntry[]) {
     })),
   });
 }
+
+export type UpdateInfo = {
+  current: string;
+  latest: string | null;
+  notes: string | null;
+  date: string | null;
+  minimum: string | null;
+  mandatory: boolean;
+  error: string | null;
+};
+
+export type UpdateProgress = { downloaded: number; total: number | null; stage: "download" | "install" };
+
+/** 预览环境里没有更新服务：只显示当前版本。 */
+export const previewUpdate: UpdateInfo = {
+  current: "0.1.0",
+  latest: null,
+  notes: null,
+  date: null,
+  minimum: null,
+  mandatory: false,
+  error: null,
+};
+
+export function checkUpdate() {
+  if (!inTauri()) return Promise.resolve(previewUpdate);
+  return call<UpdateInfo>("check_update");
+}
+
+export function installUpdate() {
+  if (!inTauri()) return Promise.resolve();
+  return call<void>("install_update");
+}

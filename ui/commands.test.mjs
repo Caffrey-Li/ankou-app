@@ -18,6 +18,7 @@ assert.deepEqual(
   [
     "begin-summary",
     "cancel-scan",
+    "check-update",
     "clear-history",
     "complete-setup",
     "deepseek-key-saved",
@@ -26,6 +27,7 @@ assert.deepEqual(
     "export-handoff",
     "get-settings",
     "get-usage",
+    "install-update",
     "list-conversations",
     "list-grants",
     "open-privacy-settings",
