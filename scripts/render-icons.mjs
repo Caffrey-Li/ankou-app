@@ -26,7 +26,8 @@ writePng("32x32.png", "icon-macos.svg", 32);
 writePng("128x128.png", "icon-macos.svg", 128);
 writePng("128x128@2x.png", "icon-macos.svg", 256);
 writePng("icon-windows-256.png", "icon-windows.svg", 256);
-writePng("tray-macos-template.png", "tray-macos-template.svg", 18);
+// 菜单栏按 18pt 高显示（tray-icon 会把图片缩放到 18pt），用 2 倍像素保证视网膜屏清晰
+writePng("tray-macos-template.png", "tray-macos-template.svg", 36);
 writePng("tray-windows-light.png", "tray-windows-light.svg", 16);
 writePng("tray-windows-dark.png", "tray-windows-dark.svg", 16);
 

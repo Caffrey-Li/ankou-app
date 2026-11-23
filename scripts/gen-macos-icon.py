@@ -38,7 +38,7 @@ def continuous(left, top, size, r):
     return " ".join(p)
 
 BODY=continuous(102,102,820,184.5)   # Apple 连续圆角（与系统图标轮廓同一套系数），比 824 模板内收 2px
-S=1.34                       # 圆环整体放大到主体宽度约 64%
+S=1.62                       # 圆环整体放大到主体宽度约 77%（11-22 用户反馈图标偏小，从 1.34 放大）
 T=512*(1-S)
 ring_mist="M535.408 345.624C579.534 351.832 619.386 375.315 646.198 410.906C673.009 446.498 684.584 491.282 678.376 535.408C672.168 579.534 648.685 619.386 613.094 646.198C577.502 673.009 532.718 684.584 488.592 678.376"
 ring_graphite="M422.96 654.464C389.462 633.535 364.409 601.473 352.202 563.908C339.994 526.344 341.413 485.679 356.208 449.056"
@@ -66,7 +66,7 @@ defs = f'''<defs>
   <linearGradient id="gloss" x1="512" y1="102" x2="512" y2="560" gradientUnits="userSpaceOnUse">
     <stop stop-color="#FFFFFF" stop-opacity="0.95"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
   </linearGradient>
-  <linearGradient id="well" x1="512" y1="176" x2="512" y2="848" gradientUnits="userSpaceOnUse">
+  <linearGradient id="well" x1="512" y1="136" x2="512" y2="888" gradientUnits="userSpaceOnUse">
     <stop stop-color="#E9EDF3"/><stop offset="1" stop-color="#FFFFFF"/>
   </linearGradient>
   <linearGradient id="mist" x1="512" y1="330" x2="560" y2="700" gradientUnits="userSpaceOnUse">
@@ -92,13 +92,13 @@ defs = f'''<defs>
     <feColorMatrix values="0 0 0 0 0.1  0 0 0 0 0.15  0 0 0 0 0.25  0 0 0 0.16 0" result="far"/>
     <feMerge><feMergeNode in="far"/><feMergeNode in="near"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
-  <filter id="wellInner" x="140" y="140" width="744" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+  <filter id="wellInner" x="110" y="110" width="804" height="820" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
     <feOffset in="SourceAlpha" dy="8"/><feGaussianBlur stdDeviation="10" result="o"/>
     <feComposite in="SourceAlpha" in2="o" operator="out" result="inner"/>
     <feColorMatrix in="inner" values="0 0 0 0 0.1  0 0 0 0 0.15  0 0 0 0 0.25  0 0 0 0.16 0" result="shade"/>
     <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge>
   </filter>
-  <filter id="ringShadow" x="120" y="120" width="784" height="800" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+  <filter id="ringShadow" x="100" y="100" width="824" height="840" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
     <feGaussianBlur in="SourceAlpha" stdDeviation="11"/><feOffset dy="12"/>
     <feColorMatrix values="0 0 0 0 0.1  0 0 0 0 0.15  0 0 0 0 0.25  0 0 0 0.26 0" result="s"/>
     <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -108,13 +108,13 @@ defs = f'''<defs>
 # legacy icns：完整一张图（含投影，旧系统按模板显示）
 legacy = f'''<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
 <!-- 万象小助手 macOS 图标（.icns 来源，macOS 15 及更早）。主体为 Apple 连续圆角（半径 184.5），820 宽，居中，不超出系统图标轮廓。
-     圆环放大 1.34 倍，外径约占主体 64%；只用石墨、雾蓝、赭色三色及其明暗。 -->
+     圆环放大 1.62 倍，外径约占主体 77%；只用石墨、雾蓝、赭色三色及其明暗。 -->
 {defs}
 <g filter="url(#bodyShadow)"><path d="{BODY}" fill="url(#body)"/></g>
 <g clip-path="url(#bodyClip)">
   <rect x="100" y="100" width="824" height="460" fill="url(#gloss)" opacity="0.55"/>
-  <circle cx="512" cy="512" r="336" fill="url(#well)" filter="url(#wellInner)"/>
-  <circle cx="512" cy="512" r="335" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="2"/>
+  <circle cx="512" cy="512" r="376" fill="url(#well)" filter="url(#wellInner)"/>
+  <circle cx="512" cy="512" r="375" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="2"/>
 </g>
 <path d="{BODY}" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="3" fill="none"/>
 <g filter="url(#ringShadow)">
@@ -129,7 +129,7 @@ open("brand/icon-macos.svg","w").write(legacy)
 def layer(body):
     return f'<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">{body}</svg>\n'
 g=f'transform="matrix({S} 0 0 {S} {T:.2f} {T:.2f})"'
-open("app/icons/Wanxiang.icon/Assets/L1-well.svg","w").write(layer('<circle cx="512" cy="512" r="336" fill="#F2F5F9"/>'))
+open("app/icons/Wanxiang.icon/Assets/L1-well.svg","w").write(layer('<circle cx="512" cy="512" r="376" fill="#F2F5F9"/>'))
 open("app/icons/Wanxiang.icon/Assets/L2-graphite.svg","w").write(layer(f'<g {g}><path d="{ring_graphite}" stroke="#1D1D1F" stroke-width="56" stroke-linecap="round"/></g>'))
 open("app/icons/Wanxiang.icon/Assets/L3-ochre.svg","w").write(layer(f'<g {g}><path d="{ring_ochre}" stroke="#B9733F" stroke-width="56" stroke-linecap="round"/></g>'))
 open("app/icons/Wanxiang.icon/Assets/L4-mist.svg","w").write(layer(f'<g {g}><path d="{ring_mist}" stroke="#4A6FA0" stroke-width="56" stroke-linecap="round"/></g>'))

@@ -67,19 +67,20 @@ html[data-vibrancy] .sidebar {
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   margin: 0;
   padding: 0 8px 16px;
   color: var(--color-graphite);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: var(--font-weight-bold);
   line-height: 1;
 }
 
 .brand img {
   display: block;
-  width: 22px;
-  height: 22px;
+  /* Figma 是 22px，用户要求放大 */
+  width: 28px;
+  height: 28px;
 }
 
 nav,
