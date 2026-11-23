@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import mark from "../../brand/mark.svg";
 import { isoDay } from "./DateRange";
-import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, scanSpace, sendNotice, type ConversationRow, type Snapshot, type SourceStatus, type UsageView } from "./api";
+import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, scanSpace, sendNotice, type ConversationRow, type Snapshot, type SourceStatus, type UsageDay, type UsageView } from "./api";
 import { loadDevFixture } from "./fixture";
 import { fixtureHandoffRows, HandoffFilters, HandoffPage, parseUpdated, handoffSubtitle, sourcesWhenListFails, type ConversationSources, type HandoffFilter } from "./HandoffPage";
 import { IconBubble, IconChart, IconClock, IconDisk, IconHome, IconPlus, IconRefresh, IconSearch, IconSet } from "./icons";
@@ -266,11 +266,11 @@ export function App() {
   function onRefresh() {
     if (!inTauri() || refreshing) return;
     setRefreshing(true);
-    setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true });
+    setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true });
     void refreshUsage().then((started) => {
       if (!started) {
         setRefreshing(false);
-        setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false });
+        setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false });
       }
     });
   }
@@ -304,18 +304,18 @@ export function App() {
         const part = event.payload;
         if (part === "started") {
           setRefreshing(true);
-          setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true });
+          setPending({ ds_bot: true, balance: true, codex: true, windows: true, claude: true, antigravity: true });
           return;
         }
         if (part === "done") {
           setRefreshing(false);
-          setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false });
+          setPending({ ds_bot: false, balance: false, codex: false, windows: false, claude: false, antigravity: false });
           // 刷新后重读一次授权与 Key 状态（启动时钥匙串可能还没确认完）
           void loadSnapshot().then(setSnapshot).catch(() => undefined);
           return;
         }
         const custom = customRef.current;
-        if (!["ds_bot", "balance", "codex", "windows", "claude"].includes(part)) return;
+        if (!["ds_bot", "balance", "codex", "windows", "claude", "antigravity"].includes(part)) return;
         void loadUsage(rangeRef.current, custom.start, custom.end).then((next) => {
           setUsage((current) => mergeUsage(current, part, next));
           setPending((current) => ({ ...current, [part]: false }));
@@ -360,7 +360,15 @@ export function App() {
       .then((page) => {
         if (!alive) return;
         setConversations(page.rows);
-        setSources({ codex: page.codex, ds_bot: page.ds_bot, harness: page.harness, cursor: page.cursor, claude: page.claude });
+        setSources({
+          codex: page.codex,
+          ds_bot: page.ds_bot,
+          harness: page.harness,
+          cursor: page.cursor,
+          claude: page.claude,
+          antigravity: page.antigravity,
+          workbuddy: page.workbuddy,
+        });
       })
       .catch(() => {
         if (!alive) return;
@@ -644,9 +652,22 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
     const rest = current.cards.filter((card) => !card.name.startsWith("ChatGPT"));
     return { ...current, cards: [...fresh, ...rest] };
   }
-  if (part === "ds_bot" || part === "codex" || part === "claude") {
+  if (part === "ds_bot" || part === "codex" || part === "claude" || part === "antigravity") {
     const names =
-      part === "ds_bot" ? ["DS Bot", "DeepSeek Harness"] : part === "codex" ? ["ChatGPT"] : ["Claude"];
+      part === "ds_bot"
+        ? ["DS Bot", "DeepSeek Harness"]
+        : part === "codex"
+          ? ["ChatGPT"]
+          : part === "claude"
+            ? ["Claude"]
+            : ["Antigravity"];
+    // 这一部分刷新到的柱子；其余工具保留上一次的值
+    const fresh: Record<string, (keyof UsageDay)[]> = {
+      ds_bot: ["bot", "harness"],
+      codex: ["codex"],
+      claude: ["claude"],
+      antigravity: ["antigravity"],
+    };
     const cards =
       part === "claude"
         ? current.cards.map((card) =>
@@ -661,15 +682,12 @@ function mergeUsage(current: UsageView, part: string, next: UsageView): UsageVie
       banner: next.banner,
       days: next.days.map((day) => {
         const previous = current.days.find((item) => item.label === day.label);
-        const keep = {
-          codex: previous?.codex ?? day.codex,
-          bot: previous?.bot ?? day.bot,
-          harness: previous?.harness ?? day.harness,
-          claude: previous?.claude ?? day.claude,
-        };
-        if (part === "ds_bot") return { ...day, codex: keep.codex, claude: keep.claude };
-        if (part === "codex") return { ...day, bot: keep.bot, harness: keep.harness, claude: keep.claude };
-        return { ...day, codex: keep.codex, bot: keep.bot, harness: keep.harness };
+        const merged: UsageDay = { ...day };
+        for (const key of ["codex", "bot", "harness", "claude", "antigravity"] as const) {
+          if (fresh[part].includes(key)) continue;
+          (merged as unknown as Record<string, number | null | undefined>)[key] = previous?.[key] ?? day[key];
+        }
+        return merged;
       }),
       details: current.details.map((row) =>
         names.includes(row.name) ? next.details.find((item) => item.name === row.name) ?? row : row,

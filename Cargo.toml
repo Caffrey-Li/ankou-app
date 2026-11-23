@@ -6,6 +6,8 @@ members = [
   "crates/adapters/cursor",
   "crates/adapters/codex",
   "crates/adapters/claude",
+  "crates/adapters/antigravity",
+  "crates/adapters/workbuddy",
   "app",
 ]
 

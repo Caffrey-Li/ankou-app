@@ -1,4 +1,12 @@
-export type ToolId = "deepseek_harness" | "ds_bot" | "cursor" | "codex" | "claude";
+export type ToolId =
+  | "deepseek_harness"
+  | "ds_bot"
+  | "cursor"
+  | "codex"
+  | "claude"
+  | "gemini"
+  | "antigravity"
+  | "workbuddy";
 export type CapabilityId =
   | "usage"
   | "conversation"
@@ -192,6 +200,100 @@ export const toolSpecs: ToolSpec[] = [
       { label: "用量与额度", capability: "usage", badge: "已实测" },
       { label: "空间", capability: "space_scan", badge: "已实测" },
       { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "antigravity",
+    letter: "Ag",
+    name: "Antigravity",
+    caps: [
+      {
+        capability: "usage",
+        title: "用量",
+        detail: "读取本机对话步骤里记下的 token 用量",
+        badge: "已实测",
+      },
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "列出本机对话与上下文占用，交接时读取所选对话 · 只读",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计本机数据目录大小，不读取内容",
+        badge: "已实测",
+      },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "用量", capability: "usage", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+    ],
+  },
+  {
+    id: "gemini",
+    letter: "G",
+    name: "Gemini",
+    caps: [
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计桌面应用目录大小，不读取内容",
+        badge: "已实测",
+      },
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "对话保存在云端，本机没有可读的记录",
+        badge: "暂不提供",
+      },
+      {
+        capability: "usage",
+        title: "用量与额度",
+        detail: "本机没有用量记录",
+        badge: "暂不提供",
+      },
+    ],
+    tags: [
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "对话", capability: "conversation", badge: "暂不提供" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
+    ],
+  },
+  {
+    id: "workbuddy",
+    letter: "W",
+    name: "WorkBuddy",
+    caps: [
+      {
+        capability: "conversation",
+        title: "对话",
+        detail: "列出本机会话与上下文占用，交接时读取所选会话 · 只读",
+        badge: "已实测",
+      },
+      {
+        capability: "space_scan",
+        title: "空间扫描",
+        detail: "统计本机数据目录大小，不读取内容",
+        badge: "已实测",
+      },
+      {
+        capability: "usage",
+        title: "用量与积分",
+        detail: "本机没有 token 记录",
+        badge: "暂不提供",
+      },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+    ],
+    tags: [
+      { label: "对话", capability: "conversation", badge: "已实测" },
+      { label: "空间", capability: "space_scan", badge: "已实测" },
+      { label: "用量", capability: "usage", badge: "暂不提供" },
       { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
     ],
   },

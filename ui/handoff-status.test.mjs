@@ -119,7 +119,15 @@ try {
   }
 
   const failed = sourcesWhenListFails();
-  assert.deepEqual(failed, { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed", claude: "read_failed" });
+  assert.deepEqual(failed, {
+    codex: "read_failed",
+    ds_bot: "read_failed",
+    harness: "read_failed",
+    cursor: "read_failed",
+    claude: "read_failed",
+    antigravity: "read_failed",
+    workbuddy: "read_failed",
+  });
   assert.notEqual(failed.codex, "unauthorized");
   assert.notEqual(failed.ds_bot, "unauthorized");
   assert.equal(handoffSubtitle([], failed, 80), "0 条对话 · 0 条超过提醒阈值");

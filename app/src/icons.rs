@@ -11,6 +11,9 @@ const HARNESS_BUNDLE_ID: &str = "com.deepseek.dsh";
 /// 已从本机应用包的 Info.plist 确认：`com.openai.codex` 的 CFBundleName 是 ChatGPT。不按文件夹名查找。
 const CODEX_BUNDLE_ID: &str = "com.openai.codex";
 const CLAUDE_BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
+const GEMINI_BUNDLE_ID: &str = "com.google.GeminiMacOS";
+const ANTIGRAVITY_BUNDLE_ID: &str = "com.google.antigravity";
+const WORKBUDDY_BUNDLE_ID: &str = "com.tencent.workbuddy.mac";
 
 #[derive(Debug, Serialize)]
 pub struct ToolIcon {
@@ -23,6 +26,9 @@ struct Located {
     cursor: Option<PathBuf>,
     codex: Option<PathBuf>,
     claude: Option<PathBuf>,
+    gemini: Option<PathBuf>,
+    antigravity: Option<PathBuf>,
+    workbuddy: Option<PathBuf>,
 }
 
 #[cfg(target_os = "macos")]
@@ -52,6 +58,9 @@ fn null_icons() -> Vec<ToolIcon> {
         ToolId::Cursor,
         ToolId::Codex,
         ToolId::Claude,
+        ToolId::Gemini,
+        ToolId::Antigravity,
+        ToolId::WorkBuddy,
     ]
     .into_iter()
     .map(|tool| ToolIcon {
@@ -67,6 +76,9 @@ fn locate(root: &Path, bundle_id: impl Fn(&Path) -> Option<String>) -> Located {
         cursor: exact_named_app(root, "Cursor.app"),
         codex: app_with_bundle_id(root, CODEX_BUNDLE_ID, &bundle_id),
         claude: app_with_bundle_id(root, CLAUDE_BUNDLE_ID, &bundle_id),
+        gemini: app_with_bundle_id(root, GEMINI_BUNDLE_ID, &bundle_id),
+        antigravity: app_with_bundle_id(root, ANTIGRAVITY_BUNDLE_ID, &bundle_id),
+        workbuddy: app_with_bundle_id(root, WORKBUDDY_BUNDLE_ID, &bundle_id),
     }
 }
 
@@ -119,6 +131,18 @@ fn assemble(
         ToolIcon {
             tool: ToolId::Claude,
             png_base64: icon(found.claude),
+        },
+        ToolIcon {
+            tool: ToolId::Gemini,
+            png_base64: icon(found.gemini),
+        },
+        ToolIcon {
+            tool: ToolId::Antigravity,
+            png_base64: icon(found.antigravity),
+        },
+        ToolIcon {
+            tool: ToolId::WorkBuddy,
+            png_base64: icon(found.workbuddy),
         },
     ]
 }
@@ -352,6 +376,9 @@ mod tests {
                 cursor: None,
                 codex: None,
                 claude: None,
+                gemini: None,
+                antigravity: None,
+                workbuddy: None,
             },
             &mut read,
         );
@@ -370,6 +397,9 @@ mod tests {
                 cursor: None,
                 codex: None,
                 claude: None,
+                gemini: None,
+                antigravity: None,
+                workbuddy: None,
             },
             &mut read,
         );
@@ -400,6 +430,9 @@ mod tests {
             cursor: Some(app.clone()),
             codex: None,
             claude: None,
+            gemini: None,
+            antigravity: None,
+            workbuddy: None,
         };
         let first = assemble(&cache, found, &mut read);
         assert!(first
@@ -414,6 +447,9 @@ mod tests {
             cursor: Some(app.clone()),
             codex: None,
             claude: None,
+            gemini: None,
+            antigravity: None,
+            workbuddy: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 1);
@@ -426,6 +462,9 @@ mod tests {
             cursor: Some(app),
             codex: None,
             claude: None,
+            gemini: None,
+            antigravity: None,
+            workbuddy: None,
         };
         let _ = assemble(&cache, found, &mut read);
         assert_eq!(reads.get(), 2);

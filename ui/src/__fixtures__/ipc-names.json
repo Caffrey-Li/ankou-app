@@ -1,5 +1,5 @@
 {
-  "tool_id": ["claude", "codex", "cursor", "deepseek_harness", "ds_bot"],
+  "tool_id": ["antigravity", "claude", "codex", "cursor", "deepseek_harness", "ds_bot", "gemini", "workbuddy"],
   "capability": [
     "account_link",
     "cleanup",

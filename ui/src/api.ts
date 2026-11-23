@@ -153,6 +153,7 @@ export type UsageDay = {
   bot: number | null;
   harness?: number | null;
   claude?: number | null;
+  antigravity?: number | null;
 };
 
 export type UsageDetail = {
@@ -250,6 +251,8 @@ export type ConversationPage = {
   harness?: SourceStatus;
   cursor?: SourceStatus;
   claude?: SourceStatus;
+  antigravity?: SourceStatus;
+  workbuddy?: SourceStatus;
 };
 
 export function listConversations() {
@@ -261,6 +264,8 @@ export function listConversations() {
       harness: "unauthorized",
       cursor: "unauthorized",
       claude: "unauthorized",
+      antigravity: "unauthorized",
+      workbuddy: "unauthorized",
     } satisfies ConversationPage);
   }
   return call<ConversationPage>("list_conversations");

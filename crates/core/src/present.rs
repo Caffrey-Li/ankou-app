@@ -25,6 +25,7 @@ pub struct UsageFacts {
     pub bot_access: RecordAccess,
     pub harness_access: RecordAccess,
     pub claude_access: RecordAccess,
+    pub antigravity_access: RecordAccess,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -44,6 +45,7 @@ pub struct UsageDay {
     pub bot: Option<i64>,
     pub harness: Option<i64>,
     pub claude: Option<i64>,
+    pub antigravity: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -95,6 +97,13 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     let claude_calls = claude_open
         .then(|| sum_metric(facts, "claude", "calls"))
         .flatten();
+    let antigravity_open = facts.antigravity_access == RecordAccess::Authorized;
+    let antigravity_tokens = antigravity_open
+        .then(|| sum_metric(facts, "antigravity", "tokens"))
+        .flatten();
+    let antigravity_calls = antigravity_open
+        .then(|| sum_metric(facts, "antigravity", "calls"))
+        .flatten();
     let excluded_calls = if bot_open {
         sum_metric(facts, "ds_bot", "excluded_calls").unwrap_or(0)
     } else {
@@ -120,7 +129,10 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
     };
     let window_report = report(facts, "codex", "windows");
     let balance_report = report(facts, "deepseek_harness", "balance");
-    let mut banner = vec!["Cursor 用量暂不提供，未计入".to_string()];
+    let mut banner = vec![
+        "Cursor 用量暂不提供，未计入".to_string(),
+        "Gemini、WorkBuddy 用量暂不提供，未计入".to_string(),
+    ];
     match facts.harness_access {
         RecordAccess::Unauthorized => banner.push("Harness 未授权，未计入".to_string()),
         RecordAccess::NeedsReauth => banner.push("Harness 需要重新授权，未计入".to_string()),
@@ -152,6 +164,11 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         RecordAccess::NeedsReauth => banner.push("Claude 需要重新授权，未计入".to_string()),
         RecordAccess::Authorized => {}
     }
+    match facts.antigravity_access {
+        RecordAccess::Unauthorized => banner.push("Antigravity 未授权，未计入".to_string()),
+        RecordAccess::NeedsReauth => banner.push("Antigravity 需要重新授权，未计入".to_string()),
+        RecordAccess::Authorized => {}
+    }
     match facts.bot_access {
         RecordAccess::Unauthorized => banner.push("DS Bot 未授权，未计入".to_string()),
         RecordAccess::NeedsReauth => banner.push("DS Bot 需要重新授权，未计入".to_string()),
@@ -164,7 +181,13 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
         !facts.codex_app_server || window_report.map(|(state, _)| state) == Some("app_off");
     let (balance_value, balance_note, balance_link) =
         balance_card(facts, balance, balance_currency, balance_report);
-    let counted = [codex_tokens, bot_tokens, harness_tokens, claude_tokens]
+    let counted = [
+        codex_tokens,
+        bot_tokens,
+        harness_tokens,
+        claude_tokens,
+        antigravity_tokens,
+    ]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
@@ -213,6 +236,9 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
                 claude: claude_open
                     .then(|| day_amount(facts, &day, "claude", "tokens"))
                     .flatten(),
+                antigravity: antigravity_open
+                    .then(|| day_amount(facts, &day, "antigravity", "tokens"))
+                    .flatten(),
             })
             .collect(),
         details: vec![
@@ -226,7 +252,16 @@ pub fn present_usage(facts: &UsageFacts) -> UsagePage {
             ),
             counted_detail("DS Bot", facts.bot_access, bot_tokens, bot_calls, false),
             counted_detail("Claude", facts.claude_access, claude_tokens, claude_calls, false),
+            counted_detail(
+                "Antigravity",
+                facts.antigravity_access,
+                antigravity_tokens,
+                antigravity_calls,
+                false,
+            ),
             withheld_detail("Cursor"),
+            withheld_detail("Gemini"),
+            withheld_detail("WorkBuddy"),
         ],
         caption: "按各工具自身周期，不受上方日期影响".to_string(),
         empty_note: "更早没有本机记录，不补算".to_string(),
@@ -242,6 +277,7 @@ fn total_reason(facts: &UsageFacts) -> &'static str {
         facts.bot_access,
         facts.harness_access,
         facts.claude_access,
+        facts.antigravity_access,
     ];
     let open = all.contains(&RecordAccess::Authorized);
     let reauth = all.contains(&RecordAccess::NeedsReauth);

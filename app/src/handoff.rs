@@ -136,6 +136,8 @@ pub struct ConversationPage {
     pub harness: SourceStatus,
     pub cursor: SourceStatus,
     pub claude: SourceStatus,
+    pub antigravity: SourceStatus,
+    pub workbuddy: SourceStatus,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -414,6 +416,18 @@ fn conversations(hub: &Hub) -> ConversationPage {
         Some((records, desktop)) => claude_rows(hub.store.guard(), &records, desktop.as_deref(), &mut rows),
         None => LocalRead::Unread,
     };
+    let (antigravity_auth, _) = conversation_auth(&grants, ToolId::Antigravity);
+    let antigravity_roots = antigravity_roots(&grants);
+    let antigravity_local = if antigravity_roots.is_empty() {
+        LocalRead::Unread
+    } else {
+        antigravity_rows(hub.store.guard(), &antigravity_roots, &mut rows)
+    };
+    let (workbuddy_auth, _) = conversation_auth(&grants, ToolId::WorkBuddy);
+    let workbuddy_local = match workbuddy_root(&grants) {
+        Some(root) => workbuddy_rows(hub.store.guard(), &root, &mut rows),
+        None => LocalRead::Unread,
+    };
     append_cursor_fixture(hub, &mut rows);
     ConversationPage {
         rows,
@@ -422,7 +436,206 @@ fn conversations(hub: &Hub) -> ConversationPage {
         harness: bot_status(harness_auth, harness_local),
         cursor: bot_status(cursor_auth, cursor_local),
         claude: bot_status(claude_auth, claude_local),
+        antigravity: bot_status(antigravity_auth, antigravity_local),
+        workbuddy: bot_status(workbuddy_auth, workbuddy_local),
     }
+}
+
+/// 取最近几轮做交接草稿；超长时只留最近部分。
+fn recent_draft(chunks: &[String]) -> HandoffDraft {
+    let start = chunks.len().saturating_sub(wanxiang_core::RECENT_TURNS);
+    let (text, truncated) = wanxiang_core::take_recent(&chunks[start..]);
+    let truncated = truncated || start > 0;
+    HandoffDraft {
+        text,
+        truncated,
+        note: if truncated {
+            "长对话只取了最近部分".to_string()
+        } else {
+            String::new()
+        },
+    }
+}
+
+/// Antigravity 对话的授权目录（桌面应用与命令行版各一个，列表库授权了才算）。
+fn antigravity_roots(grants: &[wanxiang_core::StoredGrant]) -> Vec<std::path::PathBuf> {
+    grants
+        .iter()
+        .filter(|grant| {
+            grant.tool == ToolId::Antigravity
+                && grant.capability == Capability::Conversation
+                && grant.status == GrantStatus::Active
+                && grant.pattern == wanxiang_adapter_antigravity::SUMMARY_PATTERN
+        })
+        .map(|grant| grant.root.clone())
+        .collect()
+}
+
+/// Antigravity 对话：列表库给出标题、时间；步骤库给出上下文占用。子代理的对话不单列。
+fn antigravity_rows(
+    guard: &wanxiang_core::Guard,
+    roots: &[std::path::PathBuf],
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    use wanxiang_adapter_antigravity as ag;
+    let mut readable = 0;
+    let mut listed = 0;
+    for root in roots {
+        let Ok(list) = ag::list_conversations(guard, Capability::Conversation, root) else {
+            continue;
+        };
+        readable += 1;
+        for item in list.into_iter().filter(|item| !item.nested) {
+            let context = ag::conversation_db(root, &item.id)
+                .and_then(|db| ag::context(guard, &db).ok().flatten());
+            let percent = context.and_then(|(used, limit)| ag::percent(used, limit));
+            listed += 1;
+            rows.push(ConversationRow {
+                id: item.id,
+                tool: "antigravity".to_string(),
+                title: if item.title.is_empty() {
+                    "未命名对话".to_string()
+                } else {
+                    item.title
+                },
+                updated: item.updated_ms.to_string(),
+                percent,
+                cwd: None,
+                status: String::new(),
+                context: if percent.is_some() {
+                    String::new()
+                } else {
+                    "未知".to_string()
+                },
+                source: "summary_db".to_string(),
+            });
+        }
+    }
+    if readable == 0 {
+        LocalRead::Denied
+    } else if listed == 0 {
+        LocalRead::Empty
+    } else {
+        LocalRead::Rows
+    }
+}
+
+fn antigravity_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let roots = antigravity_roots(&grants);
+    if roots.is_empty() {
+        return Err("Antigravity 对话未授权".to_string());
+    }
+    let mut failed = false;
+    for root in &roots {
+        match wanxiang_adapter_antigravity::transcript(hub.store.guard(), root, id) {
+            Ok(Some(chunks)) => return Ok(recent_draft(&chunks)),
+            Ok(None) => {}
+            Err(_) => failed = true,
+        }
+    }
+    Err(if failed {
+        "读取 Antigravity 对话失败".to_string()
+    } else {
+        "这条对话已经不在，无法交接".to_string()
+    })
+}
+
+/// WorkBuddy 对话的授权目录：会话记录授权了才算（会话表可选）。
+fn workbuddy_root(grants: &[wanxiang_core::StoredGrant]) -> Option<std::path::PathBuf> {
+    grants
+        .iter()
+        .find(|grant| {
+            grant.tool == ToolId::WorkBuddy
+                && grant.capability == Capability::Conversation
+                && grant.status == GrantStatus::Active
+                && grant.pattern == wanxiang_adapter_workbuddy::PROJECTS_PATTERN
+        })
+        .map(|grant| grant.root.clone())
+}
+
+/// WorkBuddy 对话：会话记录给出首句与时间；会话表给出标题、删除标记与上下文占用。
+fn workbuddy_rows(
+    guard: &wanxiang_core::Guard,
+    root: &std::path::Path,
+    rows: &mut Vec<ConversationRow>,
+) -> LocalRead {
+    use wanxiang_adapter_workbuddy as wb;
+    let meta = wb::session_meta(guard, root).unwrap_or_default();
+    let paths = wb::session_paths(root);
+    if paths.is_empty() {
+        return LocalRead::Empty;
+    }
+    let mut readable = 0;
+    let mut listed = 0;
+    for path in paths {
+        let Ok(bytes) = wb::read_file(guard, Capability::Conversation, &path) else {
+            continue;
+        };
+        readable += 1;
+        let id = path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !wb::valid_id(&id) {
+            continue;
+        }
+        let session = wb::parse_session(&id, &bytes);
+        drop(bytes);
+        let info = meta.get(&id);
+        if session.messages == 0 || info.is_some_and(|info| info.deleted) {
+            continue;
+        }
+        let title = info
+            .map(|info| info.title.clone())
+            .filter(|title| !title.is_empty())
+            .unwrap_or_else(|| session.title());
+        let percent = info
+            .and_then(|info| info.context)
+            .and_then(|(used, limit)| wb::percent(used, limit));
+        listed += 1;
+        rows.push(ConversationRow {
+            id,
+            tool: "workbuddy".to_string(),
+            title: if title.is_empty() {
+                "未命名对话".to_string()
+            } else {
+                title
+            },
+            updated: session.updated_ms.to_string(),
+            percent,
+            cwd: None,
+            status: String::new(),
+            context: if percent.is_some() {
+                String::new()
+            } else {
+                "未知".to_string()
+            },
+            source: "session_file".to_string(),
+        });
+    }
+    if readable == 0 {
+        LocalRead::Denied
+    } else if listed == 0 {
+        LocalRead::Empty
+    } else {
+        LocalRead::Rows
+    }
+}
+
+fn workbuddy_draft(hub: &Hub, id: &str) -> Result<HandoffDraft, String> {
+    let grants = hub.store.grants().map_err(|err| err.to_string())?;
+    let Some(root) = workbuddy_root(&grants) else {
+        return Err("WorkBuddy 对话未授权".to_string());
+    };
+    let path = wanxiang_adapter_workbuddy::find_session(&root, id)
+        .ok_or_else(|| "这条对话已经不在，无法交接".to_string())?;
+    let bytes =
+        wanxiang_adapter_workbuddy::read_file(hub.store.guard(), Capability::Conversation, &path)
+            .map_err(|_| "读取 WorkBuddy 对话失败".to_string())?;
+    let chunks = wanxiang_adapter_workbuddy::transcript(&bytes);
+    drop(bytes);
+    Ok(recent_draft(&chunks))
 }
 
 /// Claude 对话的两个授权根：会话记录（必需）与桌面应用的会话标题（可选）。
@@ -761,6 +974,8 @@ fn draft(hub: &Hub, tool: &str, id: &str) -> Result<HandoffDraft, String> {
         }
         "cursor" => cursor_draft(hub, id),
         "claude" => claude_draft(hub, id),
+        "antigravity" => antigravity_draft(hub, id),
+        "workbuddy" => workbuddy_draft(hub, id),
         "deepseek_harness" => {
             let grants = hub.store.grants().map_err(|err| err.to_string())?;
             let Some(grant) = grants.iter().find(|grant| {

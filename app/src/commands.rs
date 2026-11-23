@@ -246,6 +246,10 @@ fn usage_page(
             ToolId::DeepSeekHarness,
         ),
         claude_access: record_access(&hub.store.grants().map_err(StoreErrorText)?, ToolId::Claude),
+        antigravity_access: record_access(
+            &hub.store.grants().map_err(StoreErrorText)?,
+            ToolId::Antigravity,
+        ),
     }))
 }
 

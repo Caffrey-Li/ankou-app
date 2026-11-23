@@ -65,7 +65,7 @@ function placeholderDays(date = new Date()): UsageDay[] {
   const last = date.getDate();
   const days: UsageDay[] = [];
   for (let day = 1; day <= last; day += 1) {
-    days.push({ label: `${month + 1} 月 ${day} 日`, codex: null, bot: null, harness: null, claude: null });
+    days.push({ label: `${month + 1} 月 ${day} 日`, codex: null, bot: null, harness: null, claude: null, antigravity: null });
   }
   return days;
 }
@@ -89,6 +89,7 @@ export type RefreshPending = {
   codex: boolean;
   windows: boolean;
   claude?: boolean;
+  antigravity?: boolean;
 };
 
 const idlePending: RefreshPending = {
@@ -97,6 +98,7 @@ const idlePending: RefreshPending = {
   codex: false,
   windows: false,
   claude: false,
+  antigravity: false,
 };
 
 export function totalLabel(range: UsageRange) {
@@ -122,7 +124,7 @@ export function UsagePage({
   const [moreOpen, setMoreOpen] = useState(false);
   const bannerLines = orderBanner(usage.banner);
   const days = usage.days.length > 0 ? usage.days : placeholderDays();
-  const max = Math.max(0, ...days.map((day) => (day.codex ?? 0) + (day.bot ?? 0) + (day.harness ?? 0) + (day.claude ?? 0)));
+  const max = Math.max(0, ...days.map((day) => (day.codex ?? 0) + (day.bot ?? 0) + (day.harness ?? 0) + (day.claude ?? 0) + (day.antigravity ?? 0)));
   const scale = Math.max(max, 1);
   return (
     <div className="usage-page">
@@ -194,8 +196,10 @@ export function UsagePage({
           <div className="total-block">
             <p>{totalLabel(range)}</p>
             <div className="token-figure">
-              <strong>{pending.codex || pending.ds_bot || pending.claude ? "刷新中" : usage.total}</strong>
-              {usage.total === "—" || pending.codex || pending.ds_bot || pending.claude ? null : <span>token</span>}
+              <strong>{pending.codex || pending.ds_bot || pending.claude || pending.antigravity ? "刷新中" : usage.total}</strong>
+              {usage.total === "—" || pending.codex || pending.ds_bot || pending.claude || pending.antigravity ? null : (
+                <span>token</span>
+              )}
             </div>
             {usage.total === "—" ? (
               <p className="total-reason">
@@ -213,6 +217,7 @@ export function UsagePage({
             <span><i className="swatch bot" />DS Bot</span>
             <span><i className="swatch codex" />ChatGPT</span>
             <span><i className="swatch claude" />Claude</span>
+            <span><i className="swatch antigravity" />Antigravity</span>
           </div>
         </div>
         <div className="usage-chart" aria-label="按日本机记录">
@@ -221,8 +226,10 @@ export function UsagePage({
             const bot = day.bot ?? 0;
             const harness = day.harness ?? 0;
             const claude = day.claude ?? 0;
-            const missing = day.codex == null && day.bot == null && day.harness == null && day.claude == null;
-            const height = Math.max(8, Math.round(((codex + bot + harness + claude) / scale) * 150));
+            const antigravity = day.antigravity ?? 0;
+            const missing =
+              day.codex == null && day.bot == null && day.harness == null && day.claude == null && day.antigravity == null;
+            const height = Math.max(8, Math.round(((codex + bot + harness + claude + antigravity) / scale) * 150));
             return (
               <div key={day.label} className="chart-col">
                 <div className="chart-slot">
@@ -234,6 +241,7 @@ export function UsagePage({
                       {bot > 0 ? <span className="bar bot" style={{ flexGrow: bot }} /> : null}
                       {harness > 0 ? <span className="bar harness" style={{ flexGrow: harness }} /> : null}
                       {claude > 0 ? <span className="bar claude" style={{ flexGrow: claude }} /> : null}
+                      {antigravity > 0 ? <span className="bar antigravity" style={{ flexGrow: antigravity }} /> : null}
                     </span>
                   )}
                 </div>
@@ -275,7 +283,8 @@ export function UsagePage({
               const waiting =
                 (row.name === "DS Bot" && pending.ds_bot) ||
                 (row.name === "ChatGPT" && pending.codex) ||
-                (row.name === "Claude" && Boolean(pending.claude));
+                (row.name === "Claude" && Boolean(pending.claude)) ||
+                (row.name === "Antigravity" && Boolean(pending.antigravity));
               return (
               <div key={row.name} className="detail-row">
                 <span className="detail-name">{row.name}</span>

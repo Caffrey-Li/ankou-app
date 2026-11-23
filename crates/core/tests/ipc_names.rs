@@ -33,6 +33,9 @@ fn all_tools() -> Vec<ToolId> {
         ToolId::Cursor,
         ToolId::Codex,
         ToolId::Claude,
+        ToolId::Gemini,
+        ToolId::Antigravity,
+        ToolId::WorkBuddy,
     ];
     for tool in &tools {
         match tool {
@@ -40,7 +43,10 @@ fn all_tools() -> Vec<ToolId> {
             | ToolId::DsBot
             | ToolId::Cursor
             | ToolId::Codex
-            | ToolId::Claude => {}
+            | ToolId::Claude
+            | ToolId::Gemini
+            | ToolId::Antigravity
+            | ToolId::WorkBuddy => {}
         }
     }
     tools

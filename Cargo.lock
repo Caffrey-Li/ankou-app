@@ -4888,6 +4888,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wanxiang-adapter-antigravity"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "wanxiang-core",
+]
+
+[[package]]
 name = "wanxiang-adapter-claude"
 version = "0.0.0"
 dependencies = [
@@ -4928,6 +4937,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wanxiang-adapter-workbuddy"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde_json",
+ "wanxiang-core",
+]
+
+[[package]]
 name = "wanxiang-app"
 version = "0.0.0"
 dependencies = [
@@ -4944,10 +4963,12 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "wanxiang-adapter-antigravity",
  "wanxiang-adapter-claude",
  "wanxiang-adapter-codex",
  "wanxiang-adapter-cursor",
  "wanxiang-adapter-dsh",
+ "wanxiang-adapter-workbuddy",
  "wanxiang-core",
  "window-vibrancy",
 ]

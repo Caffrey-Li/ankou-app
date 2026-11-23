@@ -399,6 +399,11 @@
   background: #c46a3f;
 }
 
+.swatch.antigravity,
+.bar.antigravity {
+  background: #4f8f86;
+}
+
 .usage-chart {
   display: flex;
   align-items: flex-end;

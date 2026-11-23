@@ -8,6 +8,23 @@ const CODEX_PATTERN: &str = "sessions/**/*.jsonl";
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
+    if kind == "gemini_space" {
+        let root = crate::discover::gemini_support(&home);
+        return set_path(store, ToolId::Gemini, Capability::SpaceScan, &root, "**", on);
+    }
+    if kind.starts_with("antigravity_") {
+        let roots = wanxiang_adapter_antigravity::data_roots(&home);
+        return set_antigravity(
+            store,
+            kind,
+            on,
+            &roots,
+            &wanxiang_adapter_antigravity::space_root(&home),
+        );
+    }
+    if kind.starts_with("workbuddy_") {
+        return set_workbuddy(store, kind, on, &wanxiang_adapter_workbuddy::config_root(&home));
+    }
     if kind.starts_with("claude_") {
         return set_claude(
             store,
@@ -269,6 +286,66 @@ pub fn set_claude(
     }
 }
 
+/// Antigravity：桌面应用与命令行版各有一个数据目录，两处都授权。
+/// 用量只读步骤库；对话读列表库与步骤库（上下文）；空间看桌面应用的数据目录。
+pub fn set_antigravity(
+    store: &Store,
+    kind: &str,
+    on: bool,
+    roots: &[std::path::PathBuf],
+    space: &Path,
+) -> Result<(), String> {
+    use wanxiang_adapter_antigravity::{CONVERSATIONS_PATTERN, SUMMARY_PATTERN};
+    let patterns: Vec<&str> = match kind {
+        "antigravity_usage" => vec![CONVERSATIONS_PATTERN],
+        "antigravity_conversation" => vec![SUMMARY_PATTERN, CONVERSATIONS_PATTERN],
+        "antigravity_space" => {
+            return set_path(store, ToolId::Antigravity, Capability::SpaceScan, space, "**", on);
+        }
+        _ => return Err("没有这项授权".to_string()),
+    };
+    let capability = if kind == "antigravity_usage" {
+        Capability::Usage
+    } else {
+        Capability::Conversation
+    };
+    if on && roots.is_empty() {
+        return Err("没有找到 Antigravity 的本机记录".to_string());
+    }
+    for pattern in patterns {
+        if on {
+            for root in roots {
+                set_path(store, ToolId::Antigravity, capability, root, pattern, true)?;
+            }
+        } else {
+            set_path(store, ToolId::Antigravity, capability, space, pattern, false)?;
+        }
+    }
+    Ok(())
+}
+
+/// WorkBuddy：会话记录与会话表都在 `~/.workbuddy`；空间统计同一目录。
+pub fn set_workbuddy(store: &Store, kind: &str, on: bool, config: &Path) -> Result<(), String> {
+    use wanxiang_adapter_workbuddy::{DB_PATTERN, PROJECTS_PATTERN};
+    match kind {
+        "workbuddy_conversation" => {
+            set_path(
+                store,
+                ToolId::WorkBuddy,
+                Capability::Conversation,
+                config,
+                PROJECTS_PATTERN,
+                on,
+            )?;
+            set_path(store, ToolId::WorkBuddy, Capability::Conversation, config, DB_PATTERN, on)
+        }
+        "workbuddy_space" => {
+            set_path(store, ToolId::WorkBuddy, Capability::SpaceScan, config, "**", on)
+        }
+        _ => Err("没有这项授权".to_string()),
+    }
+}
+
 fn show(err: impl std::fmt::Display) -> String {
     err.to_string()
 }
@@ -299,6 +376,42 @@ mod tests {
         }
         assert!(store.grants().unwrap().is_empty());
         assert!(super::set_claude(&store, "claude_other", true, &config, &support).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn antigravity_and_workbuddy_grants_stay_in_their_files() {
+        let dir = std::env::temp_dir().join(format!("wanxiang-ag-wb-grant-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let app = dir.join("antigravity");
+        let cli = dir.join("antigravity-cli");
+        let wb = dir.join("workbuddy");
+        for path in [&app, &cli, &wb] {
+            std::fs::create_dir_all(path).unwrap();
+        }
+        let store = open_store(&dir);
+        let roots = vec![app.clone(), cli.clone()];
+        super::set_antigravity(&store, "antigravity_usage", true, &roots, &app).unwrap();
+        super::set_antigravity(&store, "antigravity_conversation", true, &roots, &app).unwrap();
+        super::set_antigravity(&store, "antigravity_space", true, &roots, &app).unwrap();
+        super::set_workbuddy(&store, "workbuddy_conversation", true, &wb).unwrap();
+        super::set_workbuddy(&store, "workbuddy_space", true, &wb).unwrap();
+        let grants = store.grants().unwrap();
+        // 用量 2 个目录 × 1，对话 2 × 2，空间 1；WorkBuddy 对话 2，空间 1
+        assert_eq!(grants.len(), 10, "{grants:?}");
+        assert!(grants
+            .iter()
+            .filter(|g| g.tool == wanxiang_core::ToolId::Antigravity && g.capability != wanxiang_core::Capability::SpaceScan)
+            .all(|g| g.pattern != "**"));
+        assert!(super::set_antigravity(&store, "antigravity_usage", true, &[], &app).is_err());
+        for kind in ["antigravity_usage", "antigravity_conversation", "antigravity_space"] {
+            super::set_antigravity(&store, kind, false, &roots, &app).unwrap();
+        }
+        for kind in ["workbuddy_conversation", "workbuddy_space"] {
+            super::set_workbuddy(&store, kind, false, &wb).unwrap();
+        }
+        assert!(store.grants().unwrap().is_empty());
+        assert!(super::set_workbuddy(&store, "workbuddy_usage", true, &wb).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

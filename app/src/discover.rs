@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use wanxiang_adapter_antigravity::installed as antigravity_installed;
 use wanxiang_adapter_claude::installed as claude_installed;
 use wanxiang_adapter_codex::installed as codex_installed;
 use wanxiang_adapter_cursor::installed as cursor_installed;
 use wanxiang_adapter_dsh::{installed as dsh_installed, Product};
+use wanxiang_adapter_workbuddy::installed as workbuddy_installed;
 use wanxiang_core::{GrantStatus, StoredGrant, ToolId, ToolPresence};
 
 #[derive(Clone, Debug, Serialize)]
@@ -38,6 +40,18 @@ pub fn snapshot(roots: &HostRoots, grants: &[StoredGrant]) -> Vec<ToolSnapshot> 
         (
             ToolId::Claude,
             claude_installed(&roots.home, &roots.applications),
+        ),
+        (
+            ToolId::Gemini,
+            gemini_installed(&roots.home, &roots.applications),
+        ),
+        (
+            ToolId::Antigravity,
+            antigravity_installed(&roots.home, &roots.applications),
+        ),
+        (
+            ToolId::WorkBuddy,
+            workbuddy_installed(&roots.home, &roots.applications),
         ),
     ];
     found
@@ -144,4 +158,16 @@ mod tests {
         assert_eq!(found[3].presence, ToolPresence::Unauthorized);
         let _ = fs::remove_dir_all(root);
     }
+}
+
+/// Gemini 桌面应用：只看应用包或它的数据目录是否存在。
+pub fn gemini_installed(home: &Path, applications: &Path) -> bool {
+    applications.join("Gemini.app").is_dir() || gemini_support(home).is_dir()
+}
+
+/// Gemini 桌面应用的数据目录（只做空间统计）。
+pub fn gemini_support(home: &Path) -> PathBuf {
+    home.join("Library")
+        .join(folder("Application", "Support"))
+        .join("com.google.GeminiMacOS")
 }

@@ -37,12 +37,31 @@ try {
   const allowed = ["未发现", "未授权", "正常", "需要处理", "数据过时", "需要重新授权"];
 
   assert.deepEqual(sideStatus, rowStatus);
-  assert.deepEqual(sideStatus, ["正常", "需要重新授权", "未授权", "正常", "未授权"]);
-  assert.deepEqual(rowDot, ["authorized", "needs_reauth", "unauthorized", "authorized", "unauthorized"]);
+  // 后接入的三个工具（Antigravity、Gemini、WorkBuddy）在这份夹具里没有明细行，显示未发现
+  assert.deepEqual(sideStatus, ["正常", "需要重新授权", "未授权", "正常", "未授权", "未发现", "未发现", "未发现"]);
+  assert.deepEqual(rowDot, [
+    "authorized",
+    "needs_reauth",
+    "unauthorized",
+    "authorized",
+    "unauthorized",
+    "missing",
+    "missing",
+    "missing",
+  ]);
   // 侧栏点按 22:57：正常 = 雾蓝，需要处理 = 赭色，未连接或过时 = 灰
-  assert.deepEqual(sideDot, ["ok", "attention", "quiet", "ok", "quiet"]);
+  assert.deepEqual(sideDot, ["ok", "attention", "quiet", "ok", "quiet", "quiet", "quiet", "quiet"]);
   const toned = toolMarks(tools, details, true, new Set(["deepseek_harness"]), new Set(["codex"]));
-  assert.deepEqual(toned.map((mark) => mark.tone), ["attention", "attention", "quiet", "quiet", "quiet"]);
+  assert.deepEqual(toned.map((mark) => mark.tone), [
+    "attention",
+    "attention",
+    "quiet",
+    "quiet",
+    "quiet",
+    "quiet",
+    "quiet",
+    "quiet",
+  ]);
   assert.equal(toolTone("unauthorized", true, false), "quiet");
   assert.equal(toolTone("authorized", true, true), "attention");
   assert.ok(sideStatus.every((status) => allowed.includes(status)));
@@ -59,7 +78,7 @@ try {
   const liveSideStatus = [...liveSide.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
   const liveRowStatus = [...liveRows.matchAll(/<i class="dot ([a-z_]+) [a-z]+"><\/i>([^<]+)/g)].map((match) => match[2]);
   assert.deepEqual(liveSideStatus, liveRowStatus);
-  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "正常", "未授权"]);
+  assert.deepEqual(liveSideStatus, ["未授权", "未授权", "未授权", "正常", "未授权", "未发现", "未发现", "未发现"]);
   assert.match(liveRows, /DeepSeek Harness<\/strong><small>用量暂不提供<\/small>/);
   assert.equal(liveRowStatus.includes("暂不提供"), false);
 } finally {

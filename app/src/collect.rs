@@ -216,7 +216,32 @@ fn refresh_body(
                 && grant.pattern == wanxiang_adapter_claude::PLAN_PATTERN
         })
         .map(|grant| grant.root.clone());
+    let antigravity_roots: Vec<PathBuf> = grants
+        .iter()
+        .filter(|grant| {
+            grant.tool == ToolId::Antigravity
+                && grant.capability == Capability::Usage
+                && grant.status == GrantStatus::Active
+                && grant.pattern == wanxiang_adapter_antigravity::CONVERSATIONS_PATTERN
+        })
+        .map(|grant| grant.root.clone())
+        .collect();
     std::thread::scope(|scope| {
+        scope.spawn(|| {
+            if !antigravity_roots.is_empty() {
+                let _ = run_collect(
+                    store,
+                    gate,
+                    stop,
+                    &AntigravityUsage {
+                        roots: antigravity_roots.clone(),
+                        offset: store.offset_secs(),
+                        guard: store.guard_handle(),
+                    },
+                );
+            }
+            emit("antigravity");
+        });
         scope.spawn(|| {
             if let Some(records) = claude_records {
                 let _ = run_collect(
@@ -486,6 +511,57 @@ impl UsageSource for ClaudeUsage {
                 snapshot.window_at = Some(sample.at_ms / 1000);
             }
         }
+        Ok(snapshot)
+    }
+}
+
+/// Antigravity：每个对话步骤库里的模型调用，按天合计 token 与次数。
+struct AntigravityUsage {
+    roots: Vec<PathBuf>,
+    offset: i32,
+    guard: Arc<Guard>,
+}
+
+impl UsageSource for AntigravityUsage {
+    fn tool(&self) -> ToolId {
+        ToolId::Antigravity
+    }
+    fn capability(&self) -> Capability {
+        Capability::Usage
+    }
+    fn metric(&self) -> &'static str {
+        "tokens"
+    }
+    fn collect(&self, stop: &TaskStop) -> Result<UsageSnapshot, UsageError> {
+        use wanxiang_adapter_antigravity as ag;
+        let mut tokens = BTreeMap::<String, i64>::new();
+        let mut calls = BTreeMap::<String, i64>::new();
+        let mut readable = 0_usize;
+        let mut total = 0_usize;
+        for root in &self.roots {
+            for path in ag::conversation_paths(root) {
+                if stop.is_stopped() {
+                    return Err(UsageError::Stopped);
+                }
+                total += 1;
+                let Ok(found) = ag::calls(&self.guard, Capability::Usage, &path) else {
+                    continue;
+                };
+                readable += 1;
+                for call in found {
+                    let instant = UNIX_EPOCH + Duration::from_millis(call.time_ms.max(0) as u64);
+                    let day = local_calendar_day(instant, self.offset);
+                    *tokens.entry(day.clone()).or_default() += call.tokens;
+                    *calls.entry(day).or_default() += 1;
+                }
+            }
+        }
+        if readable == 0 && total > 0 {
+            return Err(UsageError::Unreadable);
+        }
+        let mut snapshot = UsageSnapshot::empty();
+        snapshot.tokens = tokens.into_iter().collect();
+        snapshot.calls = calls.into_iter().collect();
         Ok(snapshot)
     }
 }

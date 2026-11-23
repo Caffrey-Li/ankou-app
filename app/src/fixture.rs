@@ -164,6 +164,7 @@ fn sample_page() -> UsagePage {
         bot_access: RecordAccess::Authorized,
         harness_access: RecordAccess::Unauthorized,
         claude_access: RecordAccess::Unauthorized,
+        antigravity_access: RecordAccess::Unauthorized,
     })
 }
 

@@ -16,6 +16,7 @@ fn empty() -> UsageFacts {
         bot_access: RecordAccess::Unauthorized,
         harness_access: RecordAccess::Unauthorized,
         claude_access: RecordAccess::Unauthorized,
+        antigravity_access: RecordAccess::Unauthorized,
     }
 }
 
@@ -40,6 +41,11 @@ fn empty_usage_names_the_gaps_and_skips_example_figures() {
     assert!(text.contains("去设置授权"));
     assert_eq!(page.cards.len(), 6);
     assert!(text.contains("Claude 未授权，未计入"));
+    assert!(text.contains("Antigravity 未授权，未计入"));
+    assert!(text.contains("Gemini、WorkBuddy 用量暂不提供，未计入"));
+    assert_eq!(detail(&page, "Gemini").tokens, "暂不提供");
+    assert_eq!(detail(&page, "WorkBuddy").calls, "暂不提供");
+    assert_eq!(detail(&page, "Antigravity").source, "未授权");
     assert_eq!(page.total, "—");
     assert_eq!(page.total_reason, "未授权");
     assert_eq!(detail(&page, "ChatGPT").fee, "不提供");
@@ -309,4 +315,19 @@ fn claude_counts_tokens_and_shows_local_plan_windows() {
     let page = present_usage(&empty_plan);
     let five = page.cards.iter().find(|card| card.name == "Claude · 5 小时窗口").unwrap();
     assert_eq!(five.note, "无本机记录");
+}
+
+#[test]
+fn antigravity_counts_tokens_and_calls_when_granted() {
+    let mut facts = empty();
+    facts.antigravity_access = RecordAccess::Authorized;
+    let today = facts.today.clone();
+    facts.rows.push((today.clone(), "antigravity".to_string(), "tokens".to_string(), 2_500));
+    facts.rows.push((today, "antigravity".to_string(), "calls".to_string(), 3));
+    let page = present_usage(&facts);
+    assert_eq!(detail(&page, "Antigravity").tokens, "2,500");
+    assert_eq!(detail(&page, "Antigravity").calls, "3");
+    assert!(!page.banner.iter().any(|line| line.contains("Antigravity")));
+    assert_eq!(page.total, "2,500");
+    assert_eq!(page.days.last().unwrap().antigravity, Some(2_500));
 }

@@ -20,6 +20,9 @@ pub const LABEL_REAUTH: &str = "需要重新授权";
 pub const LABEL_QUIT_CURSOR: &str = "请先退出 Cursor";
 pub const LABEL_QUIT_CODEX: &str = "请先退出 ChatGPT";
 pub const LABEL_QUIT_CLAUDE: &str = "请先退出 Claude";
+pub const LABEL_QUIT_GEMINI: &str = "请先退出 Gemini";
+pub const LABEL_QUIT_ANTIGRAVITY: &str = "请先退出 Antigravity";
+pub const LABEL_QUIT_WORKBUDDY: &str = "请先退出 WorkBuddy";
 pub const LABEL_QUIT_HARNESS: &str = "请先退出 DeepSeek Harness";
 pub const LABEL_QUIT_DSH_PROCESS: &str = "请先退出 DeepSeek Harness / DS Bot";
 pub const LABEL_UNKNOWN_APP: &str = "无法确认应用是否在运行，已停止清理";
@@ -55,6 +58,9 @@ const HARNESS_BUNDLE: &str = "com.deepseek.dsh";
 const CURSOR_BUNDLE: &str = "com.todesktop.230313mzl4w4u92";
 const CODEX_BUNDLE: &str = "com.openai.codex";
 const CLAUDE_BUNDLE: &str = "com.anthropic.claudefordesktop";
+const GEMINI_BUNDLE: &str = "com.google.GeminiMacOS";
+const ANTIGRAVITY_BUNDLE: &str = "com.google.antigravity";
+const WORKBUDDY_BUNDLE: &str = "com.tencent.workbuddy.mac";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpaceClass {
@@ -176,6 +182,9 @@ pub fn cleanup_block(tool: ToolId, view: &RunningView<'_>) -> Option<&'static st
         ToolId::Cursor => app_block(view.bundle_ids, CURSOR_BUNDLE, LABEL_QUIT_CURSOR),
         ToolId::Codex => app_block(view.bundle_ids, CODEX_BUNDLE, LABEL_QUIT_CODEX),
         ToolId::Claude => app_block(view.bundle_ids, CLAUDE_BUNDLE, LABEL_QUIT_CLAUDE),
+        ToolId::Gemini => app_block(view.bundle_ids, GEMINI_BUNDLE, LABEL_QUIT_GEMINI),
+        ToolId::Antigravity => app_block(view.bundle_ids, ANTIGRAVITY_BUNDLE, LABEL_QUIT_ANTIGRAVITY),
+        ToolId::WorkBuddy => app_block(view.bundle_ids, WORKBUDDY_BUNDLE, LABEL_QUIT_WORKBUDDY),
     }
 }
 
@@ -952,6 +961,9 @@ fn tool_name(tool: ToolId) -> &'static str {
         ToolId::Cursor => "cursor",
         ToolId::Codex => "codex",
         ToolId::Claude => "claude",
+        ToolId::Gemini => "gemini",
+        ToolId::Antigravity => "antigravity",
+        ToolId::WorkBuddy => "workbuddy",
     }
 }
 

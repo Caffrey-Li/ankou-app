@@ -95,6 +95,8 @@ export type ConversationSources = {
   harness?: SourceStatus;
   cursor?: SourceStatus;
   claude?: SourceStatus;
+  antigravity?: SourceStatus;
+  workbuddy?: SourceStatus;
 };
 
 const emptyReason: Record<Exclude<SourceStatus, "ok">, string> = {
@@ -112,6 +114,8 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
     sources.ds_bot === "unauthorized" &&
     (sources.harness ?? "unauthorized") === "unauthorized" &&
     (sources.claude ?? "unauthorized") === "unauthorized" &&
+    (sources.antigravity ?? "unauthorized") === "unauthorized" &&
+    (sources.workbuddy ?? "unauthorized") === "unauthorized" &&
     (sources.cursor ?? "unauthorized") === "unauthorized"
   )
     return "未授权";
@@ -120,7 +124,15 @@ export function handoffSubtitle(rows: HandoffRow[], sources: ConversationSources
 }
 
 export function sourcesWhenListFails(): ConversationSources {
-  return { codex: "read_failed", ds_bot: "read_failed", harness: "read_failed", cursor: "read_failed", claude: "read_failed" };
+  return {
+    codex: "read_failed",
+    ds_bot: "read_failed",
+    harness: "read_failed",
+    cursor: "read_failed",
+    claude: "read_failed",
+    antigravity: "read_failed",
+    workbuddy: "read_failed",
+  };
 }
 
 export function handoffEmptyLines(sources: ConversationSources | null) {
@@ -131,6 +143,10 @@ export function handoffEmptyLines(sources: ConversationSources | null) {
     ["ds_bot", "DS Bot", sources.ds_bot],
     ...(sources.cursor ? [["cursor", "Cursor", sources.cursor] as [string, string, SourceStatus]] : []),
     ...(sources.claude ? [["claude", "Claude", sources.claude] as [string, string, SourceStatus]] : []),
+    ...(sources.antigravity
+      ? [["antigravity", "Antigravity", sources.antigravity] as [string, string, SourceStatus]]
+      : []),
+    ...(sources.workbuddy ? [["workbuddy", "WorkBuddy", sources.workbuddy] as [string, string, SourceStatus]] : []),
   ];
   return tools.flatMap(([tool, label, status]) => {
     if (status === "ok") return [];
@@ -641,6 +657,8 @@ function toolKind(tool: string) {
   if (name === "ds bot" || name === "ds_bot") return "ds_bot";
   if (name.includes("harness")) return "deepseek_harness";
   if (name === "claude") return "claude";
+  if (name === "antigravity") return "antigravity";
+  if (name === "workbuddy") return "workbuddy";
   return "cursor";
 }
 
@@ -650,6 +668,8 @@ function toolLabel(tool: string) {
   if (kind === "ds_bot") return "DS Bot";
   if (kind === "deepseek_harness") return "DeepSeek Harness";
   if (kind === "claude") return "Claude";
+  if (kind === "antigravity") return "Antigravity";
+  if (kind === "workbuddy") return "WorkBuddy";
   return "Cursor";
 }
 
