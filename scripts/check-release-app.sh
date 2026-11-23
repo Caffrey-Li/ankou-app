@@ -58,7 +58,15 @@ check_absent() {
 
 check_arch() {
   archs=$(lipo -archs "$1")
-  [ "$archs" = "arm64" ] || fail "架构是「$archs」，只允许 arm64"
+  # 官网分发包是通用包（WANXIANG_UNIVERSAL=1），本机自用包只要 arm64
+  if [ "${WANXIANG_UNIVERSAL:-0}" = "1" ]; then
+    case "$archs" in
+      "x86_64 arm64" | "arm64 x86_64") ;;
+      *) fail "架构是「$archs」，通用包需要 x86_64 和 arm64" ;;
+    esac
+  else
+    [ "$archs" = "arm64" ] || fail "架构是「$archs」，只允许 arm64"
+  fi
 }
 
 check_binary() {

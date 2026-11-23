@@ -6,3 +6,6 @@
 /app/capabilities/verify.json
 .DS_Store
 *.log
+
+# 官网分发包产物
+/dist/
