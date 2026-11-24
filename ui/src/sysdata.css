@@ -1,0 +1,542 @@
+/* 清理页「系统」部分与 AI 本地模型清单 */
+
+.sys-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.sys-summary,
+.sys-list,
+.sys-enable {
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* 总览一条：磁盘条占一半，后面三格等分 */
+.sys-summary {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+}
+
+.sys-disk,
+.sys-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 20px;
+}
+
+.sys-cell {
+  border-left: 1px solid var(--color-separator);
+}
+
+.sys-disk-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.sys-disk-head span,
+.sys-cell > span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.sys-disk-head strong {
+  color: var(--color-graphite);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.sys-disk-head small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.sys-disk-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--fill-1);
+}
+
+.sys-disk-bar i,
+.sys-legend i {
+  display: block;
+  min-width: 0;
+}
+
+.sys-disk-bar i.ai,
+.sys-legend i.ai {
+  background: var(--chart-1);
+}
+
+.sys-disk-bar i.system,
+.sys-legend i.system {
+  background: var(--chart-2);
+}
+
+.sys-disk-bar i.other,
+.sys-legend i.other {
+  background: var(--chart-3);
+}
+
+.sys-disk-bar i.free,
+.sys-legend i.free {
+  background: var(--fill-2);
+}
+
+.sys-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.sys-legend span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.sys-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.sys-cell strong {
+  display: flex;
+  gap: 3px;
+  align-items: baseline;
+  color: var(--color-graphite);
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+}
+
+.sys-cell strong small {
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.sys-cell.warn strong {
+  color: var(--color-warn-text);
+}
+
+.sys-cell.quiet strong {
+  color: var(--color-text-secondary);
+}
+
+/* 清单 */
+.sys-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sys-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 20px 10px;
+}
+
+.sys-group + .sys-group {
+  border-top: 1px solid var(--color-separator);
+}
+
+.sys-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 0 4px;
+}
+
+.sys-group-head h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.sys-group-head span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.sys-row-main {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 24px;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0;
+}
+
+.sys-row-main .check,
+.sys-check-gap {
+  margin-top: 2px;
+}
+
+.sys-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sys-copy strong {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--color-graphite);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.sys-copy > span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sys-copy small {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--color-text-secondary) 80%, transparent);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-copy small.sys-denied {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--color-warn-text);
+  white-space: normal;
+}
+
+.sys-tag {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.sys-tag.ok {
+  background: color-mix(in srgb, var(--color-ok) 14%, transparent);
+  color: var(--color-ok);
+}
+
+.sys-tag.warn {
+  background: color-mix(in srgb, var(--color-ochre) 14%, transparent);
+  color: var(--color-warn-text);
+}
+
+.sys-tag.quiet {
+  background: var(--fill-1);
+  color: var(--color-text-secondary);
+}
+
+.sys-row-main > b {
+  color: var(--color-graphite);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.sys-row-main > b.quiet {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.sys-row.manual .sys-copy strong {
+  color: color-mix(in srgb, var(--color-graphite) 80%, transparent);
+}
+
+.sys-expand {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+.sys-expand:hover {
+  background: var(--fill-1);
+}
+
+.sys-expand svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.sys-expand.open svg {
+  transform: rotate(90deg);
+}
+
+.sys-children {
+  margin: 0 0 8px 30px;
+  padding: 4px 0;
+  border-left: 2px solid var(--fill-2);
+  list-style: none;
+}
+
+.sys-children label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0 5px 12px;
+  font-size: 12px;
+}
+
+.sys-children label span {
+  overflow: hidden;
+  color: var(--color-graphite);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-children label b {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.sys-more {
+  padding: 4px 0 4px 12px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.sys-missing {
+  margin: 10px 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sys-notice {
+  margin: 0;
+  padding: 0 20px 8px;
+  color: var(--color-warn-text);
+  font-size: 12px;
+}
+
+.sys-foot {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-separator);
+}
+
+.sys-foot span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sys-foot strong {
+  color: var(--color-graphite);
+  font-size: 13px;
+}
+
+.sys-foot small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.sys-primary {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-ochre);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+  cursor: default;
+}
+
+.sys-primary svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sys-primary:disabled {
+  background: color-mix(in srgb, var(--color-ochre) 35%, var(--color-card));
+}
+
+.sys-review {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-ochre) 10%, transparent);
+  list-style: none;
+}
+
+.sys-review li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.sys-review li + li {
+  margin-top: 8px;
+}
+
+.sys-review strong {
+  color: var(--color-graphite);
+}
+
+.sys-empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* 还没开启 */
+.sys-enable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 640px;
+  padding: 28px;
+}
+
+.sys-enable.compact {
+  max-width: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 0;
+}
+
+.sys-enable h2 {
+  margin: 0;
+  color: var(--color-graphite);
+  font-size: 16px;
+}
+
+.sys-enable p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 「AI 工具」页里的本地模型：嵌在右侧详情卡里 */
+.space-detail .sys-list {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.space-detail .sys-scroll {
+  padding: 0;
+  overflow: visible;
+}
+
+.space-detail .sys-foot {
+  padding: 14px 0 0;
+}
+
+/* 页头的两边切换 */
+.space-sides {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--fill-1);
+}
+
+.space-sides button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: default;
+}
+
+.space-sides button small {
+  font-size: 11px;
+}
+
+.space-sides button[aria-selected="true"] {
+  background: var(--color-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: var(--color-graphite);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 1040px) {
+  .sys-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sys-disk {
+    grid-column: 1 / -1;
+  }
+
+  .sys-cell:nth-child(2) {
+    border-left: 0;
+  }
+}
+
+/* 本地模型行的图标：没有应用图标，用一个统一的标记 */
+.sys-mark {
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--chart-1) 16%, transparent);
+  color: var(--chart-1);
+}
+
+.sys-mark svg {
+  width: 60%;
+  height: 60%;
+}
+
+.space-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.space-side[hidden] {
+  display: none;
+}

@@ -93,6 +93,46 @@ try {
   const setup = renderToStaticMarkup(createElement(SetupPage, { snapshot, onDone() {}, onReload() {} }));
   assert.equal((setup.match(/class="setup-vendor( on| missing)?"/g) ?? []).length, 8);
   assert.match(setup, /全部接入/);
+
+  // 清理页「系统」：没开启时先说明；开启后按分组列出，手动项不能勾
+  const { SystemPanel, SysList, sideTotal, toPicks, selectedBytes } = await server.ssrLoadModule("/src/SystemSpace.tsx");
+  const off = renderToStaticMarkup(
+    createElement(SystemPanel, { scan: null, enabled: false, scanning: false, windows: false, aiBytes: 0, onEnable() {}, onCleaned() {} }),
+  );
+  assert.match(off, /开启统计/);
+  const item = (id, side, group, action, bytes, extra = {}) => ({
+    id, side, group, title: id, action, note: "说明", paths: ["~/x"], state: "ok", bytes, count: 2,
+    children: [{ name: "a", bytes: bytes / 2 }, { name: "b", bytes: bytes / 2 }], snapshots: null, ...extra,
+  });
+  const sys = {
+    items: [
+      item("app_caches", "system", "缓存与日志", "safe", 4e9),
+      item("ios_backups", "system", "设备与备份", "review", 2e9),
+      item("trash", "system", "系统管理", "manual", 1e9),
+      item("tm_snapshots", "system", "系统管理", "manual", 0, { state: "info", snapshots: 3 }),
+      item("npm_cache", "system", "开发工具", "safe", 0, { state: "missing" }),
+      item("ollama_models", "ai", "本地模型", "review", 5e9),
+    ],
+    disk: { total: 1e12, available: 4e11 },
+    cancelled: false,
+  };
+  assert.equal(sideTotal(sys, "system"), 7e9);
+  assert.equal(sideTotal(sys, "ai"), 5e9);
+  const on = renderToStaticMarkup(
+    createElement(SystemPanel, { scan: sys, enabled: true, scanning: false, windows: false, aiBytes: 5e9, onEnable() {}, onCleaned() {} }),
+  );
+  assert.match(on, /可用 400\.0 GB/);
+  assert.match(on, /缓存与日志/);
+  assert.match(on, /3 个快照/);
+  assert.match(on, /本机没有或没有占用：npm_cache/);
+  assert.doesNotMatch(on, /ollama_models/);
+  assert.match(on, /aria-label="app_caches"/);
+  assert.doesNotMatch(on, /aria-label="trash"/);
+  const ai = renderToStaticMarkup(createElement(SysList, { scan: sys, side: "ai", scanning: false, windows: false, onCleaned() {} }));
+  assert.match(ai, /ollama_models/);
+  assert.doesNotMatch(ai, /app_caches/);
+  assert.deepEqual(toPicks({ app_caches: true, ios_backups: ["a"] }), [{ id: "app_caches" }, { id: "ios_backups", children: ["a"] }]);
+  assert.equal(selectedBytes(sys.items, { app_caches: true, ios_backups: ["a"] }), 5e9);
 } finally {
   await server.close();
 }

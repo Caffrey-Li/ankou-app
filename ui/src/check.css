@@ -19,6 +19,15 @@
   background-size: 12px;
 }
 
+.check:indeterminate {
+  border-color: var(--color-mist);
+  background-color: var(--color-mist);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px;
+}
+
 .check:disabled {
   opacity: 0.45;
 }

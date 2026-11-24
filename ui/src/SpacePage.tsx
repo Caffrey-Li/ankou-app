@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cancelScan, prepareCleanup, runCleanup, scanSpace, type CleanupItem, type SpaceEntry, type SpaceScan } from "./api";
 import { inTauri } from "./api";
 import { Check } from "./Check";
-import { IconCheck, IconLock, IconTrash } from "./icons";
+import { IconCheck, IconLock, IconSpark, IconTrash } from "./icons";
 import { vendors } from "./catalog";
 import { ToolIcon } from "./tool-status";
 import "./space.css";
@@ -182,7 +182,10 @@ export function SpacePage({
   onSummary,
   onScans,
   initialTool = "deepseek_harness",
+  localAi,
 }: {
+  /** 各厂商以外的本地模型与 AI 缓存：列表里多一行，右侧显示它的清单 */
+  localAi?: { bytes: number | null; detail: ReactNode };
   /** 每次扫描完，把各端的结果交给总览和工具页 */
   onScans?: (scans: SpaceScans) => void;
   onSummary?: (summary: { tool: string; known: number; protectedBytes: number; cleanable: number }) => void;
@@ -207,7 +210,7 @@ export function SpacePage({
     codebuddy: null,
     cursor_cli: null,
   });
-  const [tool, setTool] = useState<SpaceToolId>(initialTool);
+  const [tool, setTool] = useState<SpaceToolId | "local_ai">(initialTool);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
@@ -239,7 +242,7 @@ export function SpacePage({
   };
   const extraSizes = extraTools.map(extraKnown);
   const anyScan = Boolean(scan || cursor || codex);
-  const allKnown = known + cursorKnown + codexKnown + claudeKnown + extraSizes.reduce((sum, bytes) => sum + bytes, 0);
+  const allKnown = (localAi?.bytes ?? 0) + known + cursorKnown + codexKnown + claudeKnown + extraSizes.reduce((sum, bytes) => sum + bytes, 0);
   const overCount = [known, cursorKnown, codexKnown, claudeKnown, ...extraSizes].filter(
     (bytes) => bytes > thresholdGb * GB,
   ).length;
@@ -269,7 +272,7 @@ export function SpacePage({
     return { vendor, members, scanned: found.length > 0, protectedSum, cleanSum, total: protectedSum + cleanSum };
   });
   const vendorMax = Math.max(...vendorRows.map((row) => row.total), 1);
-  const currentVendor = vendors.find((vendor) => (vendor.members as string[]).includes(tool));
+  const currentVendor = tool === "local_ai" ? undefined : vendors.find((vendor) => (vendor.members as string[]).includes(tool));
   const quit = scan?.quit ?? null;
   const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
@@ -401,6 +404,23 @@ export function SpacePage({
               bar={row.scanned ? { width: row.total / vendorMax, protectedBytes: row.protectedSum, cleanable: row.cleanSum } : null}
             />
           ))}
+          {localAi ? (
+            <button
+              type="button"
+              className={tool === "local_ai" ? "active" : ""}
+              aria-pressed={tool === "local_ai"}
+              onClick={() => setTool("local_ai")}
+            >
+              <span className="space-mark sys-mark" aria-hidden="true">
+                <IconSpark />
+              </span>
+              <span className="space-tool-copy">
+                <strong>本地模型与 AI 缓存</strong>
+                <small>Ollama、Hugging Face 等</small>
+              </span>
+              <b className={localAi.bytes == null ? "quiet" : ""}>{localAi.bytes == null ? "未统计" : formatBytes(localAi.bytes, 1)}</b>
+            </button>
+          ) : null}
           <p>{statOnlyNote.codex}</p>
         </aside>
         <div className="space-detail-col">
@@ -414,7 +434,20 @@ export function SpacePage({
             ))}
           </div>
         ) : null}
-        {tool === "deepseek_harness" ? (
+        {tool === "local_ai" ? (
+          <section className="space-detail" aria-label="本地模型与 AI 缓存">
+            <header>
+              <span className="space-mark large sys-mark" aria-hidden="true">
+                <IconSpark />
+              </span>
+              <div>
+                <strong>本地模型与 AI 缓存</strong>
+                <span>各厂商以外的本地模型，以及 AI 应用放在系统缓存和日志目录里的文件</span>
+              </div>
+            </header>
+            {localAi?.detail}
+          </section>
+        ) : tool === "deepseek_harness" ? (
           <section className="space-detail" aria-label="DeepSeek Harness">
             <DetailHead
               id="deepseek_harness"

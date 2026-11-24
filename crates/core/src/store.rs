@@ -112,6 +112,9 @@ pub struct Settings {
     pub cursor_deeplink: bool,
     #[serde(default)]
     pub appearance: Appearance,
+    /// 清理页「系统」部分：统计系统与开发工具占用（只算大小，不读内容）
+    #[serde(default)]
+    pub system_scan: bool,
 }
 
 impl Default for Settings {
@@ -131,6 +134,7 @@ impl Default for Settings {
             codex_app_server: false,
             cursor_deeplink: false,
             appearance: Appearance::System,
+            system_scan: false,
         }
     }
 }
@@ -941,6 +945,7 @@ fn write_settings(conn: &Connection, settings: &Settings) -> Result<(), StoreErr
         ("codex_app_server", bit(settings.codex_app_server)),
         ("cursor_deeplink", bit(settings.cursor_deeplink)),
         ("appearance", enum_name(settings.appearance)),
+        ("system_scan", bit(settings.system_scan)),
     ];
     for (key, value) in pairs {
         conn.execute(
@@ -986,6 +991,7 @@ fn apply_setting(settings: &mut Settings, key: &str, value: &str) {
         "setup_complete" => settings.setup_complete = value == "1",
         "codex_app_server" => settings.codex_app_server = value == "1",
         "cursor_deeplink" => settings.cursor_deeplink = value == "1",
+        "system_scan" => settings.system_scan = value == "1",
         "appearance" => {
             settings.appearance = match value {
                 "light" => Appearance::Light,

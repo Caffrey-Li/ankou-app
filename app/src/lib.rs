@@ -18,6 +18,7 @@ mod measured;
 mod runtime;
 mod space;
 mod system;
+mod sysdata;
 mod update;
 
 pub fn run() {
@@ -34,6 +35,7 @@ pub fn run() {
     )
     .manage(Supervisor::new())
     .manage(update::PendingUpdate::default())
+    .manage(sysdata::SysState::default())
     .setup(|app| {
         app.manage(commands::Hub::open(app.handle())?);
         setup_app_menu(app.handle())?;

@@ -19,6 +19,7 @@ export type Settings = {
   codex_app_server: boolean;
   cursor_deeplink: boolean;
   appearance: Appearance;
+  system_scan: boolean;
 };
 
 export type StoredGrant = {
@@ -57,6 +58,7 @@ export const defaultSettings: Settings = {
   codex_app_server: false,
   cursor_deeplink: false,
   appearance: "system",
+  system_scan: false,
 };
 
 export function inTauri() {
@@ -354,6 +356,46 @@ export type CleanupItem = {
 
 export function scanSpace(tool: string) {
   return call<SpaceScan>("scan_space", { tool });
+}
+
+export type SysSide = "ai" | "system";
+export type SysAction = "safe" | "review" | "manual";
+export type SysItem = {
+  id: string;
+  side: SysSide;
+  group: string;
+  title: string;
+  action: SysAction;
+  note: string;
+  paths: string[];
+  state: "ok" | "missing" | "denied" | "info";
+  bytes: number;
+  count: number;
+  children: { name: string; bytes: number }[];
+  snapshots: number | null;
+};
+export type SysScan = {
+  items: SysItem[];
+  disk: { total: number; available: number } | null;
+  cancelled: boolean;
+};
+export type SysPick = { id: string; children?: string[] };
+export type SysCleanup = { entry_count: number; total_bytes: number; items: CleanupItem[] };
+
+export function scanSystem() {
+  return call<SysScan>("scan_system");
+}
+
+export function cancelSystemScan() {
+  return call<void>("cancel_system_scan");
+}
+
+export function prepareSystemCleanup(picks: SysPick[]) {
+  return call<string>("prepare_system_cleanup", { picks });
+}
+
+export function runSystemCleanup(token: string, picks: SysPick[]) {
+  return call<SysCleanup>("run_system_cleanup", { token, picks });
 }
 
 export function cancelScan(tool: string) {

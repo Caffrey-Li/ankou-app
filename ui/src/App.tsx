@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { isoDay } from "./DateRange";
-import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, sendNotice, type ConversationRow, type Snapshot, type SourceStatus, type UsageDay, type UsageView } from "./api";
+import { emptyUsage, fallbackSnapshot, inTauri, listConversations, loadSnapshot, loadUsage, refreshUsage, saveSettings, scanSystem, sendNotice, type ConversationRow, type SysScan, type Snapshot, type SourceStatus, type UsageDay, type UsageView } from "./api";
 import { loadDevFixture } from "./fixture";
 import { fixtureHandoffRows, HandoffFilters, HandoffPage, parseUpdated, handoffSubtitle, sourcesWhenListFails, type ConversationSources, type HandoffFilter } from "./HandoffPage";
 import { IconClock, IconPlus, IconRefresh, IconSearch } from "./icons";
 import { SettingsPage } from "./SettingsPage";
 import { fixtureSpaceSummary, formatBytes, scanAllTools, SpacePage, type SpaceScans } from "./SpacePage";
+import { sideTotal, SysEnable, SysList, SystemPanel } from "./SystemSpace";
 import type { SpaceSummary } from "./OverviewCards";
 import { Console, type PendingItem } from "./Console";
 import { ToolsPage } from "./ToolsPage";
@@ -190,6 +191,9 @@ export function App() {
   const [handoffQuery, setHandoffQuery] = useState("");
   const [previewRequest, setPreviewRequest] = useState(0);
   const [spaceRequest, setSpaceRequest] = useState(0);
+  const [spaceSide, setSpaceSide] = useState<"ai" | "system">("ai");
+  const [sysScan, setSysScan] = useState<SysScan | null>(null);
+  const [sysScanning, setSysScanning] = useState(false);
   const [searchRequest, setSearchRequest] = useState(0);
   const [spaceStamp, setSpaceStamp] = useState(fixtureKind === "m4" ? "19:10" : "");
   const [spaceSummary, setSpaceSummary] = useState<SpaceSummary | null>(
@@ -256,6 +260,37 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, spaceGranted]);
   const totals = spaceScans ? spaceTotals(spaceScans) : null;
+  // 系统与本地模型：开启后才统计（只算大小）
+  const sysEnabled = snapshot.settings.system_scan;
+  function runSysScan() {
+    if (!inTauri() || sysScanning) return;
+    setSysScanning(true);
+    void scanSystem()
+      .then(setSysScan)
+      .catch(() => undefined)
+      .finally(() => setSysScanning(false));
+  }
+  function enableSysScan() {
+    const next = { ...snapshot.settings, system_scan: true };
+    setSnapshot((current) => ({ ...current, settings: next }));
+    void saveSettings(next)
+      .then(() => {
+        setSysScan(null);
+        runSysScan();
+      })
+      .catch(() => setSnapshot((current) => ({ ...current, settings: { ...next, system_scan: false } })));
+  }
+  useEffect(() => {
+    if (page === "space" && sysEnabled && !sysScan) runSysScan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, sysEnabled]);
+  useEffect(() => {
+    if (spaceRequest > 0 && sysEnabled) runSysScan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaceRequest]);
+  const aiLocalBytes = sysScan ? sideTotal(sysScan, "ai") : null;
+  const aiBytes = (totals ?? []).reduce((sum, item) => sum + item.bytes, 0) + (aiLocalBytes ?? 0);
+  const systemBytes = sysScan ? sideTotal(sysScan, "system") : null;
   useEffect(() => {
     applyAppearance(snapshot.settings.appearance ?? "system");
   }, [snapshot.settings.appearance]);
@@ -475,7 +510,9 @@ export function App() {
     page === "handoff"
       ? handoffSubtitle(handoffRows, handoffSources, threshold)
       : page === "space"
-        ? `按工具统计本机已知占用 · 阈值 ${snapshot.settings.space_threshold_gb} GB`
+        ? spaceSide === "system"
+          ? "系统缓存、开发工具、备份与系统文件 · 只统计大小，清理只移到废纸篓"
+          : `按工具统计本机已知占用 · 阈值 ${snapshot.settings.space_threshold_gb} GB`
         : page === "usage"
           ? `${rangesLabel(range)} · ${usage.range_label}`
           : page === "settings"
@@ -564,6 +601,17 @@ export function App() {
                   </button>
                 </>
               ) : page === "space" ? (
+                <>
+                <div className="space-sides" role="tablist" aria-label="清理范围">
+                  <button type="button" role="tab" aria-selected={spaceSide === "ai"} onClick={() => setSpaceSide("ai")}>
+                    AI 工具
+                    <small>{totals ? formatBytes(aiBytes, 1) : ""}</small>
+                  </button>
+                  <button type="button" role="tab" aria-selected={spaceSide === "system"} onClick={() => setSpaceSide("system")}>
+                    系统
+                    <small>{systemBytes != null ? formatBytes(systemBytes, 1) : ""}</small>
+                  </button>
+                </div>
                 <div className="glass-pill">
                   <IconClock />
                   <span>{spaceStamp ? `扫描于 ${spaceStamp}` : "尚未扫描"}</span>
@@ -577,6 +625,7 @@ export function App() {
                     <IconRefresh />
                   </button>
                 </div>
+                </>
               ) : null}
             </div>
           </header>
@@ -641,7 +690,17 @@ export function App() {
             focus={handoffFocus}
           />
         ) : (
+          <>
+          <div className="space-side" hidden={spaceSide !== "ai"}>
           <SpacePage
+            localAi={{
+              bytes: aiLocalBytes,
+              detail: sysEnabled ? (
+                <SysList scan={sysScan} side="ai" scanning={sysScanning} windows={windows} onCleaned={runSysScan} />
+              ) : (
+                <SysEnable compact onEnable={enableSysScan} />
+              ),
+            }}
             fixture={fixtureM4}
             windows={windows}
             sheet={sheet === "confirm" || sheet === "result" ? sheet : ""}
@@ -651,6 +710,19 @@ export function App() {
             onSummary={setSpaceSummary}
             onScans={setSpaceScans}
           />
+          </div>
+          <div className="space-side" hidden={spaceSide !== "system"}>
+            <SystemPanel
+              scan={sysScan}
+              enabled={sysEnabled}
+              scanning={sysScanning}
+              windows={windows}
+              aiBytes={aiBytes}
+              onEnable={enableSysScan}
+              onCleaned={runSysScan}
+            />
+          </div>
+          </>
         )}
       </main>
       <UpdateGate updater={updater} />
