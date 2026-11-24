@@ -1,5 +1,16 @@
 # 发版与更新
 
+**0.3.2 起：安装包和更新包放在 GitHub Releases（公开仓库 `github_repo`，只放安装包，不放源码）。**
+固定下载地址：`https://github.com/<github_repo>/releases/latest/download/Wanxiang.dmg`。
+0.3.2 起的应用只读 `https://github.com/<github_repo>/releases/latest/download/latest.json`。
+0.3.1 及更早的版本仍读下面的 Worker / r2.dev，所以每次发版后 `mac-publish.sh` 要把同一份 latest.json（更新包链接指向 GitHub）放到 R2；R2 和 Worker 不要删。
+Worker 的下载统计从 0.3.2 起只剩旧版本的检查更新；GitHub 自带每个文件的下载次数。
+
+发版顺序：`mac-release.sh` → Claude 在云端 `bash scripts/gh-release.sh <产物目录>`（草稿 → 传完 → 公开）→ `mac-publish.sh`（核对 GitHub，再更新 R2 的 latest.json）。
+`--policy-only` 只改 R2 的 latest.json；GitHub 上的需要用 `gh release upload --clobber` 替换。
+
+## 以前（0.3.1 及更早）
+
 万象启动时、以及之后每 6 小时检查更新。0.3.0 起先读 `<public_url>/latest.json?v=当前版本&a=芯片`（统计 Worker），失败再读 `<base_url>/latest.json`；0.2.0 及以前只读后者，所以 r2.dev 公开地址要一直保留。
 
 ## 下载统计

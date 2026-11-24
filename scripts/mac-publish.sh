@@ -1,7 +1,9 @@
 #!/bin/bash
-# 把 mac-release.sh 的产物上传到 Cloudflare R2，供官网下载和应用内更新。
+# 0.3.2 起安装包和更新包放在 GitHub Releases（release/config.json 的 github_repo），
+# 由 Claude 在云端用 gh 上传。本脚本只做一件事：GitHub 上的版本就绪后，把同一份 latest.json
+# 放到 R2，让 0.3.1 及更早的版本（更新地址还是 Worker / r2.dev）也能更新到 GitHub 上的新版。
 # 用法：
-#   bash scripts/mac-publish.sh               上传当前版本（dmg、更新包），最后替换 latest.json
+#   bash scripts/mac-publish.sh               核对 GitHub 上的当前版本，再替换 R2 的 latest.json
 #   bash scripts/mac-publish.sh --policy-only 只按 release/update-policy.json 重写并上传 latest.json
 # 前提：wrangler 已登录（npx wrangler login），存储桶已开公开访问。
 # 日志不写账号、邮箱和令牌。
@@ -61,32 +63,35 @@ print("  线上版本 %s，最低版本改为 %s" % (manifest["version"], manife
   exit 0
 fi
 
-echo "== 上传 ${VERSION}"
-TARBALL="${OUT}/Wanxiang-${VERSION}-universal.app.tar.gz"
-DMG="${OUT}/Wanxiang-${VERSION}.dmg"
-for file in "${TARBALL}" "${TARBALL}.sig" "${DMG}" "${MANIFEST}"; do
-  [ -s "${file}" ] || die "缺少 ${file}，先运行 scripts/mac-release.sh"
-done
-xcrun stapler validate "${DMG}" >/dev/null 2>&1 || die "dmg 没有公证票据"
+GH_REPO=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["github_repo"])')
+GH_LATEST="https://github.com/${GH_REPO}/releases/latest/download"
+TARBALL_NAME="Wanxiang-${VERSION}-universal.app.tar.gz"
+[ -s "${MANIFEST}" ] || die "缺少 ${MANIFEST}，先运行 scripts/mac-release.sh"
+
+echo "== 核对 GitHub 上的 ${VERSION}"
+GH_VERSION=$(curl -fsSL --max-time 30 "${GH_LATEST}/latest.json" 2>/dev/null | /usr/bin/python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("version",""))
+except Exception: print("")')
+echo "  GitHub latest.json 版本：${GH_VERSION:-读不到}"
+[ "${GH_VERSION}" = "${VERSION}" ] || die "GitHub 上还不是 ${VERSION}，先上传 GitHub Releases"
+code=$(curl -sL -o /dev/null -w '%{http_code}' -r 0-0 --max-time 30 "https://github.com/${GH_REPO}/releases/download/v${VERSION}/${TARBALL_NAME}")
+echo "  更新包可下载：${code}"
+dmg=$(curl -sL -o /dev/null -w '%{http_code}' -r 0-0 --max-time 30 "${GH_LATEST}/Wanxiang.dmg")
+echo "  安装包可下载：${dmg}"
+case "${code}${dmg}" in 200200|206206|200206|206200) ;; *) die "GitHub 上的文件下载不到";; esac
+
 REMOTE=$(remote_version)
 if [ -n "${REMOTE}" ] && older_than_remote "${VERSION}" "${REMOTE}"; then
-  die "线上已经是 ${REMOTE}，比本地 ${VERSION} 新，不覆盖"
+  die "R2 上已经是 ${REMOTE}，比本地 ${VERSION} 新，不覆盖"
 fi
-
-# 先传带版本号的文件，最后才替换 latest.json 和官网下载链接，避免用户读到指向未上传文件的清单
-put "${TARBALL}" "v${VERSION}/$(basename "${TARBALL}")" "application/gzip" "public, max-age=31536000, immutable"
-put "${DMG}" "v${VERSION}/$(basename "${DMG}")" "application/x-apple-diskimage" "public, max-age=31536000, immutable"
-put "${DMG}" "Wanxiang.dmg" "application/x-apple-diskimage" "no-cache, max-age=0"
-put "${MANIFEST}" "latest.json" "application/json" "no-cache, max-age=0"
-
 echo
-echo "== 线上核对"
+echo "== 给旧版本更新 R2 的 latest.json"
+put "${MANIFEST}" "latest.json" "application/json" "no-cache, max-age=0"
 sleep 3
 ONLINE=$(remote_version)
-echo "  latest.json 版本：${ONLINE:-读不到}"
-code=$(curl -s -o /dev/null -w '%{http_code}' -I --max-time 20 -H "x-wanxiang-selftest: 1" "${PUBLIC_URL}/v${VERSION}/$(basename "${TARBALL}")")
-echo "  更新包可下载：${code}"
-echo "  官网下载链接：${PUBLIC_URL}/download（统计下载；可加 ?from=来源）"
-echo "  备用直链：${BASE_URL}/Wanxiang.dmg（不计入统计）"
-[ "${ONLINE}" = "${VERSION}" ] && [ "${code}" = "200" ] || die "线上核对不通过"
+echo "  R2 latest.json 版本：${ONLINE:-读不到}"
+[ "${ONLINE}" = "${VERSION}" ] || die "R2 核对不通过"
+echo
+echo "  下载地址（固定）：${GH_LATEST}/Wanxiang.dmg"
+echo "  发布页：https://github.com/${GH_REPO}/releases"
 echo; echo "结论：已发布"

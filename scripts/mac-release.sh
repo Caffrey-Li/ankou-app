@@ -105,10 +105,11 @@ step "更新包（应用内更新用）"
 UPDATER_KEY="${HOME}/.tauri/wanxiang-updater.key"
 [ -f "${UPDATER_KEY}" ] || die "没有更新签名私钥 ${UPDATER_KEY}"
 BASE_URL=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["base_url"].rstrip("/"))')
-# 下载与检查更新走统计 Worker（release/worker），r2.dev 作为备用和旧版本的地址
-PUBLIC_URL=$(/usr/bin/python3 -c 'import json;c=json.load(open("release/config.json"));print(c.get("public_url",c["base_url"]).rstrip("/"))')
+# 0.3.2 起安装包与更新包放在 GitHub Releases；R2 只保留 latest.json 给 0.3.1 及更早的版本
+GH_REPO=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["github_repo"])')
+GH_LATEST="https://github.com/${GH_REPO}/releases/latest/download"
 ENDPOINTS=$(/usr/bin/python3 -c 'import json;print("|".join(json.load(open("app/tauri.conf.json"))["plugins"]["updater"]["endpoints"]))')
-[ "${ENDPOINTS}" = "${PUBLIC_URL}/latest.json?v={{current_version}}&a={{arch}}|${BASE_URL}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
+[ "${ENDPOINTS}" = "${GH_LATEST}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
 case "${BASE_URL}" in *UPDATE_HOST*) die "还没有配置更新服务地址（release/config.json）";; esac
 TARBALL="${OUT}/Wanxiang-${VERSION}-universal.app.tar.gz"
 COPYFILE_DISABLE=1 tar -czf "${TARBALL}" -C "${OUT}" "${NAME}.app" || die "打更新包失败"
@@ -116,19 +117,20 @@ npx tauri signer sign -f "${UPDATER_KEY}" -p "" "${TARBALL}" >/dev/null 2>&1 || 
 [ -s "${TARBALL}.sig" ] || die "没有生成更新包签名"
 NOTES_FILE="release/notes/${VERSION}.md"
 [ -f "${NOTES_FILE}" ] || die "缺少更新说明 ${NOTES_FILE}"
-/usr/bin/python3 - "${VERSION}" "${PUBLIC_URL}" "${TARBALL}" "${NOTES_FILE}" "${OUT}/latest.json" <<'PY'
+/usr/bin/python3 - "${VERSION}" "${GH_REPO}" "${TARBALL}" "${NOTES_FILE}" "${OUT}/latest.json" <<'PY'
 import json, sys, datetime, os
-version, base, tarball, notes_file, out = sys.argv[1:6]
+version, repo, tarball, notes_file, out = sys.argv[1:6]
+base = f"https://github.com/{repo}/releases/download/v{version}"
 signature = open(tarball + ".sig").read().strip()
 policy = json.load(open("release/update-policy.json"))
-url = f"{base}/v{version}/{os.path.basename(tarball)}"
+url = f"{base}/{os.path.basename(tarball)}"
 entry = {"signature": signature, "url": url}
 manifest = {
     "version": version,
     "notes": open(notes_file, encoding="utf-8").read().strip(),
     "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "minimum_version": policy.get("minimum_version", version),
-    "download_url": f"{base}/Wanxiang.dmg",
+    "download_url": f"https://github.com/{repo}/releases/latest/download/Wanxiang.dmg",
     "platforms": {"darwin-aarch64": entry, "darwin-x86_64": entry},
 }
 json.dump(manifest, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
@@ -148,6 +150,8 @@ codesign --sign "${DEV_ID}" --timestamp "${DMG}" || die "dmg 签名失败"
 step "公证 dmg"
 notarize "${DMG}" dmg || die "dmg 公证未通过"
 xcrun stapler staple "${DMG}" >/dev/null || die "dmg 装订公证票据失败"
+# 固定文件名的副本：GitHub 的 releases/latest/download/Wanxiang.dmg 永远指向最新版
+cp -f "${DMG}" "${OUT}/Wanxiang.dmg"
 echo "  已装订"
 
 step "系统检查（模拟别人第一次打开）"
@@ -163,7 +167,7 @@ echo "dmg：${DMG}"
 echo "大小：$(du -sh "${DMG}" | cut -f1)"
 echo "SHA-256：$(shasum -a 256 "${DMG}" | cut -d' ' -f1)"
 if [ ${fail} -eq 0 ]; then
-  echo "下一步：bash scripts/mac-publish.sh 上传到更新服务"
+  echo "下一步：上传到 GitHub Releases（${GH_REPO}），再 bash scripts/mac-publish.sh 给旧版本更新 latest.json"
   echo; echo "结论：可以分发"
 else
   echo; echo "结论：系统检查未通过"; exit 1

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "万象小助手",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "identifier": "local.wanxiang.assistant",
   "build": {
     "frontendDist": "../ui/dist",
@@ -58,8 +58,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkzRjAzNjU2NTM4Mjk5NUMKUldSY21ZSlRWamJ3a3dLVGRGOVpYL3RBUFNoaUYxUkpLeXNxRDF6QjIxOTdxL2FUUGlDS3lrOFEK",
       "endpoints": [
-        "https://wanxiang-dl.caffreyli-0328.workers.dev/latest.json?v={{current_version}}&a={{arch}}",
-        "https://pub-9d7d8ca156fd49efb4ffac4a982abeec.r2.dev/latest.json"
+        "https://github.com/Caffrey-Li/wanxiang-releases/releases/latest/download/latest.json"
       ]
     }
   }
