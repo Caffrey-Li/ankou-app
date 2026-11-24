@@ -71,7 +71,23 @@ notarize() {
     echo "接着等之前提交的公证：${label}"
   else
     echo "提交公证：${label}"
+    local since name
+    since=$(date -u +%Y-%m-%dT%H:%M:%S)
+    name=$(basename "${file}")
+    [ "${label}" = "app" ] && name=$(basename "${ZIP}")
     id=$(xcrun notarytool submit "${file}" --keychain-profile "${PROFILE}" --output-format json 2>/dev/null | json_field id)
+    if [ -z "${id}" ]; then
+      # 苹果那边慢时，上传其实成功了但命令没拿到编号：按文件名和提交时间到历史里找
+      sleep 20
+      id=$(xcrun notarytool history --keychain-profile "${PROFILE}" --output-format json 2>/dev/null | /usr/bin/python3 -c '
+import json, sys
+name, since = sys.argv[1], sys.argv[2]
+try: h = json.load(sys.stdin)["history"]
+except Exception: h = []
+c = [x for x in h if x.get("name") == name and x.get("createdDate", "")[:19] >= since]
+print(sorted(c, key=lambda x: x["createdDate"])[-1]["id"] if c else "")' "${name}" "${since}")
+      [ -n "${id}" ] && echo "  提交命令没有返回编号，已在历史里找到这次提交"
+    fi
     [ -n "${id}" ] || { echo "  提交失败"; return 1; }
     printf '%s' "${id}" > "${idfile}"
   fi
