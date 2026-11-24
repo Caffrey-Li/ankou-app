@@ -1,7 +1,7 @@
 //! 本机空间：AI 工具以外的部分（系统、开发工具、本地模型）。
 //!
 //! 只统计大小，不读文件内容。清理只把条目移到废纸篓；需要命令或管理员权限的位置只列出并说明，
-//! 万象不替用户执行。目录清单是万象自己整理的，按 macOS 的公开约定写成，不依赖任何第三方工具。
+//! 安扣不替用户执行。目录清单是安扣自己整理的，按 macOS 的公开约定写成，不依赖任何第三方工具。
 
 use std::collections::HashSet;
 use std::fs;
@@ -346,7 +346,7 @@ pub const CATALOG: &[Item] = &[
         base: Base::Home,
         roots: &[],
         filter: Filter::All,
-        note: "容器和镜像都在 Docker 的磁盘映像里，万象不打开它。请在 Docker Desktop 里清理，或在终端运行 docker system prune",
+        note: "容器和镜像都在 Docker 的磁盘映像里，安扣不打开它。请在 Docker Desktop 里清理，或在终端运行 docker system prune",
         needs_app: Some("Docker.app"),
     },
     // —— 系统：设备与备份 ——
@@ -384,7 +384,7 @@ pub const CATALOG: &[Item] = &[
         base: Base::Home,
         roots: &[".Trash"],
         filter: Filter::All,
-        note: "万象清理的东西都在这里。确认不再需要后，在访达里清倒废纸篓",
+        note: "安扣清理的东西都在这里。确认不再需要后，在访达里清倒废纸篓",
         needs_app: None,
     },
     Item {

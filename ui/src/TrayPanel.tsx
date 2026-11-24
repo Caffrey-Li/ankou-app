@@ -128,10 +128,10 @@ export function TrayPanel() {
   const reauth = items.filter((item) => item.icon === "alert");
 
   return (
-    <div className="tray-panel" ref={panelRef} role="dialog" aria-label="万象快速面板">
+    <div className="tray-panel" ref={panelRef} role="dialog" aria-label="安扣快速面板">
       <div className="tray-head">
         <Logo />
-        <strong>万象</strong>
+        <strong>安扣</strong>
         <span className="tray-stamp">{refreshing ? "刷新中" : usage.stamp === "—" ? "尚未刷新" : `${usage.stamp} 更新`}</span>
         <span className="grow" />
         <button

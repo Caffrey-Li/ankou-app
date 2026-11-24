@@ -71,7 +71,7 @@ export function SysEnable({ onEnable, compact = false }: { onEnable: () => void;
     <section className={compact ? "sys-enable compact" : "sys-enable"} aria-label="开启统计">
       <h2>统计本机其他占用</h2>
       <p>
-        万象会统计系统缓存、日志、开发工具、设备备份和本地模型等位置的大小，并分成「AI 工具」和「系统」两部分。
+        安扣会统计系统缓存、日志、开发工具、设备备份和本地模型等位置的大小，并分成「AI 工具」和「系统」两部分。
         只计算大小，不打开文件内容；清理时只移到废纸篓，需要命令或管理员权限的位置只给出处理方法。
       </p>
       <button type="button" className="sys-primary" onClick={onEnable}>

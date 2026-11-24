@@ -14,7 +14,7 @@ export PATH="${HOME}/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}"
 PROFILE="wanxiang-notary"
 # 通用包：Apple 芯片与 Intel 都能装（需要 rustup 的 x86_64-apple-darwin 目标）
 TARGET="universal-apple-darwin"
-NAME="万象小助手"
+NAME="安扣助手"
 fail=0
 
 step() { printf '\n== %s\n' "$1"; }
@@ -127,7 +127,7 @@ GH_LATEST="https://github.com/${GH_REPO}/releases/latest/download"
 ENDPOINTS=$(/usr/bin/python3 -c 'import json;print("|".join(json.load(open("app/tauri.conf.json"))["plugins"]["updater"]["endpoints"]))')
 [ "${ENDPOINTS}" = "${GH_LATEST}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
 case "${BASE_URL}" in *UPDATE_HOST*) die "还没有配置更新服务地址（release/config.json）";; esac
-TARBALL="${OUT}/Wanxiang-${VERSION}-universal.app.tar.gz"
+TARBALL="${OUT}/Ankou-${VERSION}-universal.app.tar.gz"
 COPYFILE_DISABLE=1 tar -czf "${TARBALL}" -C "${OUT}" "${NAME}.app" || die "打更新包失败"
 npx tauri signer sign -f "${UPDATER_KEY}" -p "" "${TARBALL}" >/dev/null 2>&1 || die "更新包签名失败"
 [ -s "${TARBALL}.sig" ] || die "没有生成更新包签名"
@@ -146,7 +146,7 @@ manifest = {
     "notes": open(notes_file, encoding="utf-8").read().strip(),
     "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "minimum_version": policy.get("minimum_version", version),
-    "download_url": f"https://github.com/{repo}/releases/latest/download/Wanxiang.dmg",
+    "download_url": f"https://github.com/{repo}/releases/latest/download/Ankou.dmg",
     "platforms": {"darwin-aarch64": entry, "darwin-x86_64": entry},
 }
 json.dump(manifest, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
@@ -155,7 +155,7 @@ PY
 echo "  更新包：$(basename "${TARBALL}")（$(du -sh "${TARBALL}" | cut -f1)），已签名"
 
 step "打 dmg"
-DMG="${OUT}/Wanxiang-${VERSION}.dmg"
+DMG="${OUT}/Ankou-${VERSION}.dmg"
 STAGE=$(mktemp -d)
 ditto "${APP}" "${STAGE}/${NAME}.app"
 ln -s /Applications "${STAGE}/Applications"
@@ -166,8 +166,8 @@ codesign --sign "${DEV_ID}" --timestamp "${DMG}" || die "dmg 签名失败"
 step "公证 dmg"
 notarize "${DMG}" dmg || die "dmg 公证未通过"
 xcrun stapler staple "${DMG}" >/dev/null || die "dmg 装订公证票据失败"
-# 固定文件名的副本：GitHub 的 releases/latest/download/Wanxiang.dmg 永远指向最新版
-cp -f "${DMG}" "${OUT}/Wanxiang.dmg"
+# 固定文件名的副本：GitHub 的 releases/latest/download/Ankou.dmg 永远指向最新版
+cp -f "${DMG}" "${OUT}/Ankou.dmg"
 echo "  已装订"
 
 step "系统检查（模拟别人第一次打开）"

@@ -81,7 +81,7 @@ export function SetupPage({
         <header className="setup-top">
           <Logo className="setup-mark" size={44} />
           <div className="setup-title">
-            <h1>欢迎使用万象小助手</h1>
+            <h1>欢迎使用安扣助手</h1>
             <p>
               在这台 Mac 上发现了 {found.length} 个 AI 工具。打开开关即接入（只读），随时可以在「工具」里改。
             </p>

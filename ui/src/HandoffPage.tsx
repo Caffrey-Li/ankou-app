@@ -541,7 +541,7 @@ export function HandoffPage({
           </div>
           <div className="handoff-note">
             <strong>交接不会改动原对话</strong>
-            <p>生成的内容先给你预览和编辑；粘贴后由你检查并发送。完成或取消后，万象不保留原文与摘要。</p>
+            <p>生成的内容先给你预览和编辑；粘贴后由你检查并发送。完成或取消后，安扣不保留原文与摘要。</p>
           </div>
           {notice ? <p className="handoff-alert">{notice}</p> : null}
           <div className="handoff-bar">
@@ -663,7 +663,7 @@ export function HandoffPage({
           <section className="handoff-dialog" aria-label="发送给 AI 生成摘要？">
             <h2>发送给 AI 生成摘要？</h2>
             <p>
-              将把「{selected?.title}」的快照发送到 DeepSeek API。不含附件与其他对话，万象不保存。字数在发送前按请求体计算。
+              将把「{selected?.title}」的快照发送到 DeepSeek API。不含附件与其他对话，安扣不保存。字数在发送前按请求体计算。
             </p>
             <label>
               <Check defaultChecked /> 只对本次有效

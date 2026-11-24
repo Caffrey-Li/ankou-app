@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "万象小助手",
+  "productName": "安扣助手",
   "version": "0.3.2",
-  "identifier": "local.wanxiang.assistant",
+  "identifier": "local.ankou.assistant",
   "build": {
     "frontendDist": "../ui/dist",
     "devUrl": "http://127.0.0.1:1420",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "万象小助手",
+        "title": "安扣助手",
         "width": 1280,
         "height": 900,
         "minWidth": 960,

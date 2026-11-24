@@ -98,7 +98,7 @@ pub fn run() {
         _ => {}
     })
     .build(tauri::generate_context!())
-    .expect("启动万象小助手失败")
+    .expect("启动安扣助手失败")
     .run(|app, event| match event {
         RunEvent::Exit => shutdown(app),
         #[cfg(target_os = "macos")]
@@ -229,7 +229,7 @@ fn build_panel(app: &tauri::AppHandle) -> tauri::Result<()> {
         "tray",
         tauri::WebviewUrl::App("index.html#tray".into()),
     )
-    .title("万象快速面板")
+    .title("安扣快速面板")
     .inner_size(362.0, 440.0)
     .decorations(false)
     .transparent(true)
@@ -291,9 +291,9 @@ fn setup_app_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{AboutMetadata, PredefinedMenuItem, Submenu};
     let about = PredefinedMenuItem::about(
         app,
-        Some("关于万象小助手"),
+        Some("关于安扣助手"),
         Some(AboutMetadata {
-            name: Some("万象小助手".to_string()),
+            name: Some("安扣助手".to_string()),
             version: Some(app.package_info().version.to_string()),
             ..Default::default()
         }),
@@ -301,18 +301,18 @@ fn setup_app_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "app-settings", "设置…", true, Some("CmdOrCtrl+,"))?;
     let app_menu = Submenu::with_items(
         app,
-        "万象小助手",
+        "安扣助手",
         true,
         &[
             &about,
             &PredefinedMenuItem::separator(app)?,
             &settings,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, Some("隐藏万象小助手"))?,
+            &PredefinedMenuItem::hide(app, Some("隐藏安扣助手"))?,
             &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
             &PredefinedMenuItem::show_all(app, Some("全部显示"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, Some("退出万象小助手"))?,
+            &PredefinedMenuItem::quit(app, Some("退出安扣助手"))?,
         ],
     )?;
     let edit = Submenu::with_items(
@@ -352,13 +352,13 @@ fn setup_app_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "打开万象", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "打开安扣", true, None::<&str>)?;
     let refresh = MenuItem::with_id(app, "refresh", "刷新", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &refresh, &quit])?;
     let theme = current_theme(app);
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("万象小助手")
+        .tooltip("安扣助手")
         .icon(tray_image(theme)?)
         .menu(&menu)
         .show_menu_on_left_click(false)

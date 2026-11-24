@@ -1,7 +1,7 @@
 #!/bin/sh
 # 检查已签名的 .app，或只检查 release 主二进制。
 # 用法：
-#   scripts/check-release-app.sh /path/to/万象小助手.app
+#   scripts/check-release-app.sh /path/to/安扣助手.app
 #   scripts/check-release-app.sh --binary /path/to/wanxiang-app
 # 不签名、不打包、不公证。找不到 .app 时不要用空路径硬跑。
 set -eu

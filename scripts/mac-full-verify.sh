@@ -121,7 +121,7 @@ run cargo run -q --offline -p wanxiang-adapter-grokbot --example verify_grokbot
 
 step "打包（ad-hoc，本机）"
 CI=true run npm run tauri -- build --target aarch64-apple-darwin --bundles app,dmg
-APP="target/aarch64-apple-darwin/release/bundle/macos/万象小助手.app"
+APP="target/aarch64-apple-darwin/release/bundle/macos/安扣助手.app"
 DMG=$(ls -t target/aarch64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -1)
 
 step "产物检查"
@@ -142,7 +142,7 @@ step "安装到应用程序"
 # 全部通过才装：替换「应用程序」里的旧版，再删掉编译目录里那份，免得启动台出现两个
 if [ $fail -eq 0 ] && [ -d "$APP" ]; then
   osascript -e 'quit app id "local.wanxiang.assistant"' >/dev/null 2>&1; sleep 2
-  rm -rf "/Applications/万象小助手.app" && ditto "$APP" "/Applications/万象小助手.app" \
+  rm -rf "/Applications/安扣助手.app" && ditto "$APP" "/Applications/安扣助手.app" \
     && rm -rf "$APP" target/aarch64-apple-darwin/release/bundle/macos/rw.*.dmg \
     && echo "已安装到 /Applications，编译目录里的副本已删除" \
     || { echo "安装失败"; fail=1; failed+=("安装到应用程序"); }

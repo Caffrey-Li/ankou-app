@@ -526,7 +526,7 @@ export function App() {
         {windows ? null : <div className="traffic" data-tauri-drag-region aria-hidden="true" />}
         <div className="brand" data-tauri-drag-region>
           <Logo />
-          <span>万象小助手</span>
+          <span>安扣助手</span>
         </div>
         <nav className="topnav" aria-label="主导航">
           {pages

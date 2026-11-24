@@ -55,8 +55,9 @@ impl Hub {
             Arc::clone(&gate) as Arc<dyn wanxiang_core::ToolScheduler>,
             Arc::clone(&clock),
         ));
-        let store =
-            Arc::new(Store::open(&dir.join("wanxiang.sqlite"), guard, clock).map_err(io_err)?);
+        let db_path = dir.join("ankou.sqlite");
+        migrate_legacy_db(&dir, &db_path);
+        let store = Arc::new(Store::open(&db_path, guard, clock).map_err(io_err)?);
         let emit_app = app.clone();
         let emit: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |part: &str| {
             let _ = emit_app.emit("usage-item", part.to_string());
@@ -70,6 +71,29 @@ impl Hub {
             gate,
             emit,
         })
+    }
+}
+
+fn migrate_legacy_db(dir: &std::path::Path, db_path: &std::path::Path) {
+    if db_path.exists() {
+        return;
+    }
+    let Some(parent) = dir.parent() else {
+        return;
+    };
+    let legacy_dir = parent.join("local.wanxiang.assistant");
+    let legacy_db = legacy_dir.join("wanxiang.sqlite");
+    if !legacy_db.is_file() {
+        return;
+    }
+    if std::fs::copy(&legacy_db, db_path).is_ok() {
+        for suffix in ["-wal", "-shm"] {
+            let src = legacy_dir.join(format!("wanxiang.sqlite{suffix}"));
+            if src.is_file() {
+                let dst = dir.join(format!("ankou.sqlite{suffix}"));
+                let _ = std::fs::copy(src, dst);
+            }
+        }
     }
 }
 

@@ -1,11 +1,11 @@
-// 万象小助手下载入口（Cloudflare Worker）。
+// 安扣助手下载入口（Cloudflare Worker）。
 // - /download            官网下载最新安装包（可带 ?from=来源）
 // - /latest.json         应用检查更新（新版本带 ?v=当前版本&a=芯片）
 // - /v<版本>/<文件>       指定版本的安装包或更新包
 // - /stats?key=…         统计页（只看汇总，不含任何个人信息）
 // 只记：时间、类型、版本、芯片、系统、国家或地区、来源。不存 IP、不存完整 UA。
 
-const FILE = /^(latest\.json|Wanxiang\.dmg|v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?\/Wanxiang-[0-9A-Za-z.\-]+\.(?:dmg|app\.tar\.gz))$/;
+const FILE = /^(latest\.json|(?:Ankou|Wanxiang)\.dmg|v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?\/(?:Ankou|Wanxiang)-[0-9A-Za-z.\-]+\.(?:dmg|app\.tar\.gz))$/;
 const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.]+)?$/;
 const ARCH = new Set(["aarch64", "x86_64"]);
 const KEEP_DAYS = 400;
@@ -194,7 +194,7 @@ function page(data) {
   const checks7 = data.checkVersions.reduce((s, row) => s + row.n, 0);
   const archName = { aarch64: "Apple 芯片", x86_64: "Intel", unknown: "未知" };
   const osName = { mac: "macOS", windows: "Windows", linux: "Linux", ios: "iPhone / iPad", android: "Android", other: "其他" };
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>万象小助手 · 下载统计</title><style>
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>安扣助手 · 下载统计</title><style>
 :root{--bg:#f2f3f5;--card:#fff;--ink:#1d1d1f;--sub:#5f6370;--line:rgba(0,0,0,.08);--a:#2f5d9a;--b:#b5652a;--fill:rgba(0,0,0,.05)}
 @media (prefers-color-scheme:dark){:root{--bg:#111317;--card:#1a1d23;--ink:#ececf1;--sub:#a1a4ad;--line:rgba(255,255,255,.07);--a:#7fa6e0;--b:#e39a5e;--fill:rgba(255,255,255,.06)}}
 *{box-sizing:border-box}body{margin:0;padding:28px;background:var(--bg);color:var(--ink);font:14px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
@@ -210,7 +210,7 @@ h2{margin:0 0 10px;font-size:13px;color:var(--sub);font-weight:600}table{width:1
 tr:first-child td{border-top:0}td.bar{width:45%;padding:0 10px}td.bar i{display:block;height:6px;border-radius:3px;background:var(--a)}td.n{text-align:right;width:3em;font-variant-numeric:tabular-nums}td.empty{color:var(--sub)}
 @media (max-width:860px){.cards,.grid{grid-template-columns:1fr 1fr}}
 </style></head><body>
-<h1>万象小助手 · 下载统计</h1>
+<h1>安扣助手 · 下载统计</h1>
 <p class="sub">最近 ${data.days} 天（UTC 日期，自 ${esc(data.since)}）· 只记时间、版本、芯片、系统、国家或地区、来源，不存 IP</p>
 <div class="cards">
 <div class="card"><span>官网下载</span><strong>${sum("download")}</strong><small>累计 ${total("download")}</small></div>

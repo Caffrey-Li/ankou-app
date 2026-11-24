@@ -3,7 +3,8 @@ use std::sync::Once;
 
 static MOCK: AtomicBool = AtomicBool::new(false);
 
-const SERVICE: &str = "local.wanxiang.assistant";
+const SERVICE: &str = "local.ankou.assistant";
+const LEGACY_SERVICE: &str = "local.wanxiang.assistant";
 const ACCOUNT: &str = "deepseek";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -42,46 +43,77 @@ impl SecretStore {
         if key.is_empty() {
             return Err(SecretError::Empty);
         }
-        entry()?
+        entry_for(SERVICE)?
             .set_password(key)
             .map_err(|_| SecretError::Unavailable)
     }
 
     pub fn delete(&self) -> Result<(), SecretError> {
-        match entry()?.delete_credential() {
-            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-            Err(_) => Err(SecretError::Unavailable),
+        let mut unavailable = false;
+        for service in [SERVICE, LEGACY_SERVICE] {
+            match entry_for(service)?.delete_credential() {
+                Ok(()) | Err(keyring_core::Error::NoEntry) => {}
+                Err(_) => unavailable = true,
+            }
+        }
+        if unavailable {
+            Err(SecretError::Unavailable)
+        } else {
+            Ok(())
         }
     }
 
     pub fn load(&self) -> Result<String, SecretError> {
-        match entry()?.get_password() {
+        match entry_for(SERVICE)?.get_password() {
             Ok(secret) => Ok(secret),
-            Err(keyring_core::Error::NoEntry) => Err(SecretError::Empty),
+            Err(keyring_core::Error::NoEntry) => match entry_for(LEGACY_SERVICE)?.get_password() {
+                Ok(secret) => {
+                    // 兼容旧版「万象小助手」钥匙串：读到后顺手写入新服务名，不删旧条目。
+                    let _ = entry_for(SERVICE).and_then(|e| {
+                        e.set_password(&secret)
+                            .map_err(|_| SecretError::Unavailable)
+                    });
+                    Ok(secret)
+                }
+                Err(keyring_core::Error::NoEntry) => Err(SecretError::Empty),
+                Err(_) => Err(SecretError::Unavailable),
+            },
             Err(_) => Err(SecretError::Unavailable),
         }
     }
 
     pub fn is_saved(&self) -> Result<bool, SecretError> {
-        match entry()?.get_password() {
+        match entry_for(SERVICE)?.get_password() {
             Ok(secret) => {
                 drop(secret);
                 Ok(true)
             }
-            Err(keyring_core::Error::NoEntry) => Ok(false),
+            Err(keyring_core::Error::NoEntry) => match entry_for(LEGACY_SERVICE)?.get_password() {
+                Ok(secret) => {
+                    drop(secret);
+                    Ok(true)
+                }
+                Err(keyring_core::Error::NoEntry) => Ok(false),
+                Err(_) => Err(SecretError::Unavailable),
+            },
             Err(_) => Err(SecretError::Unavailable),
         }
     }
 }
 
+#[cfg(test)]
 fn entry() -> Result<keyring_core::Entry, SecretError> {
+    entry_for(SERVICE)
+}
+
+fn entry_for(service: &str) -> Result<keyring_core::Entry, SecretError> {
     if !MOCK.load(Ordering::SeqCst) {
         // v1 的构造函数会把默认仓库换成系统钥匙串。装过模拟后端之后不能再走这里。
         if keyring::v1::Entry::store_status().is_err() {
             return Err(SecretError::Unavailable);
         }
     }
-    keyring_core::Entry::new(SERVICE, ACCOUNT).map_err(|_| SecretError::Unavailable)
+    keyring_core::Entry::new(service, ACCOUNT).map_err(|_| SecretError::Unavailable)
 }
 
 #[cfg(test)]
@@ -97,5 +129,23 @@ mod tests {
             .as_any()
             .downcast_ref::<keyring_core::mock::Cred>()
             .is_some());
+    }
+
+    #[test]
+    fn loads_and_migrates_legacy_key() {
+        SecretStore::install_mock_backend();
+        let store = SecretStore::new();
+        store.delete().unwrap();
+        entry_for(LEGACY_SERVICE)
+            .unwrap()
+            .set_password("sk-legacy-demo")
+            .unwrap();
+        assert!(store.is_saved().unwrap());
+        assert_eq!(store.load().unwrap(), "sk-legacy-demo");
+        assert_eq!(
+            entry_for(SERVICE).unwrap().get_password().unwrap(),
+            "sk-legacy-demo"
+        );
+        store.delete().unwrap();
     }
 }

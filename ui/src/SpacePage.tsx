@@ -181,13 +181,13 @@ const toolNames: Record<SpaceToolId, string> = {
 
 /** 只统计、不清理的工具的说明：这些端还没有确认可以安全重建的目录。 */
 export const statOnlyNote: Record<StatTool, string> = {
-  antigravity: "Antigravity 的对话与工作数据全部受保护，万象只统计占用，不清理",
-  gemini: "Gemini 桌面应用的数据全部受保护，万象只统计占用，不清理",
-  workbuddy: "WorkBuddy 的数据全部受保护，万象只统计占用，不清理",
-  grok_bot: "Grok Bot 的数据全部受保护，万象只统计占用，不清理",
-  muse: "Muse 桌面应用的数据全部受保护，万象只统计占用，不清理",
-  codebuddy: "CodeBuddy 命令行的会话与配置全部受保护，万象只统计占用，不清理",
-  cursor_cli: "Cursor 命令行的对话与配置全部受保护，万象只统计占用，不清理",
+  antigravity: "Antigravity 的对话与工作数据全部受保护，安扣只统计占用，不清理",
+  gemini: "Gemini 桌面应用的数据全部受保护，安扣只统计占用，不清理",
+  workbuddy: "WorkBuddy 的数据全部受保护，安扣只统计占用，不清理",
+  grok_bot: "Grok Bot 的数据全部受保护，安扣只统计占用，不清理",
+  muse: "Muse 桌面应用的数据全部受保护，安扣只统计占用，不清理",
+  codebuddy: "CodeBuddy 命令行的会话与配置全部受保护，安扣只统计占用，不清理",
+  cursor_cli: "Cursor 命令行的对话与配置全部受保护，安扣只统计占用，不清理",
 };
 
 export function groupEntries(entries: SpaceEntry[], tool: CleanTool = "deepseek_harness") {
