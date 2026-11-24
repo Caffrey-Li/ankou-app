@@ -18,6 +18,9 @@ export function measuredKind(tool: ToolId, capability: CapabilityId, title: stri
   if (tool === "claude" && capability === "usage") return "claude_usage";
   if (tool === "claude" && capability === "conversation") return "claude_conversation";
   if (tool === "claude" && capability === "space_scan") return "claude_space";
+  if (tool === "claude" && capability === "cleanup") return "claude_cleanup";
+  if (tool === "cursor" && capability === "cleanup") return "cursor_cleanup";
+  if (tool === "codex" && capability === "cleanup") return "codex_cleanup";
   if (tool === "antigravity" && capability === "usage") return "antigravity_usage";
   if (tool === "antigravity" && capability === "conversation") return "antigravity_conversation";
   if (tool === "antigravity" && capability === "space_scan") return "antigravity_space";

@@ -160,6 +160,18 @@ pub fn set_at(
             }
             Ok(())
         }
+        "cursor_cleanup" => {
+            for pattern in wanxiang_core::CURSOR_CLEANUP_PATTERNS {
+                set_path(store, ToolId::Cursor, Capability::Cleanup, cursor, pattern, on)?;
+            }
+            Ok(())
+        }
+        "codex_cleanup" => {
+            for pattern in wanxiang_core::CODEX_CLEANUP_PATTERNS {
+                set_path(store, ToolId::Codex, Capability::Cleanup, codex, pattern, on)?;
+            }
+            Ok(())
+        }
         "deepseek_balance" => {
             if on {
                 store.grant_account_link().map_err(show)
@@ -287,6 +299,16 @@ pub fn set_claude(
                     DESKTOP_SESSIONS_PATTERN,
                     on,
                 )?;
+            }
+            Ok(())
+        }
+        "claude_cleanup" => {
+            // 只清理桌面应用目录里的缓存；没装桌面应用就没有可清理的
+            if !support.is_dir() {
+                return Err("没有找到 Claude 桌面应用".to_string());
+            }
+            for pattern in wanxiang_core::CLAUDE_CLEANUP_PATTERNS {
+                set_path(store, ToolId::Claude, Capability::Cleanup, support, pattern, on)?;
             }
             Ok(())
         }

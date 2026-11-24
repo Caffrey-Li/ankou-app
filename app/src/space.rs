@@ -29,6 +29,14 @@ pub struct SpaceView {
     pub quit: Option<String>,
     pub entries: Vec<EntryView>,
     pub trash_supported: bool,
+    /// 受保护部分按第一层目录合计（最大的几项）
+    pub parts: Vec<PartView>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PartView {
+    pub name: String,
+    pub bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -144,6 +152,11 @@ pub fn scan_tool(store: &Store, tool: &str, cancel: &AtomicBool) -> Result<Space
             })
             .collect(),
         trash_supported: trash_supported(),
+        parts: scanned
+            .parts
+            .into_iter()
+            .map(|(name, bytes)| PartView { name, bytes })
+            .collect(),
     })
 }
 

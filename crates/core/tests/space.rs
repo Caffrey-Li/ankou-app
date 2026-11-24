@@ -169,9 +169,28 @@ fn classes_follow_the_plan() {
         classify(ToolId::DsBot, Path::new("bot/usage.sqlite")),
         SpaceClass::Protected
     );
-    for name in ["Cache", "CachedData", "Code Cache", "GPUCache", "logs"] {
+    // Cursor / ChatGPT / Claude：只有可重建的缓存可清理，对话与设置仍受保护
+    for name in ["Cache/a", "CachedData/a", "Code Cache/a", "GPUCache/a", "logs/a"] {
         assert_eq!(
             classify(ToolId::Cursor, Path::new(name)),
+            SpaceClass::Cleanable,
+            "{name}"
+        );
+    }
+    assert_eq!(
+        classify(ToolId::Cursor, Path::new("User/History/a")),
+        SpaceClass::Protected
+    );
+    for name in ["Cache/a", "Code Cache/a", "GPUCache/a"] {
+        assert_eq!(
+            classify(ToolId::Claude, Path::new(name)),
+            SpaceClass::Cleanable,
+            "{name}"
+        );
+    }
+    for name in ["vm_bundles/a", "Local Storage/a", "IndexedDB/a"] {
+        assert_eq!(
+            classify(ToolId::Claude, Path::new(name)),
             SpaceClass::Protected,
             "{name}"
         );
@@ -181,8 +200,8 @@ fn classes_follow_the_plan() {
         SpaceClass::Protected
     );
     assert_eq!(
-        classify(ToolId::Codex, Path::new("cache")),
-        SpaceClass::Protected
+        classify(ToolId::Codex, Path::new("cache/a")),
+        SpaceClass::Cleanable
     );
     assert_eq!(
         classify(ToolId::Codex, Path::new("sessions/a.jsonl")),

@@ -30,7 +30,7 @@ pub use secret::{SecretError, SecretStore};
 pub use space::{
     canonical_bytes, classify, cleanup, cleanup_block, content_changed, harness_executable_names,
     scan, scan_label, ui_entry, CleanEntry, CleanupRecord, CleanupReport, ItemReport, RunningView,
-    Scan, SpaceClass, SpaceError, TrashFault, Trasher, CLEANUP_PATTERNS, LABEL_BUSY, LABEL_CHANGED,
+    Scan, SpaceClass, SpaceError, TrashFault, Trasher, CLEANUP_PATTERNS, cleanup_patterns, CLAUDE_CLEANUP_PATTERNS, CODEX_CLEANUP_PATTERNS, CURSOR_CLEANUP_PATTERNS, LABEL_BUSY, LABEL_CHANGED,
     LABEL_OUTSIDE, LABEL_PERMISSION, LABEL_PROTECTED, LABEL_QUIT_CODEX, LABEL_QUIT_CURSOR,
     LABEL_QUIT_DSH_PROCESS, LABEL_QUIT_HARNESS, LABEL_REAUTH, LABEL_SCAN_CANCEL, LABEL_SCAN_DENIED,
     LABEL_TRASH, LABEL_TRASHED, LABEL_UNKNOWN_APP, LABEL_UNKNOWN_DSH,

@@ -128,9 +128,9 @@ export const toolSpecs: ToolSpec[] = [
       },
       {
         capability: "cleanup",
-        title: "清理",
-        detail: "Cursor 的缓存清理暂不提供",
-        badge: "暂不提供",
+        title: "清理缓存",
+        detail: "只清理编译缓存、浏览器缓存和日志，对话、设置和检查点不动；清理前要退出 Cursor",
+        badge: "已实测",
       },
       {
         capability: "usage",
@@ -177,6 +177,12 @@ export const toolSpecs: ToolSpec[] = [
         badge: "已实测",
       },
       { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
+      {
+        capability: "cleanup",
+        title: "清理缓存",
+        detail: "只清理 ~/.codex/cache，会话、归档和生成的图片不动；清理前要退出 ChatGPT",
+        badge: "已实测",
+      },
       { capability: "insert_content", title: "放入", detail: "交接时打开 ChatGPT 新对话并预填，由你检查后发送", badge: "已实测" },
     ],
     tags: [
@@ -205,6 +211,12 @@ export const toolSpecs: ToolSpec[] = [
         badge: "已实测",
       },
       { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
+      {
+        capability: "cleanup",
+        title: "清理缓存",
+        detail: "只清理桌面应用的浏览器缓存，会话、设置和电脑任务的运行环境不动；清理前要退出 Claude",
+        badge: "已实测",
+      },
       { capability: "insert_content", title: "放入", detail: "交接时打开 Claude Code 新会话并预填，由你检查后发送", badge: "未验证" },
     ],
     tags: [

@@ -42,10 +42,28 @@ try {
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 1);
   assert.match(html, /清理所选项/);
 
+  // Claude / Cursor / ChatGPT 可以清理缓存：没有可清理项时不显示空的「可清理」和清理按钮
   for (const [tool, name] of [
     ["cursor", "Cursor"],
     ["codex", "ChatGPT"],
     ["claude", "Claude"],
+  ]) {
+    const detail = renderToStaticMarkup(
+      createElement(SpacePage, {
+        fixture: true,
+        windows: false,
+        sheet: "",
+        thresholdGb: 5,
+        scanRequest: 0,
+        onStamp() {},
+        initialTool: tool,
+      }),
+    );
+    assert.match(detail, new RegExp(`aria-label="${name}"`));
+    assert.equal(detail.includes("<h2>可清理</h2>"), false, `${name} 没有可清理项时不显示标题`);
+    assert.equal(detail.includes("清理所选项"), false);
+  }
+  for (const [tool, name] of [
     ["antigravity", "Antigravity"],
     ["gemini", "Gemini"],
     ["workbuddy", "WorkBuddy"],

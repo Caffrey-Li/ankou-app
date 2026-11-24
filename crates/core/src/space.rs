@@ -38,6 +38,42 @@ pub const CLEANUP_PATTERNS: &[&str] = &[
     "storages/session_projcache/*",
 ];
 
+/// Claude 桌面应用目录里浏览器内核的缓存：退出 Claude 后删掉会自动重建。
+/// 不含 vm_bundles（电脑任务的运行环境，删掉要重新下载十几 GB）和任何会话、设置。
+pub const CLAUDE_CLEANUP_PATTERNS: &[&str] = &[
+    "Cache/*",
+    "Code Cache/*",
+    "GPUCache/*",
+    "GraphiteDawnCache/*",
+    "DawnGraphiteCache/*",
+    "DawnWebGPUCache/*",
+];
+
+/// Cursor 应用目录里的编译缓存、浏览器缓存和日志。不含 snapshots（智能体改动的检查点）和 User（对话、设置）。
+pub const CURSOR_CLEANUP_PATTERNS: &[&str] = &[
+    "CachedData/*",
+    "CachedProfilesData/*",
+    "CachedExtensionVSIXs/*",
+    "Cache/*",
+    "Code Cache/*",
+    "GPUCache/*",
+    "logs/*",
+];
+
+/// ~/.codex 里的缓存目录。会话、归档、生成的图片、数据库都不动。
+pub const CODEX_CLEANUP_PATTERNS: &[&str] = &["cache/*"];
+
+/// 每个端可以清理的目录（`目录/*` 形式，清理单位是目录下的每一项）。
+pub fn cleanup_patterns(tool: ToolId) -> &'static [&'static str] {
+    match tool {
+        ToolId::DeepSeekHarness | ToolId::DsBot => CLEANUP_PATTERNS,
+        ToolId::Claude => CLAUDE_CLEANUP_PATTERNS,
+        ToolId::Cursor => CURSOR_CLEANUP_PATTERNS,
+        ToolId::Codex => CODEX_CLEANUP_PATTERNS,
+        _ => &[],
+    }
+}
+
 pub fn ui_entry(rel: &str, bytes: u64, files: u64, dev: u64, ino: u64) -> Option<CleanEntry> {
     let parts: Vec<&str> = rel.split(['/', '\\']).collect();
     let relative = !rel.is_empty()
@@ -93,6 +129,8 @@ pub struct Scan {
     pub cancelled: bool,
     pub permission: bool,
     pub entries: Vec<CleanEntry>,
+    /// 受保护部分按第一层目录（或文件）合计，从大到小，最多 8 项
+    pub parts: Vec<(String, u64)>,
 }
 
 pub fn scan_label(scan: &Scan) -> Option<&'static str> {
@@ -360,7 +398,11 @@ fn cleanup_root(guard: &Guard, tool: ToolId) -> Result<PathBuf, SpaceError> {
     let grants = guard.grants_for(tool);
     let mut root = None;
     let mut sample = None;
-    for pattern in CLEANUP_PATTERNS {
+    let patterns = cleanup_patterns(tool);
+    if patterns.is_empty() {
+        return Err(SpaceError::NotGranted);
+    }
+    for pattern in patterns {
         let matched: Vec<_> = grants
             .iter()
             .filter(|grant| {
@@ -417,6 +459,7 @@ fn denied_scan() -> Scan {
         cancelled: false,
         permission: true,
         entries: Vec::new(),
+        parts: Vec::new(),
     }
 }
 
@@ -451,6 +494,18 @@ struct Acc {
     entries: Vec<CleanEntry>,
     seen_protected: HashSet<(u64, u64)>,
     seen_clean: HashSet<(u64, u64)>,
+    parts: std::collections::HashMap<String, u64>,
+}
+
+/// 受保护的字节记到第一层目录名下
+fn add_protected(acc: &mut Acc, rel: &Path, bytes: u64) {
+    acc.protected_bytes += bytes;
+    let top = rel
+        .components()
+        .next()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .unwrap_or_default();
+    *acc.parts.entry(top).or_insert(0) += bytes;
 }
 
 fn scan_dir(
@@ -468,6 +523,7 @@ fn scan_dir(
         entries: Vec::new(),
         seen_protected: HashSet::new(),
         seen_clean: HashSet::new(),
+        parts: std::collections::HashMap::new(),
     };
     let root_meta = match stat(root) {
         Ok(meta) if meta.kind == Kind::Dir => meta,
@@ -495,6 +551,9 @@ fn scan_dir(
 fn finish(mut acc: Acc) -> Scan {
     acc.entries
         .sort_by(|a, b| rel_text(&a.rel).cmp(&rel_text(&b.rel)));
+    let mut parts: Vec<(String, u64)> = acc.parts.drain().filter(|(_, bytes)| *bytes > 0).collect();
+    parts.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    parts.truncate(8);
     Scan {
         protected_bytes: acc.protected_bytes,
         cleanable_bytes: acc.cleanable_bytes,
@@ -502,6 +561,7 @@ fn finish(mut acc: Acc) -> Scan {
         cancelled: acc.cancelled,
         permission: acc.permission,
         entries: acc.entries,
+        parts,
     }
 }
 
@@ -555,7 +615,7 @@ fn walk(
                 walk(&path, &child_rel, root_dev, tool, cancel, stat, acc);
             }
         } else if acc.seen_protected.insert((meta.dev, meta.ino)) {
-            acc.protected_bytes += meta.len;
+            add_protected(acc, &child_rel, meta.len);
         }
     }
 }
@@ -609,7 +669,7 @@ fn list_units(
             continue;
         }
         match measure(&path, &child_rel, &meta, root_dev, stat) {
-            Ok(content) if content.holds_secret => acc.protected_bytes += content.bytes,
+            Ok(content) if content.holds_secret => add_protected(acc, &child_rel, content.bytes),
             Ok(content) => {
                 acc.cleanable_bytes += content.bytes;
                 acc.entries.push(CleanEntry {
@@ -908,14 +968,12 @@ fn ids(meta: &fs::Metadata) -> (u64, u64, u64) {
 }
 
 fn is_cleanable_dir(tool: ToolId, rel: &Path) -> bool {
-    matches!(tool, ToolId::DeepSeekHarness | ToolId::DsBot)
-        && matches!(
-            strict_rel(rel).as_deref(),
-            Some("cache")
-                | Some("logs")
-                | Some("attachments/v1/tmp")
-                | Some("storages/session_projcache")
-        )
+    let Some(rel) = strict_rel(rel) else {
+        return false;
+    };
+    cleanup_patterns(tool)
+        .iter()
+        .any(|pattern| pattern.strip_suffix("/*") == Some(rel.as_str()))
 }
 
 fn under_cleanable(tool: ToolId, rel: &Path) -> bool {

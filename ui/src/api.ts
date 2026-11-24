@@ -356,6 +356,8 @@ export type SpaceScan = {
   quit: string | null;
   entries: SpaceEntry[];
   trash_supported: boolean;
+  /** 受保护部分按第一层目录合计 */
+  parts?: { name: string; bytes: number }[];
 };
 
 export type CleanupItem = {

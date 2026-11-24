@@ -63,12 +63,79 @@ export function splitSize(bytes: number) {
   return { value, unit };
 }
 
-const groups = [
-  { id: "cache", name: "运行缓存", prefix: "cache/", path: "~/.dsh/cache", note: "下次启动自动重建" },
-  { id: "logs", name: "日志", prefix: "logs/", path: "~/.dsh/logs", note: "不影响对话" },
-  { id: "tmp", name: "附件临时文件", prefix: "attachments/v1/tmp/", path: "~/.dsh/attachments/v1/tmp", note: "未发送的临时附件会丢失" },
-  { id: "proj", name: "会话项目缓存", prefix: "storages/session_projcache/", path: "storages/session_projcache", note: "可能影响恢复速度" },
-];
+type CleanGroup = { id: string; name: string; prefixes: string[]; path: string; note: string };
+
+/** 能清理的端：与 crates/core/src/space.rs 的 cleanup_patterns 一致 */
+export const cleanTools = ["deepseek_harness", "claude", "cursor", "codex"] as const;
+export type CleanTool = (typeof cleanTools)[number];
+
+const cleanGroups: Record<CleanTool, CleanGroup[]> = {
+  deepseek_harness: [
+    { id: "cache", name: "运行缓存", prefixes: ["cache/"], path: "~/.dsh/cache", note: "下次启动自动重建" },
+    { id: "logs", name: "日志", prefixes: ["logs/"], path: "~/.dsh/logs", note: "不影响对话" },
+    { id: "tmp", name: "附件临时文件", prefixes: ["attachments/v1/tmp/"], path: "~/.dsh/attachments/v1/tmp", note: "未发送的临时附件会丢失" },
+    { id: "proj", name: "会话项目缓存", prefixes: ["storages/session_projcache/"], path: "storages/session_projcache", note: "可能影响恢复速度" },
+  ],
+  claude: [
+    { id: "cache", name: "网页缓存", prefixes: ["Cache/"], path: "Claude/Cache", note: "下次打开自动重建" },
+    { id: "code", name: "脚本编译缓存", prefixes: ["Code Cache/"], path: "Claude/Code Cache", note: "下次打开自动重建，首次启动略慢" },
+    {
+      id: "gpu",
+      name: "图形缓存",
+      prefixes: ["GPUCache/", "GraphiteDawnCache/", "DawnGraphiteCache/", "DawnWebGPUCache/"],
+      path: "Claude/GPUCache 等",
+      note: "自动重建",
+    },
+  ],
+  cursor: [
+    { id: "data", name: "编译缓存", prefixes: ["CachedData/", "CachedProfilesData/"], path: "Cursor/CachedData", note: "下次启动自动重建" },
+    { id: "vsix", name: "扩展安装包缓存", prefixes: ["CachedExtensionVSIXs/"], path: "Cursor/CachedExtensionVSIXs", note: "已装的扩展不受影响" },
+    { id: "web", name: "网页缓存", prefixes: ["Cache/", "Code Cache/", "GPUCache/"], path: "Cursor/Cache 等", note: "自动重建" },
+    { id: "logs", name: "日志", prefixes: ["logs/"], path: "Cursor/logs", note: "不影响对话" },
+  ],
+  codex: [{ id: "cache", name: "缓存", prefixes: ["cache/"], path: "~/.codex/cache", note: "需要时自动重建" }],
+};
+
+/** 受保护部分的第一层目录：常见的给一个看得懂的名字；其余显示原名 */
+const partNames: Partial<Record<SpaceToolId, Record<string, string>>> = {
+  claude: {
+    vm_bundles: "电脑任务的运行环境（删除后要重新下载）",
+    "claude-code-vm": "Claude Code 虚拟机",
+    "claude-code": "Claude Code 程序",
+    "claude-code-sessions": "Claude Code 会话",
+    "local-agent-mode-sessions": "智能体会话",
+    Partitions: "网页存储",
+    IndexedDB: "应用数据",
+    "Local Storage": "应用数据",
+  },
+  cursor: {
+    snapshots: "智能体改动的检查点",
+    User: "对话与设置",
+    AgentStores: "智能体数据",
+    Partitions: "网页存储",
+  },
+  codex: {
+    archived_sessions: "已归档的会话",
+    sessions: "会话",
+    "thread_history_1.sqlite": "对话历史",
+    generated_images: "生成的图片",
+    plugins: "插件",
+    skills: "技能",
+    ".tmp": "临时文件",
+    "logs_2.sqlite": "日志数据库",
+    "logs_2.sqlite.old": "旧日志数据库",
+  },
+  deepseek_harness: {
+    storages: "会话与项目数据",
+    attachments: "附件",
+    memory: "记忆",
+  },
+};
+
+export function partName(tool: SpaceToolId, name: string) {
+  if (!name) return "其他文件";
+  return partNames[tool]?.[name] ?? name;
+}
 
 export type SpaceToolId =
   | "deepseek_harness"
@@ -86,9 +153,6 @@ export type SpaceToolId =
 
 /** 只统计、不清理的工具。 */
 type StatTool =
-  | "cursor"
-  | "codex"
-  | "claude"
   | "antigravity"
   | "gemini"
   | "workbuddy"
@@ -115,11 +179,8 @@ const toolNames: Record<SpaceToolId, string> = {
   cursor_cli: "Cursor 命令行",
 };
 
-/** 只统计、不清理的工具的说明（决策：Cursor 与 ChatGPT 全部受保护）。 */
+/** 只统计、不清理的工具的说明：这些端还没有确认可以安全重建的目录。 */
 export const statOnlyNote: Record<StatTool, string> = {
-  cursor: "Cursor 的数据全部受保护，万象只统计占用，不清理",
-  codex: "ChatGPT 无可安全重建的证据，只统计不清理",
-  claude: "Claude 桌面应用的数据全部受保护，万象只统计占用，不清理",
   antigravity: "Antigravity 的对话与工作数据全部受保护，万象只统计占用，不清理",
   gemini: "Gemini 桌面应用的数据全部受保护，万象只统计占用，不清理",
   workbuddy: "WorkBuddy 的数据全部受保护，万象只统计占用，不清理",
@@ -129,12 +190,12 @@ export const statOnlyNote: Record<StatTool, string> = {
   cursor_cli: "Cursor 命令行的对话与配置全部受保护，万象只统计占用，不清理",
 };
 
-export function groupEntries(entries: SpaceEntry[]) {
-  return groups
+export function groupEntries(entries: SpaceEntry[], tool: CleanTool = "deepseek_harness") {
+  return cleanGroups[tool]
     .map((group) => ({
       ...group,
       entries: entries
-        .filter((entry) => entry.rel.startsWith(group.prefix))
+        .filter((entry) => group.prefixes.some((prefix) => entry.rel.startsWith(prefix)))
         .slice()
         .sort((a, b) => a.modified - b.modified || a.rel.localeCompare(b.rel)),
     }))
@@ -223,12 +284,7 @@ export function SpacePage({
   const scan = fixture ? fixtureScan : live;
   const cursor = fixture ? fixtureCursorScan : cursorScan;
   const codex = fixture ? fixtureCodexScan : codexScan;
-  const entries = scan?.entries ?? [];
-  const selected = entries.filter((entry) => checked[entry.rel]);
-  const selectedBytes = selected.reduce((sum, entry) => sum + entry.bytes, 0);
   const known = (scan?.protected_bytes ?? 0) + (scan?.cleanable_bytes ?? 0);
-  const cleanable = scan?.cleanable_bytes ?? 0;
-  const protectedBytes = scan?.protected_bytes ?? 0;
   const cursorKnown = cursor ? cursor.protected_bytes + cursor.cleanable_bytes : 0;
   const codexKnown = codex ? codex.protected_bytes + codex.cleanable_bytes : 0;
   const claude = fixture ? null : claudeScan;
@@ -246,6 +302,11 @@ export function SpacePage({
   const overCount = [known, cursorKnown, codexKnown, claudeKnown, ...extraSizes].filter(
     (bytes) => bytes > thresholdGb * GB,
   ).length;
+  useEffect(() => {
+    // 换了端，之前的勾选不带过去
+    setChecked({});
+    setOpenGroups({});
+  }, [tool]);
   const unscannedCount = (scan?.unscanned ?? 0) + (cursor?.unscanned ?? 0) + (codex?.unscanned ?? 0);
   /** 每一端的扫描结果；DS Bot 与 Harness 共用目录，已计入 Harness。 */
   const scanOf = (id: SpaceToolId): SpaceScan | null =>
@@ -273,7 +334,14 @@ export function SpacePage({
   });
   const vendorMax = Math.max(...vendorRows.map((row) => row.total), 1);
   const currentVendor = tool === "local_ai" ? undefined : vendors.find((vendor) => (vendor.members as string[]).includes(tool));
-  const quit = scan?.quit ?? null;
+  // 当前选中的端能不能清理：能清理的端共用下面这一套勾选、确认、清理
+  const cleanTool: CleanTool | null = (cleanTools as readonly string[]).includes(tool) ? (tool as CleanTool) : null;
+  const active = cleanTool ? scanOf(cleanTool) : null;
+  const entries = active?.entries ?? [];
+  const selected = entries.filter((entry) => checked[entry.rel]);
+  const selectedBytes = selected.reduce((sum, entry) => sum + entry.bytes, 0);
+  const allCleanable = spaceTools.reduce((sum, id) => sum + (scanOf(id)?.cleanable_bytes ?? 0), 0);
+  const quit = active?.quit ?? null;
   const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
 
@@ -337,12 +405,12 @@ export function SpacePage({
   }
 
   async function onCleanup() {
-    if (fixture || cleanupDisabled) return;
+    if (fixture || cleanupDisabled || !cleanTool) return;
     setBusy(true);
     setConfirming(false);
     try {
-      const token = await prepareCleanup("deepseek_harness", selected);
-      const done = await runCleanup("deepseek_harness", token, selected);
+      const token = await prepareCleanup(cleanTool, selected);
+      const done = await runCleanup(cleanTool, token, selected);
       if (done.blocked) {
         setNotice(done.blocked);
         return;
@@ -351,16 +419,25 @@ export function SpacePage({
       setReleasedBytes(done.total_bytes);
       setResult(done.items);
       setChecked({});
-      const after = await scanSpace("deepseek_harness");
-      setLive(after);
-      onSummary?.({
-        tool: "DeepSeek Harness",
-        known: after.protected_bytes + after.cleanable_bytes,
-        protectedBytes: after.protected_bytes,
-        cleanable: after.cleanable_bytes,
-      });
+      const after = await scanSpace(cleanTool);
+      if (cleanTool === "deepseek_harness") {
+        setLive(after);
+        onSummary?.({
+          tool: "DeepSeek Harness",
+          known: after.protected_bytes + after.cleanable_bytes,
+          protectedBytes: after.protected_bytes,
+          cleanable: after.cleanable_bytes,
+        });
+      } else if (cleanTool === "claude") setClaudeScan(after);
+      else if (cleanTool === "cursor") setCursorScan(after);
+      else setCodexScan(after);
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "清理没有完成");
+      const text = err instanceof Error ? err.message : String(err ?? "");
+      setNotice(
+        /授权|grant/i.test(text)
+          ? `还没有打开「清理」授权：到「工具」页的 ${cleanTool ? toolNames[cleanTool] : ""} 里打开后再清理`
+          : text || "清理没有完成",
+      );
     } finally {
       setBusy(false);
     }
@@ -385,7 +462,7 @@ export function SpacePage({
       <section className="space-metrics">
         <Metric label="已知占用" bytes={anyScan ? allKnown : null} />
         <Metric label="超过阈值" value={anyScan ? String(overCount) : null} unit="个工具" tone={overCount > 0 ? "warn" : ""} />
-        <Metric label="可清理" bytes={scan ? cleanable : null} />
+        <Metric label="可清理" bytes={anyScan ? allCleanable : null} />
         <Metric label="未扫描" value={anyScan ? String(unscannedCount) : null} unit="处" tone="quiet" />
         <span className="space-metrics-note">重叠目录只统计一次；对话、记忆与账户数据始终受保护</span>
       </section>
@@ -421,7 +498,6 @@ export function SpacePage({
               <b className={localAi.bytes == null ? "quiet" : ""}>{localAi.bytes == null ? "未统计" : formatBytes(localAi.bytes, 1)}</b>
             </button>
           ) : null}
-          <p>{statOnlyNote.codex}</p>
         </aside>
         <div className="space-detail-col">
         {currentVendor && currentVendor.members.length > 1 ? (
@@ -447,23 +523,24 @@ export function SpacePage({
             </header>
             {localAi?.detail}
           </section>
-        ) : tool === "deepseek_harness" ? (
-          <section className="space-detail" aria-label="DeepSeek Harness">
+        ) : cleanTool ? (
+          <section className="space-detail" aria-label={toolNames[cleanTool]}>
             <DetailHead
-              id="deepseek_harness"
+              id={cleanTool}
               meta={
-                scan
-                  ? `已知占用 ${formatBytes(known, 1)} · 阈值 ${thresholdGb} GB · 另有 ${scan.unscanned} 处未扫描`
-                  : "尚未扫描"
+                active
+                  ? `已知占用 ${formatBytes(active.protected_bytes + active.cleanable_bytes, 1)} · 阈值 ${thresholdGb} GB${active.unscanned > 0 ? ` · 另有 ${active.unscanned} 处未扫描` : ""}`
+                  : "未扫描：在「工具」页打开空间扫描授权后，点右上角刷新"
               }
             />
-            <StackBar protectedBytes={protectedBytes} cleanable={cleanable} known={Boolean(scan)} />
-            <h2>可清理</h2>
+            <StackBar protectedBytes={active?.protected_bytes ?? 0} cleanable={active?.cleanable_bytes ?? 0} known={Boolean(active)} />
             {entries.length === 0 ? (
-              <p className="space-empty">{scan ? "这一项还没有可清理的内容。" : "扫描后列出可清理的内容。"}</p>
+              <p className="space-empty">{active ? "现在没有可清理的缓存。" : "扫描后列出可清理的内容。"}</p>
             ) : (
+              <>
+              <h2>可清理</h2>
               <ul className="space-entries">
-                {groupEntries(entries).map((group) => {
+                {groupEntries(entries, cleanTool).map((group) => {
                   const mark = groupMark(group.entries, checked);
                   const open = Boolean(openGroups[group.id]);
                   const weak = group.entries.some((entry) => entry.weak);
@@ -525,28 +602,24 @@ export function SpacePage({
                   );
                 })}
               </ul>
+              </>
             )}
-            <h2>受保护</h2>
-            <ul className="space-protected">
-              <li>
-                <IconLock />
-                <span>对话、记忆、账户与其余用户数据</span>
-                <b>{scan ? formatBytes(protectedBytes, 1) : "—"}</b>
-              </li>
-            </ul>
+            <ProtectedParts id={cleanTool} scan={active} />
             {notice && <p className="space-notice">{notice}</p>}
+            {entries.length > 0 ? (
             <footer>
               <span>
                 <strong>
                   已选 {selected.length} 项 · 预计释放 {formatBytes(selectedBytes)}
                 </strong>
-                {quit ? <small>{quit}</small> : <small>建议先退出 DeepSeek Harness</small>}
+                {quit ? <small>{quit}</small> : <small>建议先退出 {toolNames[cleanTool]}</small>}
               </span>
               <button type="button" disabled={cleanupDisabled} onClick={() => setConfirming(true)}>
                 <IconTrash />
                 {windows ? "Windows 暂不支持" : "清理所选项…"}
               </button>
             </footer>
+            ) : null}
           </section>
         ) : tool === "ds_bot" ? (
           <section className="space-detail" aria-label="DS Bot">
@@ -562,7 +635,7 @@ export function SpacePage({
           </section>
         ) : (
           <StatOnlyDetail
-            id={tool}
+            id={tool as StatTool}
             scan={scanOf(tool)}
             thresholdGb={thresholdGb}
           />
@@ -726,17 +799,48 @@ function StatOnlyDetail({ id, scan, thresholdGb }: { id: StatTool; scan: SpaceSc
         }
       />
       <StackBar protectedBytes={scan ? total : 0} cleanable={0} known={Boolean(scan)} />
-      <h2>可清理</h2>
-      <p className="space-empty">{statOnlyNote[id]}。</p>
-      <h2>受保护</h2>
-      <ul className="space-protected">
-        <li>
-          <IconLock />
-          <span>全部内容</span>
-          <b>{scan ? formatBytes(total, 1) : "—"}</b>
-        </li>
-      </ul>
+      <ProtectedParts id={id} scan={scan} />
+      <p className="space-footnote">{statOnlyNote[id]}。</p>
     </section>
+  );
+}
+
+/** 受保护的部分：按第一层目录列出最大的几项，看得出空间花在哪里、为什么不清理 */
+function ProtectedParts({ id, scan }: { id: SpaceToolId; scan: SpaceScan | null }) {
+  if (!scan || scan.protected_bytes <= 0) return null;
+  const parts = (scan.parts ?? []).slice(0, 6);
+  const listed = parts.reduce((sum, part) => sum + part.bytes, 0);
+  const rest = Math.max(0, scan.protected_bytes - listed);
+  return (
+    <>
+      <h2>
+        受保护 · 不会清理<small>{formatBytes(scan.protected_bytes, 1)}</small>
+      </h2>
+      <ul className="space-protected">
+        {parts.length === 0 ? (
+          <li>
+            <IconLock />
+            <span>对话、设置与其余数据</span>
+            <b>{formatBytes(scan.protected_bytes, 1)}</b>
+          </li>
+        ) : (
+          parts.map((part) => (
+            <li key={part.name}>
+              <IconLock />
+              <span>{partName(id, part.name)}</span>
+              <b>{formatBytes(part.bytes, 1)}</b>
+            </li>
+          ))
+        )}
+        {parts.length > 0 && rest >= 1024 * 1024 ? (
+          <li>
+            <IconLock />
+            <span>其余</span>
+            <b>{formatBytes(rest, 1)}</b>
+          </li>
+        ) : null}
+      </ul>
+    </>
   );
 }
 
