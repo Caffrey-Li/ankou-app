@@ -1,0 +1,18 @@
+# 万象小助手 下载与检查更新入口：代理 R2 里的安装包和 latest.json，顺便记一条匿名统计。
+name = "wanxiang-dl"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "wanxiang-updates"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wanxiang-stats"
+database_id = "d3fa6ea8-605d-4c55-b99a-5d5b84925574"
+
+# 每天清理 400 天以前的记录
+[triggers]
+crons = ["17 3 * * *"]

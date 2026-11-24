@@ -15,6 +15,7 @@ WRANGLER=(npx --yes wrangler@4)
 VERSION=$(/usr/bin/python3 -c 'import json;print(json.load(open("app/tauri.conf.json"))["version"])')
 BUCKET=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["bucket"])')
 BASE_URL=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["base_url"].rstrip("/"))')
+PUBLIC_URL=$(/usr/bin/python3 -c 'import json;c=json.load(open("release/config.json"));print(c.get("public_url",c["base_url"]).rstrip("/"))')
 OUT="dist/release-${VERSION}"
 MANIFEST="${OUT}/latest.json"
 
@@ -83,8 +84,9 @@ echo "== 线上核对"
 sleep 3
 ONLINE=$(remote_version)
 echo "  latest.json 版本：${ONLINE:-读不到}"
-code=$(curl -s -o /dev/null -w '%{http_code}' -I --max-time 20 "${BASE_URL}/v${VERSION}/$(basename "${TARBALL}")")
+code=$(curl -s -o /dev/null -w '%{http_code}' -I --max-time 20 -H "x-wanxiang-selftest: 1" "${PUBLIC_URL}/v${VERSION}/$(basename "${TARBALL}")")
 echo "  更新包可下载：${code}"
-echo "  官网下载链接：${BASE_URL}/Wanxiang.dmg"
+echo "  官网下载链接：${PUBLIC_URL}/download（统计下载；可加 ?from=来源）"
+echo "  备用直链：${BASE_URL}/Wanxiang.dmg（不计入统计）"
 [ "${ONLINE}" = "${VERSION}" ] && [ "${code}" = "200" ] || die "线上核对不通过"
 echo; echo "结论：已发布"

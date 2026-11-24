@@ -105,8 +105,10 @@ step "更新包（应用内更新用）"
 UPDATER_KEY="${HOME}/.tauri/wanxiang-updater.key"
 [ -f "${UPDATER_KEY}" ] || die "没有更新签名私钥 ${UPDATER_KEY}"
 BASE_URL=$(/usr/bin/python3 -c 'import json;print(json.load(open("release/config.json"))["base_url"].rstrip("/"))')
-ENDPOINT=$(/usr/bin/python3 -c 'import json;print(json.load(open("app/tauri.conf.json"))["plugins"]["updater"]["endpoints"][0])')
-[ "${ENDPOINT}" = "${BASE_URL}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
+# 下载与检查更新走统计 Worker（release/worker），r2.dev 作为备用和旧版本的地址
+PUBLIC_URL=$(/usr/bin/python3 -c 'import json;c=json.load(open("release/config.json"));print(c.get("public_url",c["base_url"]).rstrip("/"))')
+ENDPOINTS=$(/usr/bin/python3 -c 'import json;print("|".join(json.load(open("app/tauri.conf.json"))["plugins"]["updater"]["endpoints"]))')
+[ "${ENDPOINTS}" = "${PUBLIC_URL}/latest.json?v={{current_version}}&a={{arch}}|${BASE_URL}/latest.json" ] || die "tauri.conf.json 的更新地址与 release/config.json 不一致"
 case "${BASE_URL}" in *UPDATE_HOST*) die "还没有配置更新服务地址（release/config.json）";; esac
 TARBALL="${OUT}/Wanxiang-${VERSION}-universal.app.tar.gz"
 COPYFILE_DISABLE=1 tar -czf "${TARBALL}" -C "${OUT}" "${NAME}.app" || die "打更新包失败"
@@ -114,7 +116,7 @@ npx tauri signer sign -f "${UPDATER_KEY}" -p "" "${TARBALL}" >/dev/null 2>&1 || 
 [ -s "${TARBALL}.sig" ] || die "没有生成更新包签名"
 NOTES_FILE="release/notes/${VERSION}.md"
 [ -f "${NOTES_FILE}" ] || die "缺少更新说明 ${NOTES_FILE}"
-/usr/bin/python3 - "${VERSION}" "${BASE_URL}" "${TARBALL}" "${NOTES_FILE}" "${OUT}/latest.json" <<'PY'
+/usr/bin/python3 - "${VERSION}" "${PUBLIC_URL}" "${TARBALL}" "${NOTES_FILE}" "${OUT}/latest.json" <<'PY'
 import json, sys, datetime, os
 version, base, tarball, notes_file, out = sys.argv[1:6]
 signature = open(tarball + ".sig").read().strip()

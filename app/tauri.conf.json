@@ -58,6 +58,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkzRjAzNjU2NTM4Mjk5NUMKUldSY21ZSlRWamJ3a3dLVGRGOVpYL3RBUFNoaUYxUkpLeXNxRDF6QjIxOTdxL2FUUGlDS3lrOFEK",
       "endpoints": [
+        "https://wanxiang-dl.caffreyli-0328.workers.dev/latest.json?v={{current_version}}&a={{arch}}",
         "https://pub-9d7d8ca156fd49efb4ffac4a982abeec.r2.dev/latest.json"
       ]
     }
