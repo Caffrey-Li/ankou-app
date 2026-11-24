@@ -315,6 +315,15 @@ export function placeDeeplink(token: string, text: string) {
   return call<void>("place_deeplink", { token, text });
 }
 
+/** 交接放入：先确认（绑定目标和全文），再放入。返回实际用的方式。 */
+export function preparePlace(target: string, text: string, folder: string | null) {
+  return call<{ token: string; method: "prefill" | "open" | "copy"; too_long: boolean }>("prepare_place", { target, text, folder });
+}
+
+export function placeHandoff(target: string, token: string, text: string, folder: string | null) {
+  return call<"prefill" | "open" | "copy">("place_handoff", { target, token, text, folder });
+}
+
 export function exportHandoff(text: string) {
   return call<void>("export_handoff", { text });
 }

@@ -30,6 +30,8 @@ fn main() {
         "send_summary",
         "prepare_deeplink",
         "place_deeplink",
+        "prepare_place",
+        "place_handoff",
         "export_handoff",
         "organize_handoff",
         "tool_icons",

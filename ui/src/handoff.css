@@ -614,3 +614,44 @@
   flex: none;
   font-size: 13px;
 }
+
+/* 换到其他工具：目标列表 */
+.handoff-choice.open svg {
+  transform: rotate(90deg);
+}
+
+.handoff-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.handoff-targets button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-graphite) 4%, transparent);
+  color: var(--color-graphite);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+
+.handoff-targets button:hover {
+  background: color-mix(in srgb, var(--color-graphite) 8%, transparent);
+}
+
+.handoff-targets button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-mist) 12%, transparent);
+  color: var(--color-mist);
+}
+
+.handoff-targets small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}

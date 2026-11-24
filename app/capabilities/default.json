@@ -29,6 +29,8 @@
     "allow-send-summary",
     "allow-prepare-deeplink",
     "allow-place-deeplink",
+    "allow-prepare-place",
+    "allow-place-handoff",
     "allow-export-handoff",
     "allow-organize-handoff",
     "allow-tool-icons",

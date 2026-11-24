@@ -7,6 +7,7 @@ mod space;
 mod store;
 mod supervisor;
 pub mod sysdata;
+pub mod place;
 mod usage;
 
 pub use guard::{

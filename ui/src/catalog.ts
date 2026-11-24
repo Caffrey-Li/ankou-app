@@ -74,7 +74,7 @@ export const toolSpecs: ToolSpec[] = [
         detail: "每次清理前逐项列出并确认",
         badge: "已实测",
       },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要并打开应用，由你在新对话里粘贴", badge: "复制后粘贴" },
     ],
     tags: [
       { label: "用量", capability: "usage", badge: "已实测" },
@@ -177,13 +177,13 @@ export const toolSpecs: ToolSpec[] = [
         badge: "已实测",
       },
       { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时打开 ChatGPT 新对话并预填，由你检查后发送", badge: "已实测" },
     ],
     tags: [
       { label: "用量与额度窗口", capability: "usage", badge: "已实测" },
       { label: "空间", capability: "space_scan", badge: "已实测" },
       { label: "对话", capability: "conversation", badge: "已实测" },
-      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+      { label: "放入", capability: "insert_content", badge: "已实测" },
     ],
   },
   {
@@ -205,13 +205,13 @@ export const toolSpecs: ToolSpec[] = [
         badge: "已实测",
       },
       { capability: "conversation", title: "对话", detail: "列出本机会话，交接时读取所选对话", badge: "已实测" },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时打开 Claude Code 新会话并预填，由你检查后发送", badge: "未验证" },
     ],
     tags: [
       { label: "用量与额度", capability: "usage", badge: "已实测" },
       { label: "空间", capability: "space_scan", badge: "已实测" },
       { label: "对话", capability: "conversation", badge: "已实测" },
-      { label: "放入", capability: "insert_content", badge: "复制后粘贴" },
+      { label: "放入", capability: "insert_content", badge: "未验证" },
     ],
   },
   {
@@ -238,7 +238,7 @@ export const toolSpecs: ToolSpec[] = [
         detail: "统计本机数据目录大小，不读取内容",
         badge: "已实测",
       },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要并打开应用，由你在新对话里粘贴", badge: "复制后粘贴" },
     ],
     tags: [
       { label: "用量", capability: "usage", badge: "已实测" },
@@ -302,7 +302,7 @@ export const toolSpecs: ToolSpec[] = [
         detail: "本机没有 token 记录",
         badge: "暂不提供",
       },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要并打开应用，由你在新对话里粘贴", badge: "复制后粘贴" },
     ],
     tags: [
       { label: "对话", capability: "conversation", badge: "已实测" },
@@ -335,7 +335,7 @@ export const toolSpecs: ToolSpec[] = [
         detail: "统计应用数据目录大小，不读取内容",
         badge: "已实测",
       },
-      { capability: "insert_content", title: "放入", detail: "交接时复制摘要，由你手动粘贴", badge: "复制后粘贴" },
+      { capability: "insert_content", title: "放入", detail: "交接时复制摘要并打开应用，由你在新对话里粘贴", badge: "复制后粘贴" },
     ],
     tags: [
       { label: "每周额度", capability: "usage", badge: "已实测" },

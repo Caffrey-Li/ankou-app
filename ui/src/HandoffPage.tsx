@@ -4,8 +4,8 @@ import {
   exportHandoff,
   inTauri,
   organizeHandoff,
-  placeDeeplink,
-  prepareDeeplink,
+  placeHandoff,
+  preparePlace,
   prepareHandoff,
   sendSummary,
   type SourceStatus,
@@ -43,6 +43,47 @@ export const handoffCopy = {
   truncated: "长对话只取了最近部分",
   withheld: "暂不提供",
 };
+
+/** 交接放到哪里：与 crates/core/src/place.rs 的 TARGETS 一致（契约测试核对）。
+ *  prefill：打开新对话并预填（官方说明不会自动发送）；open：复制后打开应用；copy：只复制。 */
+export const placeTargets = [
+  { id: "claude", name: "Claude", how: "prefill" },
+  { id: "claude_chat", name: "Claude 聊天", how: "prefill" },
+  { id: "codex", name: "ChatGPT", how: "prefill" },
+  { id: "cursor", name: "Cursor", how: "open" },
+  { id: "deepseek_harness", name: "DeepSeek Harness", how: "open" },
+  { id: "antigravity", name: "Antigravity", how: "open" },
+  { id: "gemini", name: "Gemini", how: "open" },
+  { id: "workbuddy", name: "WorkBuddy", how: "open" },
+  { id: "grok_bot", name: "Grok Bot", how: "open" },
+  { id: "muse", name: "Muse", how: "open" },
+  { id: "ds_bot", name: "DS Bot", how: "copy" },
+  { id: "cursor_cli", name: "Cursor 命令行", how: "copy" },
+  { id: "codebuddy", name: "CodeBuddy 命令行", how: "copy" },
+] as const;
+export type PlaceTarget = (typeof placeTargets)[number];
+
+/** 对话来自哪个端，默认就回到哪个端开新对话 */
+export function homeTarget(tool: string): PlaceTarget {
+  const kind = toolKind(tool);
+  return placeTargets.find((target) => target.id === kind) ?? placeTargets.find((target) => target.id === "cursor")!;
+}
+
+export function placeHint(target: PlaceTarget) {
+  if (target.how === "prefill") return `生成交接内容，直接放进 ${target.name} 的新对话，你检查后再发送`;
+  if (target.how === "open") return `生成交接内容并复制，打开 ${target.name}，在新对话里粘贴`;
+  return `生成交接内容并复制，到 ${target.name} 里新开对话粘贴`;
+}
+
+/** 与 Rust 的 PREFILL_CHARS 一致：超过就不能直接放入，改为复制并打开 */
+export const PREFILL_CHARS = 8000;
+
+export function placeButton(target: PlaceTarget, chars = 0) {
+  if (target.how === "prefill" && chars > PREFILL_CHARS) return `复制并打开 ${target.name}（超过 ${PREFILL_CHARS} 字）`;
+  if (target.how === "prefill") return `放入 ${target.name} 新对话`;
+  if (target.how === "open") return `复制并打开 ${target.name}`;
+  return "复制交接内容";
+}
 
 const sectionNames = ["目标", "进展", "未完成", "关键决策和约束", "下一步", "不确定事项", "资料位置"] as const;
 
@@ -228,7 +269,8 @@ export function HandoffPage({
     inTauri() ? sectionNames.map(() => "") : sampleSections,
   );
   const [transcript, setTranscript] = useState("");
-  const [deeplinkToken, setDeeplinkToken] = useState("");
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (focus) setSelectedId(focus.id);
@@ -259,31 +301,18 @@ export function HandoffPage({
     return matched;
   }, [filter, query, rows, threshold]);
   const selected = rows.find((row) => row.id === selectedId) ?? visible[0];
+  const home = homeTarget(selected?.tool ?? "");
+  const target = placeTargets.find((item) => item.id === targetId) ?? home;
+  useEffect(() => {
+    // 换了对话就回到它自己的应用
+    setTargetId(null);
+    setChoosing(false);
+  }, [selected?.id]);
   const previewText = useMemo(() => composeSections(sheetTexts), [sheetTexts]);
   const sourceLine = selected ? `${toolLabel(selected.tool)} · ${selected.title}` : "";
   useEffect(() => {
     if (previewRequest > 0) void generate();
   }, [previewRequest]);
-  useEffect(() => {
-    if (open !== "preview" || !inTauri() || toolKind(selected?.tool ?? "") !== "cursor") return;
-    const text = previewText;
-    let cancelled = false;
-    prepareDeeplink(text).then(
-      (token) => {
-        if (!cancelled) setDeeplinkToken(token);
-      },
-      (error: unknown) => {
-        if (cancelled) return;
-        setDeeplinkToken("");
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("8000")) setNotice(handoffCopy.tooLong);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [open, previewText, selected?.tool]);
-
   async function generate() {
     if (!selected) return;
     if (!inTauri()) {
@@ -339,17 +368,27 @@ export function HandoffPage({
 
   async function place() {
     const text = previewText;
-    if (!inTauri() || !deeplinkToken) {
-      await navigator.clipboard?.writeText(text);
-      setNotice("已复制，到 Cursor 新对话里粘贴");
+    // 无论哪种方式都先复制一份，放入失败或被截断时还能粘贴
+    await navigator.clipboard?.writeText(text).catch(() => undefined);
+    if (!inTauri()) {
+      setNotice(target.how === "prefill" ? `已放入 ${target.name} 新对话 · 请检查后发送` : `已复制，到 ${target.name} 里粘贴`);
       return;
     }
     try {
-      await placeDeeplink(deeplinkToken, text);
-      setDeeplinkToken("");
-      setNotice("已放入 Cursor 新对话 · 请检查后发送");
+      // 原对话有工作目录就带上，新对话落在同一个项目
+      const folder = selected?.cwd ?? null;
+      const prepared = await preparePlace(target.id, text, folder);
+      const method = await placeHandoff(target.id, prepared.token, text, folder);
+      if (method === "prefill") setNotice(`已放入 ${target.name} 新对话 · 请检查后发送（内容也已复制）`);
+      else if (method === "open")
+        setNotice(
+          prepared.too_long
+            ? `内容超过 8000 字，不能直接放入。已复制并打开 ${target.name}，请新建对话后粘贴`
+            : `已复制并打开 ${target.name} · 新建对话后粘贴`,
+        );
+      else setNotice(`已复制，到 ${target.name} 里新开对话粘贴`);
     } catch {
-      setNotice(handoffCopy.deeplinkFailed);
+      setNotice(`没能打开 ${target.name}，内容已复制，可以手动粘贴`);
     }
   }
 
@@ -452,20 +491,53 @@ export function HandoffPage({
           </div>
           <div className="handoff-actions">
             <h3>继续这段工作</h3>
-            <button type="button" className="handoff-choice recommended" onClick={() => void generate()}>
+            <button
+              type="button"
+              className="handoff-choice recommended"
+              onClick={() => {
+                setTargetId(null);
+                void generate();
+              }}
+            >
               <span>
-                <strong>在 Cursor 新对话中继续</strong>
-                <small>生成交接内容，复制后在 Cursor 新对话里粘贴</small>
+                <strong>在 {home.name} 新对话中继续</strong>
+                <small>{placeHint(home)}</small>
               </span>
-              <em>推荐</em>
+              <em>原应用</em>
             </button>
-            <button type="button" className="handoff-choice" onClick={() => void generate()}>
+            <button
+              type="button"
+              className={choosing ? "handoff-choice open" : "handoff-choice"}
+              aria-expanded={choosing}
+              onClick={() => setChoosing((value) => !value)}
+            >
               <span>
                 <strong>换到其他工具</strong>
-                <small>ChatGPT、DS Bot、Harness · 复制后手动粘贴</small>
+                <small>{target.id !== home.id ? `已选 ${target.name} · ${placeHint(target)}` : "Claude、ChatGPT 可直接放入新对话，其余复制后粘贴"}</small>
               </span>
               <IconChevron />
             </button>
+            {choosing ? (
+              <div className="handoff-targets" role="group" aria-label="交接到">
+                {placeTargets
+                  .filter((item) => item.id !== home.id)
+                  .map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={target.id === item.id}
+                      onClick={() => {
+                        setTargetId(item.id);
+                        setChoosing(false);
+                        void generate();
+                      }}
+                    >
+                      {item.name}
+                      <small>{item.how === "prefill" ? "直接放入" : item.how === "open" ? "复制并打开" : "复制"}</small>
+                    </button>
+                  ))}
+              </div>
+            ) : null}
           </div>
           <div className="handoff-note">
             <strong>交接不会改动原对话</strong>
@@ -531,7 +603,7 @@ export function HandoffPage({
             </header>
             <p className="handoff-source">
               {toolLabel(selected?.tool ?? "")} · {selected?.title}（{snapshotClock(selected)} 快照）→{" "}
-              {toolKind(selected?.tool ?? "") === "cursor" ? "Cursor 新对话" : "复制后手动粘贴"}
+              {target.name} 新对话{target.how === "prefill" ? "" : " · 复制后粘贴"}
             </p>
             {notice === handoffCopy.truncated ? <p className="handoff-alert">{handoffCopy.truncated}</p> : null}
             <label className="sheet-wide">
@@ -580,7 +652,7 @@ export function HandoffPage({
               </button>
               <button type="button" className="primary-button" onClick={() => void place()}>
                 <IconArrow />
-                {deeplinkToken ? "放入 Cursor 新对话" : "复制，去 Cursor 粘贴"}
+                {placeButton(target, previewText.length)}
               </button>
             </footer>
           </section>
