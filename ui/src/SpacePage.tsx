@@ -228,9 +228,22 @@ export const spaceTools = [
 export type SpaceScans = Record<(typeof spaceTools)[number], SpaceScan | null>;
 
 /** 一次扫完所有端；没授权或失败的记为 null。只统计大小，不读内容。 */
-export async function scanAllTools(): Promise<SpaceScans> {
-  const results = await Promise.all(spaceTools.map((tool) => scanSpace(tool).catch(() => null)));
-  return Object.fromEntries(spaceTools.map((tool, index) => [tool, results[index]])) as SpaceScans;
+/** 正在进行的一轮扫描：总览、清理页、重新扫描按钮共用，不会同时扫两遍 */
+let inflight: Promise<SpaceScans> | null = null;
+
+export function scanAllTools(): Promise<SpaceScans> {
+  if (inflight) return inflight;
+  inflight = Promise.all(spaceTools.map((tool) => scanSpace(tool).catch(() => null)))
+    .then((results) => Object.fromEntries(spaceTools.map((tool, index) => [tool, results[index]])) as SpaceScans)
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
+}
+
+/** 有没有一轮扫描正在进行 */
+export function scanInFlight() {
+  return inflight !== null;
 }
 
 export function SpacePage({
@@ -244,7 +257,13 @@ export function SpacePage({
   onScans,
   initialTool = "deepseek_harness",
   localAi,
+  initialScans,
+  onScanning,
 }: {
+  /** 总览启动时已经扫过的结果：进清理页直接用，不再从头扫 */
+  initialScans?: SpaceScans | null;
+  /** 扫描开始、结束时告诉顶栏，按钮显示进行中 */
+  onScanning?: (scanning: boolean) => void;
   /** 各厂商以外的本地模型与 AI 缓存：列表里多一行，右侧显示它的清单 */
   localAi?: { bytes: number | null; detail: ReactNode };
   /** 每次扫描完，把各端的结果交给总览和工具页 */
@@ -275,6 +294,10 @@ export function SpacePage({
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
+  useEffect(() => {
+    onScanning?.(scanning);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanning]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirming, setConfirming] = useState(sheet === "confirm");
@@ -350,9 +373,15 @@ export function SpacePage({
     void onScan();
   }, [scanRequest]);
 
-  // 打开页面时自动做一次只读扫描（只统计大小），不必再手动点刷新
+  // 打开页面：总览已经扫过就直接用；还没有结果才扫一次（只统计大小）
   useEffect(() => {
-    if (!fixture && !anyScan && scanRequest === 0 && inTauri()) void onScan();
+    if (fixture || anyScan || !inTauri()) return;
+    if (initialScans && scanRequest === 0) {
+      applyScans(initialScans);
+      onStamp(stampNow());
+      return;
+    }
+    if (scanRequest === 0) void onScan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -366,6 +395,20 @@ export function SpacePage({
     try {
       const all = await scanAllTools();
       onScans?.(all);
+      if (!applyScans(all)) {
+        setNotice("扫描没有完成");
+        return;
+      }
+      setChecked({});
+      onStamp(stampNow());
+      if (all.deepseek_harness?.cancelled) setNotice("扫描已取消");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function applyScans(all: SpaceScans) {
+    {
       const harness = all.deepseek_harness;
       const cursor = all.cursor;
       const codex = all.codex;
@@ -377,10 +420,7 @@ export function SpacePage({
       setCodexScan(codex);
       setClaudeScan(claudeResult);
       setExtraScans({ antigravity, gemini, workbuddy, grok_bot: grokBot, muse, codebuddy, cursor_cli: cursorCli });
-      if (!harness) {
-        setNotice("扫描没有完成");
-        return;
-      }
+      if (!harness) return Object.values(all).some(Boolean);
       setLive(harness);
       onSummary?.({
         tool: "DeepSeek Harness",
@@ -388,11 +428,7 @@ export function SpacePage({
         protectedBytes: harness.protected_bytes,
         cleanable: harness.cleanable_bytes,
       });
-      setChecked({});
-      onStamp(stampNow());
-      if (harness.cancelled) setNotice("扫描已取消");
-    } finally {
-      setScanning(false);
+      return true;
     }
   }
 
@@ -454,7 +490,7 @@ export function SpacePage({
         <div className="space-progress">
           <span>正在扫描</span>
           <i />
-          <button type="button" onClick={() => void cancelScan("deepseek_harness")}>
+          <button type="button" onClick={() => spaceTools.forEach((id) => void cancelScan(id))}>
             取消
           </button>
         </div>
@@ -476,7 +512,7 @@ export function SpacePage({
               name={row.vendor.name}
               selected={(row.vendor.members as string[]).includes(tool)}
               onSelect={setTool}
-              size={row.scanned ? formatBytes(row.total, 1) : "未扫描"}
+              size={row.scanned ? formatBytes(row.total, 1) : scanning ? "扫描中" : "未扫描"}
               over={row.total > thresholdGb * GB}
               bar={row.scanned ? { width: row.total / vendorMax, protectedBytes: row.protectedSum, cleanable: row.cleanSum } : null}
             />
@@ -505,7 +541,7 @@ export function SpacePage({
             {(currentVendor.members as SpaceToolId[]).map((id) => (
               <button key={id} type="button" role="tab" aria-selected={tool === id} onClick={() => setTool(id)}>
                 {toolNames[id]}
-                <small>{id === "ds_bot" ? "计入 Harness" : scanOf(id) ? formatBytes(sizeOf(id), 1) : "未扫描"}</small>
+                <small>{id === "ds_bot" ? "计入 Harness" : scanOf(id) ? formatBytes(sizeOf(id), 1) : scanning ? "扫描中" : "未扫描"}</small>
               </button>
             ))}
           </div>
@@ -530,12 +566,14 @@ export function SpacePage({
               meta={
                 active
                   ? `已知占用 ${formatBytes(active.protected_bytes + active.cleanable_bytes, 1)} · 阈值 ${thresholdGb} GB${active.unscanned > 0 ? ` · 另有 ${active.unscanned} 处未扫描` : ""}`
-                  : "未扫描：在「工具」页打开空间扫描授权后，点右上角刷新"
+                  : scanning
+                    ? "正在扫描…"
+                    : "未扫描：在「工具」页打开空间扫描授权后，点右上角重新扫描"
               }
             />
             <StackBar protectedBytes={active?.protected_bytes ?? 0} cleanable={active?.cleanable_bytes ?? 0} known={Boolean(active)} />
             {entries.length === 0 ? (
-              <p className="space-empty">{active ? "现在没有可清理的缓存。" : "扫描后列出可清理的内容。"}</p>
+              <p className="space-empty">{active ? "现在没有可清理的缓存。" : scanning ? "正在扫描，稍等片刻。" : "扫描后列出可清理的内容。"}</p>
             ) : (
               <>
               <h2>可清理</h2>
@@ -637,6 +675,7 @@ export function SpacePage({
           <StatOnlyDetail
             id={tool as StatTool}
             scan={scanOf(tool)}
+            scanning={scanning}
             thresholdGb={thresholdGb}
           />
         )}
@@ -786,7 +825,17 @@ function StackBar({ protectedBytes, cleanable, known }: { protectedBytes: number
   );
 }
 
-function StatOnlyDetail({ id, scan, thresholdGb }: { id: StatTool; scan: SpaceScan | null; thresholdGb: number }) {
+function StatOnlyDetail({
+  id,
+  scan,
+  scanning,
+  thresholdGb,
+}: {
+  id: StatTool;
+  scan: SpaceScan | null;
+  scanning: boolean;
+  thresholdGb: number;
+}) {
   const total = scan ? scan.protected_bytes + scan.cleanable_bytes : 0;
   return (
     <section className="space-detail" aria-label={toolNames[id]}>
@@ -795,7 +844,9 @@ function StatOnlyDetail({ id, scan, thresholdGb }: { id: StatTool; scan: SpaceSc
         meta={
           scan
             ? `已知占用 ${formatBytes(total, 1)} · 阈值 ${thresholdGb} GB${scan.unscanned > 0 ? ` · 另有 ${scan.unscanned} 处未扫描` : ""}`
-            : "未扫描：在设置里开启空间扫描授权后，点右上角刷新"
+            : scanning
+              ? "正在扫描…"
+              : "未扫描：在「工具」页打开空间扫描授权后，点右上角重新扫描"
         }
       />
       <StackBar protectedBytes={scan ? total : 0} cleanable={0} known={Boolean(scan)} />

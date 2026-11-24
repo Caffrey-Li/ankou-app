@@ -163,6 +163,7 @@ export function App() {
   const [selectedVendor, setSelectedVendor] = useState<VendorId>("deepseek");
   const [handoffFocus, setHandoffFocus] = useState<{ tool: string; id: string; at: number } | undefined>(undefined);
   const [spaceScans, setSpaceScans] = useState<SpaceScans | null>(null);
+  const [spaceScanning, setSpaceScanning] = useState(false);
   const [spaceScanFailed, setSpaceScanFailed] = useState(false);
   const [listed, setListed] = useState(false);
   const updater = useUpdater();
@@ -614,13 +615,27 @@ export function App() {
                 </div>
                 <div className="glass-pill">
                   <IconClock />
-                  <span>{spaceStamp ? `扫描于 ${spaceStamp}` : "尚未扫描"}</span>
+                  <span>
+                    {(spaceSide === "system" ? sysScanning : spaceScanning)
+                      ? "正在扫描…"
+                      : spaceSide === "system" && !sysEnabled
+                        ? "系统未开启统计"
+                        : spaceStamp
+                          ? `扫描于 ${spaceStamp}`
+                          : "尚未扫描"}
+                  </span>
                   <span className="pill-rule" aria-hidden="true" />
                   <button
                     type="button"
-                    className="icon-hit"
+                    className={(spaceSide === "system" ? sysScanning : spaceScanning) ? "icon-hit spinning" : "icon-hit"}
                     aria-label="重新扫描"
-                    onClick={() => setSpaceRequest((value) => value + 1)}
+                    aria-busy={spaceSide === "system" ? sysScanning : spaceScanning}
+                    disabled={spaceSide === "system" ? sysScanning : spaceScanning}
+                    onClick={() => {
+                      // 在「系统」这边点重新扫描就是要统计系统：没开启的直接开启
+                      if (spaceSide === "system" && !sysEnabled) enableSysScan();
+                      else setSpaceRequest((value) => value + 1);
+                    }}
                   >
                     <IconRefresh />
                   </button>
@@ -706,6 +721,8 @@ export function App() {
             sheet={sheet === "confirm" || sheet === "result" ? sheet : ""}
             thresholdGb={snapshot.settings.space_threshold_gb}
             scanRequest={spaceRequest}
+            initialScans={spaceScans}
+            onScanning={setSpaceScanning}
             onStamp={setSpaceStamp}
             onSummary={setSpaceSummary}
             onScans={setSpaceScans}
