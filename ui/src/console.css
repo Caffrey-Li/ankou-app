@@ -247,35 +247,166 @@ span.c-icon {
   border-radius: 2px;
 }
 
-.c-bars {
-  display: flex;
+/* 用量图：左侧刻度、细网格、细柱（≤24px，顶端 4px 圆角，段间 2px 底色缝隙）、悬停提示 */
+.c-plot {
+  position: relative;
+  display: grid;
   flex: 1;
-  align-items: flex-end;
-  gap: 4px;
-  min-height: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 8px;
+  min-height: 160px;
+  padding-top: 8px;
 }
 
-.c-bar {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 1px;
-  height: 100%;
+.c-yaxis {
+  position: relative;
+  min-width: 34px;
+}
+
+.c-yaxis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.c-area {
+  position: relative;
   min-width: 0;
 }
 
-.c-bar i {
+.c-grid {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--fill-2);
+}
+
+.c-grid:first-child {
+  background: color-mix(in srgb, var(--color-text-secondary) 35%, transparent);
+}
+
+.c-cols {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.c-col {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  border-radius: 6px;
+  outline: none;
+  cursor: default;
+}
+
+.c-col.active,
+.c-col:focus-visible {
+  background: var(--fill-1);
+}
+
+.c-stack-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* 很小的值撑不下时往上长，不压过基线 */
+  gap: 2px;
+  width: min(24px, 64%);
+  min-height: 0;
+}
+
+.c-stack-bar i {
   display: block;
-  min-height: 1px;
+  flex-basis: 0;
+  min-height: 2px;
+}
+
+.c-stack-bar i:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.c-xaxis {
+  display: flex;
+  grid-column: 2;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.c-xaxis span {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+  text-align: center;
+}
+
+.c-xaxis span:first-child {
+  text-align: left;
+}
+
+.c-xaxis span:last-child {
+  text-align: right;
+}
+
+.c-tip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+  font-size: 12px;
+  transform: translateX(14px);
+  pointer-events: none;
+}
+
+.c-tip.left {
+  transform: translateX(calc(-100% - 14px));
+}
+
+.c-tip strong {
+  color: var(--color-graphite);
+  font-size: 12px;
+}
+
+.c-tip-total {
+  margin-bottom: 2px;
+  color: var(--color-text-secondary);
+}
+
+.c-tip-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--color-text-secondary);
+}
+
+.c-tip-row i {
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
 }
 
-.c-axis {
-  display: flex;
-  justify-content: space-between;
-  color: var(--color-text-secondary);
-  font-size: 11px;
+.c-tip-row b {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--color-graphite);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 .c-side {

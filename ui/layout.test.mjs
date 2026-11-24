@@ -94,6 +94,14 @@ try {
   assert.equal((setup.match(/class="setup-vendor( on| missing)?"/g) ?? []).length, 8);
   assert.match(setup, /全部接入/);
 
+  // 用量图：整齐刻度、短写法
+  const consoleMod = await server.ssrLoadModule("/src/Console.tsx");
+  assert.deepEqual(consoleMod.niceTicks(5.6e8), [0, 2e8, 4e8, 6e8]);
+  assert.deepEqual(consoleMod.niceTicks(0), [0]);
+  assert.equal(consoleMod.shortCount(2.5e8), "2.5 亿");
+  assert.equal(consoleMod.shortCount(25_000_000), "2500 万");
+  assert.equal(consoleMod.shortCount(800), "800");
+
   // 清理页「系统」：没开启时先说明；开启后按分组列出，手动项不能勾
   const { SystemPanel, SysList, sideTotal, toPicks, selectedBytes } = await server.ssrLoadModule("/src/SystemSpace.tsx");
   const off = renderToStaticMarkup(

@@ -60,10 +60,11 @@
   --fill-3: color-mix(in srgb, var(--color-graphite) 12%, transparent);
   --card-edge: 0 0 0 1px rgba(0, 0, 0, 0.06);
   --shadow-panel: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 4px 14px -6px rgba(20, 26, 36, 0.1);
-  --chart-1: #c46a3f;
-  --chart-2: #2f5d9a;
-  --chart-3: #7d93b8;
-  --chart-4: #4f8f86;
+  /* 图表分类色：按此顺序相邻排列，已用配色校验（色弱下相邻两色仍分得开、对底色对比度 ≥ 3:1） */
+  --chart-1: #eb6834;
+  --chart-2: #2a78d6;
+  --chart-3: #16996a;
+  --chart-4: #6250d6;
 }
 
 /* 深色：设置里选「深色」，或「跟随系统」且系统是深色 */
@@ -86,10 +87,10 @@ html[data-theme="dark"] {
   --card-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-panel: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-card: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --chart-1: #d08a62;
-  --chart-2: #7fa6e0;
-  --chart-3: #8fa3c4;
-  --chart-4: #6fb0a6;
+  --chart-1: #d95926;
+  --chart-2: #3987e5;
+  --chart-3: #199e70;
+  --chart-4: #9085e9;
 }
 
 

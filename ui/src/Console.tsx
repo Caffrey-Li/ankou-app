@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ConversationRow, UsageView } from "./api";
 import { vendors, type VendorId } from "./catalog";
 import { formatBytes } from "./SpacePage";
@@ -63,12 +64,46 @@ function VendorTile({
   );
 }
 
+/** 坐标轴刻度：取 1 / 2 / 2.5 / 5 × 10ⁿ 的整齐步长，大约 4 格 */
+export function niceTicks(max: number, count = 4) {
+  if (max <= 0) return [0];
+  const raw = max / count;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * power).find((value) => value >= raw) ?? raw;
+  const ticks: number[] = [];
+  for (let value = 0; value < max + step * 0.999; value += step) ticks.push(value);
+  return ticks;
+}
+
+/** 轴上的短写法：3.4 亿、2500 万、800 */
+export function shortCount(value: number) {
+  const trim = (n: number) => String(Number(n.toFixed(1)));
+  if (value >= 1e8) return `${trim(value / 1e8)} 亿`;
+  if (value >= 1e4) return `${trim(value / 1e4)} 万`;
+  return String(Math.round(value));
+}
+
+/** 「11 月 23 日」→ 横轴上只写「23 日」，第一格带上月份 */
+function dayTick(label: string, first: boolean) {
+  if (first) return label;
+  const match = /(\d+)\s*日/.exec(label);
+  return match ? `${match[1]} 日` : label;
+}
+
+// 自下而上的堆叠顺序与配色顺序一致（已用配色校验：相邻两色在色弱下也分得开）
+const stackOrder: VendorId[] = ["anthropic", "openai", "google", "deepseek"];
+
 function UsageChart({ usage, onOpen }: { usage: UsageView; onOpen: () => void }) {
   const days = stackDays(usage);
-  const max = Math.max(1, ...days.map((day) => day.total));
-  const present = (["anthropic", "openai", "deepseek", "google"] as VendorId[]).filter((vendor) =>
+  const [active, setActive] = useState<number | null>(null);
+  const max = Math.max(0, ...days.map((day) => day.total));
+  const ticks = niceTicks(max);
+  const top = ticks[ticks.length - 1] || 1;
+  const present = stackOrder.filter((vendor) =>
     days.some((day) => day.parts.some((part) => part.vendor === vendor && part.value > 0)),
   );
+  const every = days.length > 16 ? 5 : days.length > 8 ? 2 : 1;
+  const shown = active == null ? null : days[active];
   return (
     <section className="c-panel c-chart" aria-label="本月用量">
       <div className="c-chart-head">
@@ -86,31 +121,81 @@ function UsageChart({ usage, onOpen }: { usage: UsageView; onOpen: () => void })
           明细
         </button>
       </div>
-      {days.length === 0 || max <= 1 ? (
+      {days.length === 0 || max <= 0 ? (
         <p className="c-empty">{usage.total_reason || "还没有本机用量记录"}</p>
       ) : (
-        <div className="c-bars" aria-hidden="true">
-          {days.map((day) => (
-            <div key={day.label} className="c-bar" title={`${day.label} · ${cnCount(day.total)}`}>
-              {day.parts
-                .filter((part) => part.value > 0)
-                .reverse()
-                .map((part) => (
-                  <i
-                    key={part.vendor}
-                    style={{ height: `${(part.value / max) * 100}%`, background: chartColor[part.vendor] }}
-                  />
-                ))}
+        <div className="c-plot" onMouseLeave={() => setActive(null)}>
+          <div className="c-yaxis" aria-hidden="true">
+            {ticks.map((tick) => (
+              <span key={tick} style={{ bottom: `${(tick / top) * 100}%` }}>
+                {shortCount(tick)}
+              </span>
+            ))}
+          </div>
+          <div className="c-area">
+            {ticks.map((tick) => (
+              <i key={tick} className="c-grid" style={{ bottom: `${(tick / top) * 100}%` }} aria-hidden="true" />
+            ))}
+            <div className="c-cols">
+              {days.map((day, index) => {
+                const parts = stackOrder
+                  .map((vendor) => day.parts.find((part) => part.vendor === vendor))
+                  .filter((part): part is NonNullable<typeof part> => Boolean(part && part.value > 0));
+                const summary = `${day.label}：共 ${shortCount(day.total)}${parts.map((part) => `，${vendorName(part.vendor)} ${shortCount(part.value)}`).join("")}`;
+                return (
+                  <div
+                    key={day.label}
+                    className={active === index ? "c-col active" : "c-col"}
+                    tabIndex={0}
+                    aria-label={day.total > 0 ? summary : `${day.label}：无记录`}
+                    onMouseEnter={() => setActive(index)}
+                    onFocus={() => setActive(index)}
+                    onBlur={() => setActive(null)}
+                  >
+                    <div className="c-stack-bar" style={{ height: `${(day.total / top) * 100}%` }}>
+                      {parts
+                        .slice()
+                        .reverse()
+                        .map((part) => (
+                          <i key={part.vendor} style={{ flexGrow: part.value, background: chartColor[part.vendor] }} />
+                        ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+            {shown ? (
+              <div
+                className={active != null && active > days.length * 0.6 ? "c-tip left" : "c-tip"}
+                style={{ left: `${(((active ?? 0) + 0.5) / days.length) * 100}%` }}
+                role="status"
+              >
+                <strong>{shown.label}</strong>
+                <span className="c-tip-total">{shown.total > 0 ? `共 ${shortCount(shown.total)}` : "无记录"}</span>
+                {stackOrder
+                  .slice()
+                  .reverse()
+                  .map((vendor) => shown.parts.find((part) => part.vendor === vendor))
+                  .filter((part): part is NonNullable<typeof part> => Boolean(part && part.value > 0))
+                  .map((part) => (
+                    <span key={part.vendor} className="c-tip-row">
+                      <i style={{ background: chartColor[part.vendor] }} />
+                      {vendorName(part.vendor)}
+                      <b>{shortCount(part.value)}</b>
+                    </span>
+                  ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="c-xaxis" aria-hidden="true">
+            {days.map((day, index) => (
+              <span key={day.label}>
+                {index === 0 || index === days.length - 1 || index % every === 0 ? dayTick(day.label, index === 0) : ""}
+              </span>
+            ))}
+          </div>
         </div>
       )}
-      {days.length > 0 ? (
-        <div className="c-axis">
-          <span>{days[0].label}</span>
-          <span>{days[days.length - 1].label}</span>
-        </div>
-      ) : null}
     </section>
   );
 }

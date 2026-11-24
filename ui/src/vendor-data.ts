@@ -71,8 +71,8 @@ export function stackDays(usage: UsageView): StackDay[] {
     const parts: { vendor: VendorId; value: number }[] = [
       { vendor: "anthropic", value: day.claude ?? 0 },
       { vendor: "openai", value: day.codex ?? 0 },
-      { vendor: "deepseek", value: (day.bot ?? 0) + (day.harness ?? 0) },
       { vendor: "google", value: day.antigravity ?? 0 },
+      { vendor: "deepseek", value: (day.bot ?? 0) + (day.harness ?? 0) },
     ];
     return { label: day.label, parts, total: parts.reduce((sum, part) => sum + part.value, 0) };
   });
@@ -81,8 +81,8 @@ export function stackDays(usage: UsageView): StackDay[] {
 export const chartColor: Partial<Record<VendorId, string>> = {
   anthropic: "var(--chart-1)",
   openai: "var(--chart-2)",
-  deepseek: "var(--chart-3)",
-  google: "var(--chart-4)",
+  google: "var(--chart-3)",
+  deepseek: "var(--chart-4)",
 };
 
 export function vendorName(id: VendorId) {
