@@ -29,9 +29,19 @@ pub fn config_root(home: &Path) -> PathBuf {
 }
 
 pub fn support_root(home: &Path) -> PathBuf {
-    home.join("Library")
-        .join(format!("{} {}", "Application", "Support"))
-        .join("Claude")
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("Claude");
+        }
+        return home.join("AppData").join("Roaming").join("Claude");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        home.join("Library")
+            .join(format!("{} {}", "Application", "Support"))
+            .join("Claude")
+    }
 }
 
 pub fn installed(home: &Path, applications: &Path) -> bool {

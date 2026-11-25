@@ -6,7 +6,9 @@ const BOT_PATTERN: &str = "bot/usage.sqlite*";
 const CODEX_PATTERN: &str = "sessions/**/*.jsonl";
 
 pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
-    let home = std::env::var_os("HOME").ok_or_else(|| "找不到本机目录".to_string())?;
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .ok_or_else(|| "找不到本机目录".to_string())?;
     let home = std::path::PathBuf::from(home);
     if kind == "gemini_space" {
         let root = crate::discover::gemini_support(&home);
@@ -58,9 +60,19 @@ pub fn set(store: &Store, kind: &str, on: bool) -> Result<(), String> {
 }
 
 fn cursor_support(home: &Path) -> std::path::PathBuf {
-    home.join("Library")
-        .join(format!("{} {}", "Application", "Support"))
-        .join("Cursor")
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return std::path::PathBuf::from(appdata).join("Cursor");
+        }
+        return home.join("AppData").join("Roaming").join("Cursor");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        home.join("Library")
+            .join(format!("{} {}", "Application", "Support"))
+            .join("Cursor")
+    }
 }
 
 pub fn apply_space_fixture(store: &Store) -> Result<(), String> {

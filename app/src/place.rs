@@ -83,7 +83,48 @@ fn open_app(bundle: &str) -> bool {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn open_app(bundle: &str) -> bool {
+    use std::path::PathBuf;
+    let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let program_files = std::env::var_os("ProgramFiles").map(PathBuf::from);
+    let candidates: Vec<PathBuf> = match bundle {
+        "com.todesktop.230313mzl4w4u92" => local
+            .iter()
+            .map(|d| d.join("Programs").join("cursor").join("Cursor.exe"))
+            .collect(),
+        "com.anthropic.claudefordesktop" => local
+            .iter()
+            .map(|d| d.join("AnthropicClaude").join("Claude.exe"))
+            .collect(),
+        "com.deepseek.dsh" => local
+            .iter()
+            .map(|d| d.join("Programs").join("DeepSeek Harness").join("DeepSeek Harness.exe"))
+            .collect(),
+        "com.google.antigravity" => local
+            .iter()
+            .map(|d| d.join("Programs").join("Antigravity").join("Antigravity.exe"))
+            .collect(),
+        "com.tencent.workbuddy.mac" => local
+            .iter()
+            .map(|d| d.join("Programs").join("WorkBuddy").join("WorkBuddy.exe"))
+            .chain(
+                program_files
+                    .iter()
+                    .map(|d| d.join("WorkBuddy").join("WorkBuddy.exe")),
+            )
+            .collect(),
+        _ => Vec::new(),
+    };
+    for exe in candidates {
+        if exe.is_file() && std::process::Command::new(&exe).spawn().is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn open_app(bundle: &str) -> bool {
     let _ = bundle;
     false

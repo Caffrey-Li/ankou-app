@@ -365,7 +365,7 @@ export function SpacePage({
   const selectedBytes = selected.reduce((sum, entry) => sum + entry.bytes, 0);
   const allCleanable = spaceTools.reduce((sum, id) => sum + (scanOf(id)?.cleanable_bytes ?? 0), 0);
   const quit = active?.quit ?? null;
-  const cleanupDisabled = windows || selected.length === 0 || busy || scanning || Boolean(quit);
+  const cleanupDisabled = active?.trash_supported === false || selected.length === 0 || busy || scanning || Boolean(quit);
   const dialog = confirming || sheet === "confirm" ? "confirm" : result || sheet === "result" ? "result" : "";
 
   useEffect(() => {
@@ -654,7 +654,7 @@ export function SpacePage({
               </span>
               <button type="button" disabled={cleanupDisabled} onClick={() => setConfirming(true)}>
                 <IconTrash />
-                {windows ? "Windows 暂不支持" : "清理所选项…"}
+                {active?.trash_supported === false ? "当前系统暂不支持" : "清理所选项…"}
               </button>
             </footer>
             ) : null}
@@ -690,10 +690,10 @@ export function SpacePage({
             清理 {fixture || sheet === "confirm" ? 2 : selected.length} 项，约{" "}
             {fixture || sheet === "confirm" ? "800 MB" : formatBytes(selectedBytes)}？
           </h2>
-          <p>将移到废纸篓，可以在废纸篓里找回。对话、记忆与账户数据会跳过。</p>
+          <p>将移到{windows ? "回收站" : "废纸篓"}，可以在{windows ? "回收站" : "废纸篓"}里找回。对话、记忆与账户数据会跳过。</p>
           <div>
-            <button type="button" className="primary ochre" disabled={windows || busy} onClick={() => void onCleanup()}>
-              {windows ? "Windows 暂不支持" : "清理"}
+            <button type="button" className="primary ochre" disabled={active?.trash_supported === false || busy} onClick={() => void onCleanup()}>
+              {active?.trash_supported === false ? "当前系统暂不支持" : "清理"}
             </button>
             <button type="button" className="secondary" onClick={() => setConfirming(false)}>
               取消

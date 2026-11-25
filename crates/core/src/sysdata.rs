@@ -199,6 +199,18 @@ pub const CATALOG: &[Item] = &[
         note: "应用日志和崩溃报告，排查问题时才用得到",
         needs_app: None,
     },
+    Item {
+        id: "win_temp",
+        side: Side::System,
+        group: "缓存与日志",
+        title: "Windows 临时文件",
+        action: Action::Safe,
+        base: Base::Home,
+        roots: &["AppData/Local/Temp"],
+        filter: Filter::All,
+        note: "系统与应用的临时文件，正在占用的文件会自动跳过",
+        needs_app: None,
+    },
     // —— 系统：开发工具 ——
     Item {
         id: "xcode_derived",
@@ -284,7 +296,7 @@ pub const CATALOG: &[Item] = &[
         title: "pnpm 依赖仓库",
         action: Action::Review,
         base: Base::Home,
-        roots: &["Library/pnpm/store"],
+        roots: &["Library/pnpm/store", "AppData/Local/pnpm/store"],
         filter: Filter::All,
         note: "项目依赖的共享存放处，删除后安装依赖时会重新下载",
         needs_app: None,

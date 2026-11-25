@@ -20,9 +20,19 @@ const MAX_FILE: u64 = 32 * 1024 * 1024;
 const TITLE_CHARS: usize = 40;
 
 pub fn support_root(home: &Path) -> PathBuf {
-    home.join("Library")
-        .join(format!("{} {}", "Application", "Support"))
-        .join("Grok Bot")
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("Grok Bot");
+        }
+        return home.join("AppData").join("Roaming").join("Grok Bot");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        home.join("Library")
+            .join(format!("{} {}", "Application", "Support"))
+            .join("Grok Bot")
+    }
 }
 
 pub fn installed(home: &Path, applications: &Path) -> bool {

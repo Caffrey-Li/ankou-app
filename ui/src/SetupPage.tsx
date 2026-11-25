@@ -83,7 +83,7 @@ export function SetupPage({
           <div className="setup-title">
             <h1>欢迎使用安扣助手</h1>
             <p>
-              在这台 Mac 上发现了 {found.length} 个 AI 工具。打开开关即接入（只读），随时可以在「工具」里改。
+              在这台电脑上发现了 {found.length} 个 AI 工具。打开开关即接入（只读），随时可以在「工具」里改。
             </p>
           </div>
           <div className="steps" aria-label="步骤">

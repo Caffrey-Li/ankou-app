@@ -393,13 +393,21 @@ fn tray_action<R: tauri::Runtime>(app: AppHandle<R>, action: String) -> Result<(
 /// 只打开「隐私与安全性 › 完全磁盘访问权限」面板，由用户自己决定是否授予。
 #[tauri::command]
 fn open_privacy_settings<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_url(
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
-            None::<&str>,
-        )
-        .map_err(text)
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_opener::OpenerExt;
+        app.opener()
+            .open_url(
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+                None::<&str>,
+            )
+            .map_err(text)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
 
 #[tauri::command]

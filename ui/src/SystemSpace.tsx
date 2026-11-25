@@ -168,7 +168,7 @@ export function SysList({
               </div>
               {rows.map((item) => {
                 const pick = selection[item.id];
-                const can = pickable(item) && !windows;
+                const can = pickable(item);
                 const many = can && item.children.length > 1;
                 const expanded = Boolean(open[item.id]);
                 const tag = actionTag[item.action];
@@ -253,11 +253,11 @@ export function SysList({
           <strong>
             已选 {picked.length} 项 · 预计释放 {formatBytes(bytes, 1)}
           </strong>
-          <small>移到废纸篓，确认不需要后再清倒；正在运行的应用的缓存会跳过</small>
+          <small>移到{windows ? "回收站" : "废纸篓"}，确认不需要后再清倒；正在运行的应用的缓存会跳过</small>
         </span>
-        <button type="button" className="sys-primary" disabled={windows || busy || scanning || picked.length === 0} onClick={() => setConfirming(true)}>
+        <button type="button" className="sys-primary" disabled={busy || scanning || picked.length === 0} onClick={() => setConfirming(true)}>
           <IconTrash />
-          {windows ? "Windows 暂不支持" : "清理所选项…"}
+          清理所选项…
         </button>
       </footer>
       {confirming ? (
@@ -268,7 +268,7 @@ export function SysList({
           <h2>
             清理 {picked.length} 项，约 {formatBytes(bytes, 1)}？
           </h2>
-          <p>将移到废纸篓，可以在废纸篓里找回。</p>
+          <p>将移到{windows ? "回收站" : "废纸篓"}，可以在{windows ? "回收站" : "废纸篓"}里找回。</p>
           {reviews.length ? (
             <ul className="sys-review">
               {reviews.map((item) => (
