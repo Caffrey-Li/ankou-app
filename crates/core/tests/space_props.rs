@@ -101,6 +101,7 @@ proptest! {
     }
 }
 
+#[cfg(unix)]
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(16))]
     #[test]

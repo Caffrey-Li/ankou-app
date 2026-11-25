@@ -1458,6 +1458,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(unix)]
     fn empty_bot_db(path: &Path) {
         let status = std::process::Command::new("sqlite3")
             .arg(path)
@@ -1488,6 +1489,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn one_unauthorized_and_one_without_records() {
         let (dir, hub) = temp_hub("mix-codex");
@@ -1505,6 +1507,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn granted_reads_report_records_or_an_empty_list() {
         let (dir, hub) = temp_hub("rows");
@@ -1532,6 +1535,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn an_empty_grant_is_no_records_and_not_server_unavailable() {
         let (dir, hub) = temp_hub("empty-both");
@@ -1543,6 +1547,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn needs_reauth_is_not_treated_as_missing_or_a_failed_read() {
         let (dir, hub) = temp_hub("reauth");
@@ -1565,6 +1570,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_granted_read_error_is_read_failed() {
         let (dir, hub) = temp_hub("read-fail");
@@ -1597,6 +1603,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[cfg(unix)]
     fn raw_frame(data: &[u8]) -> Vec<u8> {
         let mut out = vec![0x28, 0xB5, 0x2F, 0xFD, 0x00, 0x38];
         for (index, block) in data.chunks(100 * 1024).enumerate() {
@@ -1608,6 +1615,7 @@ mod tests {
         out
     }
 
+    #[cfg(unix)]
     fn dsh_session(root: &Path, workspace: &str, id: &str, cwd: &str, title: &str) {
         let dir = root.join("sessions").join(workspace).join(format!("session-{id}"));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1622,6 +1630,7 @@ mod tests {
         std::fs::write(dir.join("session.v4.jsonl.zstd"), raw_frame(body.as_bytes())).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn harness_lists_its_own_sessions_and_bot_sessions_stay_with_ds_bot() {
         let (dir, hub) = temp_hub("harness");

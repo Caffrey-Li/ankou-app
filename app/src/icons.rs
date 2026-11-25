@@ -446,6 +446,7 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[cfg(unix)]
     #[test]
     fn ds_bot_stays_empty_and_cache_follows_mtime() {
         let root = temp_apps("cache");

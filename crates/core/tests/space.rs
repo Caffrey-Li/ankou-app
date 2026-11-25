@@ -228,9 +228,11 @@ fn scan_splits_cleanable_children_and_skips_secret_bytes() {
     assert_eq!(scan.entries[0].rel, Path::new("cache/item"));
     assert_eq!(scan.entries[0].bytes, 4);
     assert_eq!(scan.entries[0].files, 1);
+    #[cfg(unix)]
     assert!(scan.entries[0].ino > 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn grown_file_counts_even_when_directory_mtime_stays() {
     let tmp = Tmp::new();
@@ -256,6 +258,7 @@ fn grown_file_counts_even_when_directory_mtime_stays() {
     assert_eq!(second.protected_bytes, 15);
 }
 
+#[cfg(unix)]
 #[test]
 fn symlink_is_not_followed_and_hardlink_is_counted_once() {
     let tmp = Tmp::new();
@@ -288,6 +291,7 @@ fn cancel_keeps_nothing_from_later_entries() {
     assert_eq!(wanxiang_core::scan_label(&scan), Some(LABEL_SCAN_CANCEL));
 }
 
+#[cfg(unix)]
 #[test]
 fn unreadable_directory_is_permission_and_unscanned() {
     let tmp = Tmp::new();
@@ -320,24 +324,27 @@ fn unreadable_directory_is_permission_and_unscanned() {
 #[test]
 fn replaced_root_needs_reauth_and_revoked_grant_is_refused() {
     let tmp = Tmp::new();
-    let root = tmp.path.join("root");
-    fs::create_dir(&root).unwrap();
-    let guard = open_guard();
-    guard
-        .grant(
-            ToolId::Codex,
-            wanxiang_core::Capability::SpaceScan,
-            PathScope {
-                root: root.clone(),
-                pattern: "**".into(),
-            },
-        )
-        .unwrap();
-    fs::rename(&root, tmp.path.join("moved")).unwrap();
-    fs::create_dir(&root).unwrap();
-    let err = scan(&guard, ToolId::Codex, &AtomicBool::new(false)).unwrap_err();
-    assert_eq!(err, SpaceError::NeedsReauth);
-    assert_eq!(err.label(), LABEL_REAUTH);
+    #[cfg(unix)]
+    {
+        let root = tmp.path.join("root");
+        fs::create_dir(&root).unwrap();
+        let guard = open_guard();
+        guard
+            .grant(
+                ToolId::Codex,
+                wanxiang_core::Capability::SpaceScan,
+                PathScope {
+                    root: root.clone(),
+                    pattern: "**".into(),
+                },
+            )
+            .unwrap();
+        fs::rename(&root, tmp.path.join("moved")).unwrap();
+        fs::create_dir(&root).unwrap();
+        let err = scan(&guard, ToolId::Codex, &AtomicBool::new(false)).unwrap_err();
+        assert_eq!(err, SpaceError::NeedsReauth);
+        assert_eq!(err.label(), LABEL_REAUTH);
+    }
     let root = tmp.path.join("other");
     fs::create_dir(&root).unwrap();
     let fresh = open_guard();
@@ -408,6 +415,7 @@ fn appended_nested_file_is_skipped_even_if_the_entry_inode_stays() {
     assert!(!text.contains("cache"));
 }
 
+#[cfg(unix)]
 #[test]
 fn directory_mtime_alone_does_not_skip() {
     let tmp = Tmp::new();
@@ -739,6 +747,7 @@ fn ui_entries_only_accept_relative_paths() {
     assert!(ui_entry("C:/cache/item", 1, 1, 1, 1).is_none());
 }
 
+#[cfg(unix)]
 #[test]
 fn swapped_cache_symlink_is_skipped() {
     let tmp = Tmp::new();
