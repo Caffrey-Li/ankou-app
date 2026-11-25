@@ -22,6 +22,8 @@ jobs:
           cache: npm
       - name: install frontend dependencies
         run: npm ci
+      - name: fetch rust crates
+        run: cargo fetch --locked
       - name: test frontend
         run: npm test
       - name: build frontend
