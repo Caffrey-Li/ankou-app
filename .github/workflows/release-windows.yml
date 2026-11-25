@@ -29,7 +29,7 @@ jobs:
       - name: build frontend
         run: npm run build
       - name: test rust workspace
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: build windows bundles
         run: npx tauri build --bundles nsis,msi
       - name: upload installers

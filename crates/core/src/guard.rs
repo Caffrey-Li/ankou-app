@@ -852,7 +852,9 @@ fn compile_pattern(pattern: &str) -> Result<CompiledPattern, GuardError> {
         if part == "**" {
             segs.push(Seg::GlobStar);
         } else {
-            segs.push(Seg::Wild(part.to_string()));
+            // 路径分量经 `fold` 比较：Windows 上已转小写，模式也要同样折叠，
+            // 否则 `User/globalStorage/...` 这类带大写的模式永远对不上。
+            segs.push(Seg::Wild(fold(std::ffi::OsStr::new(part))));
         }
     }
     Ok(CompiledPattern { segs })
