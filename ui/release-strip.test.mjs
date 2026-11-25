@@ -5,10 +5,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-execFileSync("npx", ["vite", "build", "--config", "ui/vite.config.ts"], {
-  cwd: root,
-  stdio: "inherit",
-});
+execFileSync(
+  process.execPath,
+  [join(root, "node_modules", "vite", "bin", "vite.js"), "build", "--config", "ui/vite.config.ts"],
+  {
+    cwd: root,
+    stdio: "inherit",
+  },
+);
 
 function files(dir) {
   return readdirSync(dir).flatMap((name) => {

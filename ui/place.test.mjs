@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -12,7 +13,7 @@ const fromRust = [...rust.matchAll(/Target \{ id: "([a-z_]+)", name: "([^"]+)", 
 assert.ok(fromRust.length >= 10);
 
 const server = await createServer({
-  configFile: new URL("./vite.config.ts", import.meta.url).pathname,
+  configFile: fileURLToPath(new URL("./vite.config.ts", import.meta.url)),
   server: { middlewareMode: true },
   appType: "custom",
   logLevel: "error",
