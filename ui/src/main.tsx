@@ -13,7 +13,7 @@ if (view === "tray") {
 // 设置读出来之前先按系统深浅色画，避免启动时闪一下
 applyAppearance("system");
 
-const compare = new URLSearchParams(window.location.search).get("compare") === "1";
+const compare = import.meta.env.DEV && new URLSearchParams(window.location.search).get("compare") === "1";
 if (compare) {
   document.documentElement.dataset.compare = "1";
   await import("./compare-fonts.css");

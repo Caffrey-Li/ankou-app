@@ -958,9 +958,19 @@ fn is_cleanable_dir(tool: ToolId, rel: &Path) -> bool {
     let Some(rel) = strict_rel(rel) else {
         return false;
     };
-    cleanup_patterns(tool)
-        .iter()
-        .any(|pattern| pattern.strip_suffix("/*") == Some(rel.as_str()))
+    cleanup_patterns(tool).iter().any(|pattern| {
+        let Some(dir) = pattern.strip_suffix("/*") else {
+            return false;
+        };
+        #[cfg(windows)]
+        {
+            dir.eq_ignore_ascii_case(rel.as_str())
+        }
+        #[cfg(not(windows))]
+        {
+            dir == rel.as_str()
+        }
+    })
 }
 
 fn under_cleanable(tool: ToolId, rel: &Path) -> bool {

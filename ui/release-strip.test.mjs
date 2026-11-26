@@ -30,6 +30,8 @@ assert.equal(built.includes("fixture-m2"), false);
 assert.equal(built.includes('get("bot")'), false);
 assert.equal(built.includes('get("codex")'), false);
 assert.equal(built.includes("fixture=handoff"), false);
+assert.equal(built.includes("compare-fonts"), false);
+assert.equal(built.includes("noto-sans-sc"), false);
 for (const needle of ["WANXIANG_VERIFY", "verify_enabled", "verify_set", "WANXIANG_SPACE_FIXTURE"]) {
   assert.equal(built.includes(needle), false, needle);
 }

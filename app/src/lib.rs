@@ -273,12 +273,22 @@ fn toggle_panel(app: &tauri::AppHandle, rect: tauri::Rect) {
         .outer_size()
         .map(|size| f64::from(size.width))
         .unwrap_or(362.0 * scale);
+    let height = panel
+        .outer_size()
+        .map(|size| f64::from(size.height))
+        .unwrap_or(440.0 * scale);
     let mut x = icon.x + icon_size.width / 2.0 - width / 2.0;
-    let y = icon.y + icon_size.height;
+    let mut y = icon.y + icon_size.height;
     if let Ok(Some(monitor)) = app.monitor_from_point(icon.x, icon.y) {
         let left = f64::from(monitor.position().x);
         let right = left + f64::from(monitor.size().width);
+        let top = f64::from(monitor.position().y);
+        let bottom = top + f64::from(monitor.size().height);
         x = x.min(right - width).max(left);
+        // 任务栏在屏幕底部（Windows 默认）时向下会超出屏幕，改为在图标上方弹出
+        if y + height > bottom {
+            y = (icon.y - height).max(top);
+        }
     }
     let _ = panel.set_position(tauri::PhysicalPosition::new(x, y));
     let _ = panel.emit("panel-open", ());

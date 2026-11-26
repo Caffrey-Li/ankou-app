@@ -21,7 +21,15 @@ pub fn find_codex_cli_in(path_env: &str, extras: &[&str]) -> Option<PathBuf> {
 fn exact_executable(dir: &Path, name: &str) -> Option<PathBuf> {
     let entries = std::fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {
-        if entry.file_name() != name {
+        let matched = if cfg!(windows) {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|file| file.eq_ignore_ascii_case(name))
+        } else {
+            entry.file_name() == name
+        };
+        if !matched {
             continue;
         }
         let path = entry.path();
