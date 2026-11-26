@@ -9,6 +9,16 @@ use wanxiang_core::{
     ToolId, ToolPresence, ToolScheduler,
 };
 
+/// `fs::canonicalize` 在 Windows 上带 `\\?\` 前缀；守卫存的是去掉前缀的路径。
+fn canon(path: &std::path::Path) -> std::path::PathBuf {
+    let real = std::fs::canonicalize(path).unwrap();
+    let text = real.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+        _ => real,
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 struct Tmp {
@@ -21,7 +31,7 @@ impl Tmp {
         let raw = std::env::temp_dir().join(format!("wanxiang-m1b-{}-{}", std::process::id(), n));
         fs::create_dir_all(&raw).unwrap();
         Self {
-            path: fs::canonicalize(&raw).unwrap(),
+            path: canon(&raw),
         }
     }
 }
@@ -70,7 +80,7 @@ fn open(tmp: &Tmp, guard: Arc<Guard>) -> Store {
 fn root(tmp: &Tmp, name: &str) -> PathBuf {
     let path = tmp.path.join(name);
     fs::create_dir_all(&path).unwrap();
-    fs::canonicalize(&path).unwrap()
+    canon(&path)
 }
 
 fn grant_usage(store: &Store, root: &std::path::Path) -> i64 {

@@ -1106,8 +1106,43 @@ fn file_id_of(path: &Path) -> io::Result<FileId> {
     #[cfg(windows)]
     {
         let file = open_handle(path)?;
-        let (dev, ino) = windows_file_id(&file)?;
+        let (dev, ino, _) = windows_file_id(&file)?;
         Ok(FileId { dev, ino })
+    }
+}
+
+/// 目录根的 (设备, inode)。和授权时记下的标记用同一种取法，Windows 上不会因为
+/// `Metadata` 拿不到文件编号而永远对不上。
+pub(crate) fn root_ids(path: &Path) -> io::Result<(u64, u64)> {
+    let id = file_id_of(path)?;
+    Ok((id.dev, id.ino))
+}
+
+/// 单个条目的 (设备, inode, 硬链接数)，不跟随符号链接。
+///
+/// Unix 直接读 `Metadata`。Windows 的稳定版 `Metadata` 不给文件编号，这里打开句柄读
+/// `GetFileInformationByHandle`；读不到时返回 inode 0，调用方把 0 当作「未知，不去重」。
+pub(crate) fn node_ids(path: &Path, meta: &fs::Metadata) -> (u64, u64, u64) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let _ = path;
+        (meta.dev(), meta.ino(), meta.nlink())
+    }
+    #[cfg(windows)]
+    {
+        if meta.file_type().is_symlink() {
+            return (0, 0, 1);
+        }
+        match open_handle(path).and_then(|file| windows_file_id(&file)) {
+            Ok(ids) => ids,
+            Err(_) => (0, 0, 1),
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (path, meta);
+        (0, 0, 1)
     }
 }
 
@@ -1149,7 +1184,7 @@ unsafe extern "C" {
 }
 
 #[cfg(windows)]
-fn windows_file_id(file: &File) -> io::Result<(u64, u64)> {
+fn windows_file_id(file: &File) -> io::Result<(u64, u64, u64)> {
     use std::os::windows::io::AsRawHandle;
     let mut info = ByHandleFileInformation::zero();
     let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) };
@@ -1157,7 +1192,7 @@ fn windows_file_id(file: &File) -> io::Result<(u64, u64)> {
         return Err(io::Error::last_os_error());
     }
     let ino = ((info.index_high as u64) << 32) | u64::from(info.index_low);
-    Ok((u64::from(info.volume_serial), ino))
+    Ok((u64::from(info.volume_serial), ino, u64::from(info.links)))
 }
 
 #[cfg(windows)]

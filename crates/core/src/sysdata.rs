@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use crate::guard::node_ids;
 use crate::space::{TrashFault, Trasher};
 
 /// 这一项属于哪一边：AI 相关的放在「AI 工具」，其余放在「系统」。
@@ -506,18 +507,18 @@ pub const CHILD_LIMIT: usize = 40;
 /// 统计一个目录（或文件）实际占用的磁盘空间。不跟随链接，不跨卷，同一文件只算一次。
 pub fn measure(path: &Path, seen: &mut HashSet<(u64, u64)>, cancel: &AtomicBool) -> io::Result<u64> {
     let meta = fs::symlink_metadata(path)?;
-    let dev = ids(&meta).0;
+    let dev = node_ids(path, &meta).0;
     let mut total = 0;
     let mut stack = vec![(path.to_path_buf(), meta)];
     while let Some((at, meta)) = stack.pop() {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        let (this_dev, ino) = ids(&meta);
+        let (this_dev, ino, _) = node_ids(&at, &meta);
         if this_dev != dev || meta.file_type().is_symlink() {
             continue;
         }
-        if !seen.insert((this_dev, ino)) {
+        if ino != 0 && !seen.insert((this_dev, ino)) {
             continue;
         }
         total += allocated(&meta);
@@ -544,19 +545,6 @@ fn allocated(meta: &fs::Metadata) -> u64 {
     #[cfg(not(unix))]
     {
         meta.len()
-    }
-}
-
-fn ids(meta: &fs::Metadata) -> (u64, u64) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        (meta.dev(), meta.ino())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = meta;
-        (0, 0)
     }
 }
 

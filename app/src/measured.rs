@@ -441,6 +441,16 @@ fn show(err: impl std::fmt::Display) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// `fs::canonicalize` 在 Windows 上带 `\\?\` 前缀；守卫存的是去掉前缀的路径。
+    fn canon(path: &std::path::Path) -> std::path::PathBuf {
+        let real = std::fs::canonicalize(path).unwrap();
+        let text = real.to_string_lossy().into_owned();
+        match text.strip_prefix(r"\\?\") {
+            Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+            _ => real,
+        }
+    }
+
     #[test]
     fn codebuddy_and_cursor_cli_grants_use_their_own_tool() {
         let dir = std::env::temp_dir().join(format!("wanxiang-cli-grant-{}", std::process::id()));
@@ -601,7 +611,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(store.grants().unwrap()[0].pattern, "bot/usage.sqlite*");
-        assert_eq!(store.grants().unwrap()[0].root, dsh.canonicalize().unwrap());
+        assert_eq!(store.grants().unwrap()[0].root, canon(&dsh));
         set_at(
             &store,
             "codex_usage",
@@ -612,7 +622,7 @@ mod tests {
         )
         .unwrap();
         assert!(store.grants().unwrap().iter().any(|grant| {
-            grant.pattern == "sessions/**/*.jsonl" && grant.root == codex.canonicalize().unwrap()
+            grant.pattern == "sessions/**/*.jsonl" && grant.root == canon(&codex)
         }));
         set_at(
             &store,
@@ -762,7 +772,7 @@ mod tests {
             .metadata(
                 wanxiang_core::ToolId::DeepSeekHarness,
                 wanxiang_core::Capability::Cleanup,
-                &dsh.join("cache/job/nested").canonicalize().unwrap(),
+                &canon(&dsh.join("cache/job/nested")),
             )
             .unwrap_err();
         let protected = store
@@ -770,7 +780,7 @@ mod tests {
             .metadata(
                 wanxiang_core::ToolId::DeepSeekHarness,
                 wanxiang_core::Capability::Cleanup,
-                &dsh.join("bot/note").canonicalize().unwrap(),
+                &canon(&dsh.join("bot/note")),
             )
             .unwrap_err();
         assert!(
@@ -786,7 +796,7 @@ mod tests {
             .metadata(
                 wanxiang_core::ToolId::DeepSeekHarness,
                 wanxiang_core::Capability::Cleanup,
-                &dsh.join("cache/item").canonicalize().unwrap(),
+                &canon(&dsh.join("cache/item")),
             )
             .unwrap();
         set_at(
@@ -822,7 +832,7 @@ mod tests {
         std::env::remove_var("WANXIANG_SPACE_FIXTURE");
         applied.unwrap();
         let grants = store.grants().unwrap();
-        let canonical = root.canonicalize().unwrap();
+        let canonical = canon(&root);
         assert!(grants.iter().all(|grant| grant.root == canonical));
         assert_eq!(
             grants
@@ -858,17 +868,17 @@ mod tests {
             grant.tool == wanxiang_core::ToolId::Codex
                 && grant.capability == wanxiang_core::Capability::SpaceScan
                 && grant.pattern == "**"
-                && grant.root == codex.canonicalize().unwrap()
+                && grant.root == canon(&codex)
         }));
         assert!(grants.iter().any(|grant| {
             grant.tool == wanxiang_core::ToolId::Cursor
                 && grant.capability == wanxiang_core::Capability::SpaceScan
                 && grant.pattern == "**"
-                && grant.root == cursor.canonicalize().unwrap()
+                && grant.root == canon(&cursor)
         }));
         let guard = store.guard();
-        let note = codex.join("note").canonicalize().unwrap();
-        let db = cursor.join("item").canonicalize().unwrap();
+        let note = canon(&codex.join("note"));
+        let db = canon(&cursor.join("item"));
         assert!(matches!(
             guard.open_read(
                 wanxiang_core::ToolId::Codex,
@@ -934,11 +944,11 @@ mod tests {
         let grants = store.grants().unwrap();
         assert!(grants.iter().any(|grant| {
             grant.tool == wanxiang_core::ToolId::Codex
-                && grant.root == dir.join(".codex").canonicalize().unwrap()
+                && grant.root == canon(&dir.join(".codex"))
         }));
         assert!(grants.iter().any(|grant| {
             grant.tool == wanxiang_core::ToolId::Cursor
-                && grant.root == cursor_support(&dir).canonicalize().unwrap()
+                && grant.root == canon(&cursor_support(&dir))
         }));
         if let Some(home) = previous_home {
             std::env::set_var("HOME", home);

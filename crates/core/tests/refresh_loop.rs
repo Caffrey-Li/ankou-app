@@ -6,12 +6,25 @@ use std::time::{Duration, Instant};
 
 use wanxiang_core::{Capability, RefreshGate, Supervisor, ToolId, ToolScheduler, REFRESH_EVERY, STALE_AFTER};
 
+#[cfg(unix)]
 fn sleeper() -> Command {
     let mut command = Command::new("sleep");
     command.arg("30").stdin(Stdio::null());
     command
 }
 
+#[cfg(windows)]
+fn sleeper() -> Command {
+    // Windows 没有 sleep：ping 本机 30 次，约 30 秒。
+    let mut command = Command::new("ping");
+    command
+        .args(["-n", "30", "127.0.0.1"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null());
+    command
+}
+
+#[cfg(unix)]
 fn alive(pid: u32) -> bool {
     Command::new("ps")
         .args(["-p", &pid.to_string()])
@@ -19,6 +32,17 @@ fn alive(pid: u32) -> bool {
         .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn alive(pid: u32) -> bool {
+    // tasklist 找不到进程时退出码也是 0，只能看输出里有没有这个编号。
+    Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .stderr(Stdio::null())
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).contains(&format!("\"{pid}\"")))
         .unwrap_or(false)
 }
 

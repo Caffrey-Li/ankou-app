@@ -120,8 +120,16 @@ fn entry_for(service: &str) -> Result<keyring_core::Entry, SecretError> {
 mod tests {
     use super::*;
 
+    /// 模拟钥匙串是进程内全局的，测试并行时会互相看到对方写的键，所以串行跑。
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn query_stays_on_the_mock_store() {
+        let _serial = serial();
         SecretStore::install_mock_backend();
         assert!(!SecretStore::new().is_saved().unwrap());
         let probe = entry().unwrap();
@@ -133,6 +141,7 @@ mod tests {
 
     #[test]
     fn loads_and_migrates_legacy_key() {
+        let _serial = serial();
         SecretStore::install_mock_backend();
         let store = SecretStore::new();
         store.delete().unwrap();

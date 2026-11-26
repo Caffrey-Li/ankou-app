@@ -9,6 +9,16 @@ use wanxiang_core::{
     ToolId, ToolScheduler,
 };
 
+/// `fs::canonicalize` 在 Windows 上带 `\\?\` 前缀；守卫存的是去掉前缀的路径。
+fn canon(path: &std::path::Path) -> std::path::PathBuf {
+    let real = std::fs::canonicalize(path).unwrap();
+    let text = real.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+        _ => real,
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 struct Tmp {
@@ -22,7 +32,7 @@ impl Tmp {
             std::env::temp_dir().join(format!("wanxiang-m1a-prop-{}-{}", std::process::id(), n));
         fs::create_dir_all(&raw).unwrap();
         Self {
-            path: fs::canonicalize(&raw).unwrap(),
+            path: canon(&raw),
         }
     }
 }
@@ -112,7 +122,7 @@ proptest! {
         let tmp = Tmp::new();
         let root = tmp.path.join("root");
         fs::create_dir(&root).unwrap();
-        let root = fs::canonicalize(&root).unwrap();
+        let root = canon(&root);
         let mut file = root.clone();
         for (i, part) in parts.iter().enumerate() {
             file.push(part);
@@ -137,7 +147,7 @@ proptest! {
         let tmp = Tmp::new();
         let root = tmp.path.join("root");
         fs::create_dir(&root).unwrap();
-        let root = fs::canonicalize(&root).unwrap();
+        let root = canon(&root);
         let canary = tmp.path.join("canary.txt");
         fs::write(&canary, b"canary").unwrap();
         let mut dotted = parts.clone();
@@ -164,7 +174,7 @@ proptest! {
         let tmp = Tmp::new();
         let root = tmp.path.join("root");
         fs::create_dir(&root).unwrap();
-        let root = fs::canonicalize(&root).unwrap();
+        let root = canon(&root);
         let sibling = tmp.path.join(&name);
         fs::create_dir(&sibling).unwrap();
         let file = sibling.join("a.txt");
@@ -189,7 +199,7 @@ proptest! {
         let tmp = Tmp::new();
         let root = tmp.path.join("root");
         fs::create_dir(&root).unwrap();
-        let root = fs::canonicalize(&root).unwrap();
+        let root = canon(&root);
         let evil = tmp.path.join(format!("root{suffix}"));
         fs::create_dir(&evil).unwrap();
         let file = evil.join("a.txt");
@@ -214,7 +224,7 @@ proptest! {
         let tmp = Tmp::new();
         let root = tmp.path.join("root");
         fs::create_dir(&root).unwrap();
-        let root = fs::canonicalize(&root).unwrap();
+        let root = canon(&root);
         let mut file = root.clone();
         for dir in &dirs {
             file.push(dir);

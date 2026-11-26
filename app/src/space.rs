@@ -138,7 +138,13 @@ pub fn scan_tool(store: &Store, tool: &str, cancel: &AtomicBool) -> Result<Space
             .entries
             .into_iter()
             .map(|entry| {
-                let rel = entry.rel.to_string_lossy().to_string();
+                // 界面和确认清单都用 `/` 分隔，Windows 上不能直接用 `\\`。
+                let rel = entry
+                    .rel
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
                 let weak = rel.starts_with("storages/session_projcache/");
                 EntryView {
                     rel,

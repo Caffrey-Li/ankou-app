@@ -7,6 +7,16 @@ use wanxiang_core::{
     canonical_bytes, content_changed, scan, CleanEntry, Guard, PathScope, ToolId, ToolScheduler,
 };
 
+/// `fs::canonicalize` 在 Windows 上带 `\\?\` 前缀；守卫存的是去掉前缀的路径。
+fn canon(path: &std::path::Path) -> std::path::PathBuf {
+    let real = std::fs::canonicalize(path).unwrap();
+    let text = real.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+        _ => real,
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 struct Tmp {
@@ -20,7 +30,7 @@ impl Tmp {
             std::env::temp_dir().join(format!("wanxiang-m4a-prop-{}-{}", std::process::id(), n));
         fs::create_dir_all(&raw).unwrap();
         Self {
-            path: fs::canonicalize(&raw).unwrap(),
+            path: canon(&raw),
         }
     }
 }

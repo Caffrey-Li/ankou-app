@@ -9,6 +9,16 @@ use wanxiang_core::{
     ToolScheduler, CONFIRM_TTL,
 };
 
+/// `fs::canonicalize` 在 Windows 上带 `\\?\` 前缀；守卫存的是去掉前缀的路径。
+fn canon(path: &std::path::Path) -> std::path::PathBuf {
+    let real = std::fs::canonicalize(path).unwrap();
+    let text = real.to_string_lossy().into_owned();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => std::path::PathBuf::from(rest),
+        _ => real,
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 struct Tmp {
@@ -21,14 +31,14 @@ impl Tmp {
         let raw = std::env::temp_dir().join(format!("wanxiang-m1a-{}-{}", std::process::id(), n));
         fs::create_dir_all(&raw).unwrap();
         Self {
-            path: fs::canonicalize(&raw).unwrap(),
+            path: canon(&raw),
         }
     }
 
     fn dir(&self, name: &str) -> PathBuf {
         let path = self.path.join(name);
         fs::create_dir_all(&path).unwrap();
-        fs::canonicalize(&path).unwrap()
+        canon(&path)
     }
 }
 
@@ -313,7 +323,7 @@ fn grant_stores_the_canonical_root() {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let raw = std::env::temp_dir().join(format!("wanxiang-m1a-raw-{}-{}", std::process::id(), n));
     fs::create_dir_all(&raw).unwrap();
-    let canon = fs::canonicalize(&raw).unwrap();
+    let canon = canon(&raw);
     let env = env();
     env.guard
         .grant(ToolId::Cursor, Capability::Usage, scope(&raw, "**"))

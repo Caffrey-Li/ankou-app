@@ -1,0 +1,7 @@
+# 统一用 LF 检出，避免 Windows 上 golden 文件（如 ui/src/fixture-m2.json）变成 CRLF 导致对比失败
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.car binary
+*.dmg binary

@@ -4,7 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::guard::metadata_denied;
+use crate::guard::{metadata_denied, node_ids, root_ids};
 use crate::{Capability, ConfirmToken, Guard, GuardError, ToolId};
 
 pub const LABEL_CHANGED: &str = "已跳过 · 内容已变化";
@@ -430,7 +430,7 @@ fn cleanup_root(guard: &Guard, tool: ToolId) -> Result<PathBuf, SpaceError> {
     if meta.file_type().is_symlink() || !meta.is_dir() {
         return Err(SpaceError::NeedsReauth);
     }
-    let (dev, ino, _) = ids(&meta);
+    let (dev, ino) = root_ids(&root).map_err(|err| SpaceError::Io(err.kind()))?;
     if dev != stamp.dev || ino != stamp.ino {
         return Err(SpaceError::NeedsReauth);
     }
@@ -614,7 +614,7 @@ fn walk(
             } else {
                 walk(&path, &child_rel, root_dev, tool, cancel, stat, acc);
             }
-        } else if acc.seen_protected.insert((meta.dev, meta.ino)) {
+        } else if meta.ino == 0 || acc.seen_protected.insert((meta.dev, meta.ino)) {
             add_protected(acc, &child_rel, meta.len);
         }
     }
@@ -663,7 +663,7 @@ fn list_units(
             continue;
         }
         if meta.kind == Kind::File && meta.nlink > 1 {
-            if acc.seen_clean.insert((meta.dev, meta.ino)) {
+            if meta.ino == 0 || acc.seen_clean.insert((meta.dev, meta.ino)) {
                 acc.cleanable_bytes += meta.len;
             }
             continue;
@@ -739,7 +739,7 @@ fn measure_dir(
         }
         if meta.kind == Kind::Dir {
             measure_dir(&path, &child_rel, root_dev, stat, seen, content)?;
-        } else if seen.insert((meta.dev, meta.ino)) {
+        } else if meta.ino == 0 || seen.insert((meta.dev, meta.ino)) {
             content.bytes += meta.len;
             content.files += 1;
         } else {
@@ -935,7 +935,7 @@ fn real_stat(path: &Path) -> io::Result<Meta> {
     } else {
         Kind::Other
     };
-    let (dev, ino, nlink) = ids(&meta);
+    let (dev, ino, nlink) = node_ids(path, &meta);
     Ok(Meta {
         dev,
         ino,
@@ -952,19 +952,6 @@ fn modified_secs(path: &Path) -> u64 {
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
-}
-
-fn ids(meta: &fs::Metadata) -> (u64, u64, u64) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        (meta.dev(), meta.ino(), meta.nlink())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = meta;
-        (0, 0, 1)
-    }
 }
 
 fn is_cleanable_dir(tool: ToolId, rel: &Path) -> bool {
