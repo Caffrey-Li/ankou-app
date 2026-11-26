@@ -52,6 +52,11 @@
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist",
       "signingIdentity": "Wanxiang Local Signing"
+    },
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      }
     }
   },
   "plugins": {
